@@ -128,5 +128,10 @@
     "time": "2026-05-21T21:02:09.495307",
     "level": "ERROR",
     "message": "Public price fetch failed: Public price fetch failed: 451 Client Error:  for url: https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
+  },
+  {
+    "time": "2026-05-21T21:02:39.532302",
+    "level": "ERROR",
+    "message": "Public price fetch failed: Public price fetch failed: 451 Client Error:  for url: https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
   }
 ]
