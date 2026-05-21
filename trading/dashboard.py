@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as st_html
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -221,6 +222,8 @@ def _init():
         "manual_amount":    100.0,
         "testnet":          True,
         "refresh_secs":     5,
+        "alert_open_ids":   [],   # trade IDs we've already seen as open
+        "alert_closed_ids": [],   # trade IDs we've already seen as closed
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -331,6 +334,57 @@ equity = st.session_state.initial_balance + total_pnl
 roi    = (total_pnl / st.session_state.initial_balance * 100) if st.session_state.initial_balance else 0.0
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ALERT DETECTION — diff against last known trade IDs
+# ─────────────────────────────────────────────────────────────────────────────
+_known_open   = set(st.session_state.alert_open_ids)
+_known_closed = set(st.session_state.alert_closed_ids)
+
+_cur_open_ids   = {t["id"] for t in open_trades   if t.get("id")}
+_cur_closed_ids = {t["id"] for t in closed_trades if t.get("id")}
+
+_new_opens  = _cur_open_ids   - _known_open
+_new_closes = _cur_closed_ids - _known_closed
+
+# Build alert payloads
+_alert_events = []
+for _tid in _new_opens:
+    _tr = next((t for t in open_trades if t.get("id") == _tid), None)
+    if _tr:
+        _side = _tr.get("side", "BUY")
+        _coin = _tr.get("coin", "")
+        _ep   = _tr.get("entry_price", 0)
+        _typ  = "🤖 Bot" if _tr.get("type") == "bot" else "👤 Manual"
+        _alert_events.append({
+            "kind":  "open",
+            "side":  _side,
+            "title": f"{_typ} {_side} opened",
+            "body":  f"{_coin} @ ${_ep:,.4f}",
+            "color": "#26a69a" if _side == "BUY" else "#ef5350",
+            "sound": "buy" if _side == "BUY" else "sell",
+        })
+
+for _tid in _new_closes:
+    _tr = next((t for t in closed_trades if t.get("id") == _tid), None)
+    if _tr:
+        _pnl  = _tr.get("profit_loss") or 0
+        _pct  = _tr.get("profit_loss_pct") or 0
+        _coin = _tr.get("coin", "")
+        _typ  = "🤖 Bot" if _tr.get("type") == "bot" else "👤 Manual"
+        _win  = _pnl >= 0
+        _alert_events.append({
+            "kind":  "close",
+            "side":  "WIN" if _win else "LOSS",
+            "title": f"{_typ} {'WIN' if _win else 'LOSS'} — trade closed",
+            "body":  f"{_coin}  {'+' if _win else ''}${abs(_pnl):,.4f} ({_pct:+.2f}%)",
+            "color": "#26a69a" if _win else "#ef5350",
+            "sound": "win" if _win else "loss",
+        })
+
+# Update known IDs
+st.session_state.alert_open_ids   = list(_cur_open_ids)
+st.session_state.alert_closed_ids = list(_cur_closed_ids)
+
+# ─────────────────────────────────────────────────────────────────────────────
 # HEADER
 # ─────────────────────────────────────────────────────────────────────────────
 price_str = _fmt_p(live_price, 2) if live_price else "Loading…"
@@ -375,6 +429,108 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+# ── Alert toasts + audio (injected into browser, height=0 so invisible) ───────
+if _alert_events:
+    import json as _json
+    _events_json = _json.dumps(_alert_events)
+    _alert_html = f"""
+<style>
+.at-toast-wrap {{
+    position:fixed; top:64px; right:18px; z-index:99999;
+    display:flex; flex-direction:column; gap:10px; pointer-events:none;
+}}
+.at-toast {{
+    display:flex; align-items:flex-start; gap:12px;
+    background:#161b22; border:1px solid var(--tc);
+    border-radius:8px; padding:12px 16px;
+    box-shadow:0 8px 32px rgba(0,0,0,.55);
+    min-width:260px; max-width:340px;
+    animation: atSlideIn .3s ease forwards;
+    pointer-events:all;
+    font-family:'Inter',-apple-system,sans-serif;
+}}
+.at-toast.fade-out {{ animation: atFadeOut .4s ease forwards; }}
+.at-toast-icon {{ font-size:22px; line-height:1; margin-top:1px; }}
+.at-toast-body {{ flex:1; }}
+.at-toast-title {{ font-size:13px; font-weight:700; color:#f0f6fc; margin-bottom:3px; }}
+.at-toast-msg   {{ font-size:12px; color:#8b949e; font-family:'JetBrains Mono',monospace; }}
+.at-toast-bar   {{
+    height:3px; border-radius:0 0 8px 8px;
+    margin:-12px -16px -12px; margin-top:10px;
+    background:var(--tc); opacity:.6;
+    animation: atBar linear forwards;
+}}
+@keyframes atSlideIn {{
+    from {{ opacity:0; transform:translateX(40px); }}
+    to   {{ opacity:1; transform:translateX(0); }}
+}}
+@keyframes atFadeOut {{
+    from {{ opacity:1; transform:translateX(0); }}
+    to   {{ opacity:0; transform:translateX(40px); }}
+}}
+@keyframes atBar {{
+    from {{ width:100%; }}
+    to   {{ width:0%; }}
+}}
+</style>
+<div class="at-toast-wrap" id="atToastWrap"></div>
+<script>
+(function(){{
+  var events = {_events_json};
+  var wrap = document.getElementById('atToastWrap');
+  if (!wrap) return;
+
+  function playSound(kind) {{
+    try {{
+      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      function tone(freq, start, dur, vol) {{
+        var osc  = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
+        gain.gain.setValueAtTime(vol, ctx.currentTime + start);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
+        osc.start(ctx.currentTime + start);
+        osc.stop(ctx.currentTime + start + dur + 0.05);
+      }}
+      if (kind === 'buy')  {{ tone(520,0,.12,.18); tone(660,.11,.18,.14); }}
+      if (kind === 'sell') {{ tone(440,0,.12,.18); tone(330,.11,.18,.14); }}
+      if (kind === 'win')  {{ tone(520,0,.10,.15); tone(660,.09,.10,.12); tone(780,.18,.20,.10); }}
+      if (kind === 'loss') {{ tone(440,0,.15,.15); tone(330,.14,.20,.12); }}
+    }} catch(e) {{}}
+  }}
+
+  function showToast(ev) {{
+    var icon = ev.kind==='open'
+      ? (ev.side==='BUY' ? '▲' : '▼')
+      : (ev.side==='WIN' ? '✦' : '✕');
+
+    var el = document.createElement('div');
+    el.className = 'at-toast';
+    el.style.setProperty('--tc', ev.color);
+    el.innerHTML =
+      '<div class="at-toast-icon" style="color:'+ev.color+'">'+icon+'</div>'+
+      '<div class="at-toast-body">'+
+        '<div class="at-toast-title">'+ev.title+'</div>'+
+        '<div class="at-toast-msg">'+ev.body+'</div>'+
+      '</div>'+
+      '<div class="at-toast-bar" style="animation-duration:4s;"></div>';
+
+    wrap.appendChild(el);
+    playSound(ev.sound);
+
+    setTimeout(function() {{
+      el.classList.add('fade-out');
+      setTimeout(function() {{ if(el.parentNode) el.parentNode.removeChild(el); }}, 420);
+    }}, 4000);
+  }}
+
+  events.forEach(function(ev) {{ showToast(ev); }});
+}})();
+</script>
+"""
+    st_html.html(_alert_html, height=0)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # SIDEBAR
