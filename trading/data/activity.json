@@ -1,0 +1,12 @@
+[
+  {
+    "time": "2026-05-21T15:13:58.873175",
+    "level": "WARNING",
+    "message": "\ud83d\udea8 EMERGENCY STOP activated \u2014 all trading halted"
+  },
+  {
+    "time": "2026-05-21T15:14:00.772395",
+    "level": "INFO",
+    "message": "\u2705 Emergency stop cleared \u2014 trading resumed"
+  }
+]
