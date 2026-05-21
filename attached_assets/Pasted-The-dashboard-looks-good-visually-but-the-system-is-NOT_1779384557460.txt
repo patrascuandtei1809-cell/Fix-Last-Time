@@ -1,0 +1,71 @@
+The dashboard looks good visually, but the system is NOT working correctly.
+
+Please fix EVERYTHING so it becomes a fully working live trading dashboard.
+
+MAIN PROBLEMS:
+
+1. The chart is NOT moving
+- It looks static
+- It must update LIVE every 2–5 seconds automatically
+- Use st.rerun() or a proper refresh loop
+- The data must be refreshed continuously, not just once
+
+2. The bot is NOT running properly
+- It must run in a background thread (while True loop)
+- It should continuously fetch new market data (Binance API)
+- It must update the dataframe (df) in real time
+
+3. The chart must use LIVE data
+- The chart must always read from the bot’s updated dataframe
+- NOT from an initial/static dataset
+
+4. Indicators are not updating
+- EMA and RSI must update dynamically with new candles
+- No frozen values
+
+5. Trades are not behaving correctly
+- BUY/SELL must trigger properly
+- Trades must appear on the chart at correct timestamps
+- Entry and exit must be saved correctly
+
+6. Fix ALL missing or broken parts
+- If functions like get_trend, log, RiskManager are missing:
+  → either implement them correctly
+  → OR remove them completely
+- No import errors allowed
+
+7. Thread safety
+- Make sure shared data (df) is safe (use locks if needed)
+- Avoid crashes or race conditions
+
+8. Performance
+- The app should NOT freeze
+- No infinite rerun loops without control
+
+9. UI must remain professional
+- DO NOT simplify the interface
+- Keep the trading dashboard style
+- Keep sidebar, controls, and metrics
+
+FINAL REQUIREMENTS:
+
+✔ Give me ALL final files:
+- dashboard.py
+- bot.py
+- strategy.py (if used)
+- risk.py (if used)
+- requirements.txt
+
+✔ The project must run with:
+streamlit run dashboard.py
+
+✔ ZERO errors when running
+
+✔ The chart MUST move live
+✔ The bot MUST run continuously
+✔ Everything must be connected and working together
+
+IMPORTANT:
+Do NOT give partial code.
+Do NOT give explanations only.
+Give FULL WORKING CODE ready to run.
