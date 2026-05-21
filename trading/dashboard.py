@@ -17,6 +17,7 @@ import bot as bot_module
 from bot import (
     load_trades, load_activity, get_open_trades,
     add_trade, close_trade, reset_all_data, clear_activity, log_activity,
+    get_shared_df, get_shared_price, get_shared_updated_at,
 )
 from strategy import get_indicators
 from risk import RiskManager, RiskSettings
@@ -219,6 +220,7 @@ def _init():
         "initial_balance":  1000.0,
         "manual_amount":    100.0,
         "testnet":          True,
+        "refresh_secs":     5,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -245,7 +247,7 @@ def _fmt_pct(v):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# LIVE MARKET DATA — public API (no key needed)
+# LIVE MARKET DATA — always fetched fresh on every rerun
 # ─────────────────────────────────────────────────────────────────────────────
 sym       = st.session_state.symbol
 testnet   = st.session_state.testnet
@@ -258,35 +260,49 @@ low_24h       = None
 df_chart      = None
 chart_source  = ""
 
-# Always try public API first (no auth needed)
+# 1. Always fetch 24h stats (public, no auth needed)
 try:
-    stats       = public_24h(sym, testnet=False)   # always mainnet for public data
-    live_price  = stats["price"]
-    change_pct  = stats["change_pct"]
-    high_24h    = stats["high"]
-    low_24h     = stats["low"]
+    stats      = public_24h(sym, testnet=False)
+    live_price = stats["price"]
+    change_pct = stats["change_pct"]
+    high_24h   = stats["high"]
+    low_24h    = stats["low"]
 except Exception:
     pass
 
-try:
-    df_raw   = public_klines(sym, interval, limit=200, testnet=False)
-    df_chart = get_indicators(df_raw)
-    chart_source = "public"
-except Exception:
-    pass
+# 2. Chart data — prefer bot's continuously-updated shared df when bot is running
+bot_inst    = bot_module.get_bot()
+bot_running = bot_inst.is_running() if bot_inst else False
 
-# If authenticated, upgrade to authenticated data (testnet may have different prices)
-if st.session_state.connected and _cl():
+_bot_df = get_shared_df() if bot_running else None
+if _bot_df is not None and len(_bot_df) > 5:
+    df_chart     = _bot_df
+    chart_source = "bot-live"
+    # Also use bot's price if available
+    _bot_price = get_shared_price()
+    if _bot_price:
+        live_price = _bot_price
+else:
+    # Fall back: fetch fresh from public API every rerun
     try:
-        live_price = _cl().get_symbol_price(sym)
+        df_raw   = public_klines(sym, interval, limit=200, testnet=False)
+        df_chart = get_indicators(df_raw)
+        chart_source = "public"
     except Exception:
         pass
-    try:
-        df_raw2  = _cl().get_klines(sym, interval, limit=200)
-        df_chart = get_indicators(df_raw2)
-        chart_source = "auth"
-    except Exception:
-        pass
+
+    # Authenticated client overrides (testnet prices differ)
+    if st.session_state.connected and _cl():
+        try:
+            live_price = _cl().get_symbol_price(sym)
+        except Exception:
+            pass
+        try:
+            df_raw2  = _cl().get_klines(sym, interval, limit=200)
+            df_chart = get_indicators(df_raw2)
+            chart_source = "auth"
+        except Exception:
+            pass
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -314,10 +330,6 @@ if not st.session_state.paper_mode and st.session_state.connected and _cl():
 equity = st.session_state.initial_balance + total_pnl
 roi    = (total_pnl / st.session_state.initial_balance * 100) if st.session_state.initial_balance else 0.0
 
-bot_inst    = bot_module.get_bot()
-bot_running = bot_inst.is_running() if bot_inst else False
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # HEADER
 # ─────────────────────────────────────────────────────────────────────────────
@@ -326,6 +338,10 @@ chg_cls   = "chg-up" if change_pct >= 0 else "chg-dn"
 chg_str   = f"{'▲' if change_pct >= 0 else '▼'} {abs(change_pct):.2f}%"
 h_str     = _fmt_p(high_24h, 2) if high_24h else "—"
 l_str     = _fmt_p(low_24h, 2)  if low_24h  else "—"
+
+_upd_at = get_shared_updated_at() if bot_running else None
+_upd_str = _upd_at.strftime("%H:%M:%S") if _upd_at else datetime.now().strftime("%H:%M:%S")
+_src_label = {"bot-live": "bot-live", "auth": "auth-live", "public": "public"}.get(chart_source, "—")
 
 conn_pill = ('<span class="pill p-green"><span class="dot dot-g"></span>CONNECTED</span>'
              if st.session_state.connected
@@ -339,6 +355,8 @@ mode_pill = ('<span class="pill p-gray">📋 PAPER</span>'
 net_pill  = ('<span class="pill p-blue">TESTNET</span>'
              if testnet
              else '<span class="pill p-red">MAINNET</span>')
+_ref_secs = st.session_state.get("refresh_secs", 5)
+live_pill = f'<span class="pill p-gold"><span class="dot dot-y"></span>LIVE {_ref_secs}s · {_upd_str}</span>'
 
 st.markdown(f"""
 <div class="at-header">
@@ -352,7 +370,7 @@ st.markdown(f"""
   </div>
 
   <div class="pills">
-    {net_pill}{mode_pill}{conn_pill}{bot_pill}
+    {live_pill}{net_pill}{mode_pill}{conn_pill}{bot_pill}
   </div>
 </div>
 """, unsafe_allow_html=True)
@@ -499,9 +517,19 @@ with st.sidebar:
 
     st.markdown('<hr class="s-div"/>', unsafe_allow_html=True)
 
-    # Data
+    # Data & Live Refresh
     st.markdown('<div class="sec-lbl">Data & Refresh</div>', unsafe_allow_html=True)
-    auto_refresh = st.checkbox("Auto-refresh (30s)", value=False)
+    _ref_opts = [3, 5, 10, 30, 60]
+    _ref_idx  = _ref_opts.index(st.session_state.refresh_secs) if st.session_state.refresh_secs in _ref_opts else 1
+    _ref_choice = st.selectbox(
+        "Live refresh interval",
+        options=_ref_opts,
+        index=_ref_idx,
+        format_func=lambda x: f"{x}s",
+        help="Chart and data refresh automatically at this interval",
+    )
+    st.session_state.refresh_secs = _ref_choice
+    st.caption(f"Chart auto-refreshes every {_ref_choice}s — no manual action needed")
     if st.button("↺ Refresh Now", use_container_width=True):
         st.rerun()
     if st.button("🗑 Reset All Data", use_container_width=True):
@@ -664,16 +692,19 @@ with st.container():
             log_activity("WARNING", "🚨 EMERGENCY STOP activated")
             st.rerun()
 
-        # ── Chart ─────────────────────────────────────────────────────────────
+        # ── Chart (3-panel: Candles+EMA | Stochastic | RSI) ───────────────────
         if df_chart is not None and len(df_chart) > 5:
+            _has_rsi = "rsi" in df_chart.columns
+
             fig = make_subplots(
-                rows=2, cols=1,
+                rows=3 if _has_rsi else 2, cols=1,
                 shared_xaxes=True,
-                row_heights=[0.72, 0.28],
-                vertical_spacing=0.02,
+                row_heights=[0.60, 0.20, 0.20] if _has_rsi else [0.72, 0.28],
+                vertical_spacing=0.015,
+                subplot_titles=("", "Stochastic", "RSI 14") if _has_rsi else ("", "Stochastic"),
             )
 
-            # Candlestick
+            # ── Candlestick ────────────────────────────────────────────────────
             fig.add_trace(go.Candlestick(
                 x=df_chart["open_time"],
                 open=df_chart["open"], high=df_chart["high"],
@@ -684,23 +715,25 @@ with st.container():
                 line=dict(width=1), whiskerwidth=0,
             ), row=1, col=1)
 
-            # EMA 9
-            fig.add_trace(go.Scatter(
-                x=df_chart["open_time"], y=df_chart["ema9"],
-                line=dict(color="#ef5350", width=1.5),
-                name="EMA 9",
-                hovertemplate="EMA9: %{y:.4f}<extra></extra>",
-            ), row=1, col=1)
+            # ── EMA 9 ──────────────────────────────────────────────────────────
+            if "ema9" in df_chart.columns:
+                fig.add_trace(go.Scatter(
+                    x=df_chart["open_time"], y=df_chart["ema9"],
+                    line=dict(color="#ef5350", width=1.5),
+                    name="EMA 9",
+                    hovertemplate="EMA9: %{y:.4f}<extra></extra>",
+                ), row=1, col=1)
 
-            # EMA 21
-            fig.add_trace(go.Scatter(
-                x=df_chart["open_time"], y=df_chart["ema21"],
-                line=dict(color="#e3b341", width=1.5),
-                name="EMA 21",
-                hovertemplate="EMA21: %{y:.4f}<extra></extra>",
-            ), row=1, col=1)
+            # ── EMA 21 ─────────────────────────────────────────────────────────
+            if "ema21" in df_chart.columns:
+                fig.add_trace(go.Scatter(
+                    x=df_chart["open_time"], y=df_chart["ema21"],
+                    line=dict(color="#e3b341", width=1.5),
+                    name="EMA 21",
+                    hovertemplate="EMA21: %{y:.4f}<extra></extra>",
+                ), row=1, col=1)
 
-            # Current price annotation
+            # ── Live price line ────────────────────────────────────────────────
             if live_price:
                 p_color = "#26a69a" if change_pct >= 0 else "#ef5350"
                 fig.add_hline(
@@ -712,7 +745,7 @@ with st.container():
                     annotation_font_size=10,
                 )
 
-            # Trade markers
+            # ── Trade markers ──────────────────────────────────────────────────
             buckets = {
                 "mb": ([], [], "triangle-up",   "#58a6ff", 14, "Manual BUY"),
                 "ms": ([], [], "triangle-down", "#bc8cff", 14, "Manual SELL"),
@@ -721,7 +754,6 @@ with st.container():
                 "mx": ([], [], "x-thin",        "#58a6ff", 10, "Manual Exit"),
                 "bx": ([], [], "x-thin",        "#e3b341", 10, "Bot Exit"),
             }
-
             for t in all_trades:
                 try:
                     ts    = pd.to_datetime(t.get("open_time"))
@@ -730,19 +762,13 @@ with st.container():
                     side  = t.get("side", "BUY")
                     if ep is None:
                         continue
-                    if ttype == "manual":
-                        k = "mb" if side == "BUY" else "ms"
-                    else:
-                        k = "bb" if side == "BUY" else "bs"
+                    k = ("mb" if side == "BUY" else "ms") if ttype == "manual" else ("bb" if side == "BUY" else "bs")
                     buckets[k][0].append(ts)
                     buckets[k][1].append(ep)
-
                     if t.get("exit_price") and t.get("close_time"):
-                        ts_x = pd.to_datetime(t["close_time"])
-                        xp   = t["exit_price"]
-                        xk   = "mx" if ttype == "manual" else "bx"
-                        buckets[xk][0].append(ts_x)
-                        buckets[xk][1].append(xp)
+                        xk = "mx" if ttype == "manual" else "bx"
+                        buckets[xk][0].append(pd.to_datetime(t["close_time"]))
+                        buckets[xk][1].append(t["exit_price"])
                 except Exception:
                     continue
 
@@ -756,28 +782,50 @@ with st.container():
                         hovertemplate=f"{blbl}<br>%{{x}}<br>%{{y:.4f}}<extra></extra>",
                     ), row=1, col=1)
 
-            # Stochastic
-            fig.add_trace(go.Scatter(
-                x=df_chart["open_time"], y=df_chart["stoch_k"],
-                line=dict(color="#79b0ff", width=1.5), name="%K",
-            ), row=2, col=1)
-            fig.add_trace(go.Scatter(
-                x=df_chart["open_time"], y=df_chart["stoch_d"],
-                line=dict(color="#c9d1d9", width=1.2, dash="dot"), name="%D",
-            ), row=2, col=1)
-            fig.add_hline(y=80, line=dict(color="#ef535050", width=1, dash="dash"), row=2, col=1)
-            fig.add_hline(y=20, line=dict(color="#26a69a50", width=1, dash="dash"), row=2, col=1)
-            fig.add_hrect(y0=80, y1=100, fillcolor="#ef535008", line_width=0, row=2, col=1)
-            fig.add_hrect(y0=0,  y1=20,  fillcolor="#26a69a08", line_width=0, row=2, col=1)
+            # ── Stochastic (row 2) ─────────────────────────────────────────────
+            if "stoch_k" in df_chart.columns:
+                fig.add_trace(go.Scatter(
+                    x=df_chart["open_time"], y=df_chart["stoch_k"],
+                    line=dict(color="#79b0ff", width=1.5), name="%K",
+                    hovertemplate="%K: %{y:.1f}<extra></extra>",
+                ), row=2, col=1)
+                fig.add_trace(go.Scatter(
+                    x=df_chart["open_time"], y=df_chart["stoch_d"],
+                    line=dict(color="#c9d1d9", width=1.2, dash="dot"), name="%D",
+                    hovertemplate="%D: %{y:.1f}<extra></extra>",
+                ), row=2, col=1)
+                fig.add_hline(y=80, line=dict(color="#ef535060", width=1, dash="dash"), row=2, col=1)
+                fig.add_hline(y=20, line=dict(color="#26a69a60", width=1, dash="dash"), row=2, col=1)
+                fig.add_hrect(y0=80, y1=100, fillcolor="#ef535010", line_width=0, row=2, col=1)
+                fig.add_hrect(y0=0,  y1=20,  fillcolor="#26a69a10", line_width=0, row=2, col=1)
 
+            # ── RSI (row 3) ────────────────────────────────────────────────────
+            if _has_rsi:
+                _rsi_color = df_chart["rsi"].apply(
+                    lambda v: "#ef5350" if v > 70 else ("#26a69a" if v < 30 else "#79b0ff")
+                )
+                fig.add_trace(go.Scatter(
+                    x=df_chart["open_time"], y=df_chart["rsi"],
+                    line=dict(color="#79b0ff", width=1.5), name="RSI 14",
+                    fill="tozeroy", fillcolor="rgba(121,176,255,0.05)",
+                    hovertemplate="RSI: %{y:.1f}<extra></extra>",
+                ), row=3, col=1)
+                fig.add_hline(y=70, line=dict(color="#ef535060", width=1, dash="dash"), row=3, col=1)
+                fig.add_hline(y=30, line=dict(color="#26a69a60", width=1, dash="dash"), row=3, col=1)
+                fig.add_hline(y=50, line=dict(color="#48505830", width=1, dash="dot"), row=3, col=1)
+                fig.add_hrect(y0=70, y1=100, fillcolor="#ef535010", line_width=0, row=3, col=1)
+                fig.add_hrect(y0=0,  y1=30,  fillcolor="#26a69a10", line_width=0, row=3, col=1)
+
+            # ── Layout ─────────────────────────────────────────────────────────
             G = "#1a2030"
+            n_rows = 3 if _has_rsi else 2
             fig.update_layout(
                 paper_bgcolor="#0a0c10",
                 plot_bgcolor="#0a0c10",
                 font=dict(color="#6e7681", family="'JetBrains Mono',monospace", size=10),
                 xaxis_rangeslider_visible=False,
-                height=590,
-                margin=dict(l=0, r=64, t=6, b=0),
+                height=640,
+                margin=dict(l=0, r=64, t=18, b=0),
                 showlegend=True,
                 legend=dict(
                     bgcolor="rgba(13,17,23,0.88)",
@@ -791,24 +839,32 @@ with st.container():
                 hoverlabel=dict(bgcolor="#161b22", bordercolor="#30363d",
                                 font_color="#c9d1d9", font_size=11),
             )
-            fig.update_xaxes(
-                gridcolor=G, gridwidth=1, zerolinecolor=G,
-                showspikes=True, spikecolor="#484f58", spikewidth=1,
-                tickfont=dict(size=10),
-            )
+            for r in range(1, n_rows + 1):
+                fig.update_xaxes(
+                    gridcolor=G, gridwidth=1, zerolinecolor=G,
+                    showspikes=True, spikecolor="#484f58", spikewidth=1,
+                    tickfont=dict(size=10), row=r, col=1,
+                )
             fig.update_yaxes(
                 gridcolor=G, gridwidth=1, zerolinecolor=G,
                 showspikes=True, spikecolor="#484f58",
-                tickfont=dict(size=10),
-                tickprefix="$",
+                tickfont=dict(size=10), tickprefix="$",
                 row=1, col=1,
             )
             fig.update_yaxes(
-                gridcolor=G, gridwidth=1,
-                range=[0, 100], ticksuffix="",
-                tickfont=dict(size=10),
-                row=2, col=1,
+                gridcolor=G, gridwidth=1, range=[0, 100],
+                tickfont=dict(size=10), row=2, col=1,
             )
+            if _has_rsi:
+                fig.update_yaxes(
+                    gridcolor=G, gridwidth=1, range=[0, 100],
+                    tickfont=dict(size=10), row=3, col=1,
+                )
+            # Subplot title styling
+            for ann in fig.layout.annotations:
+                ann.font.color = "#484f58"
+                ann.font.size  = 9
+
             st.plotly_chart(fig, use_container_width=True,
                             config={"displayModeBar": True, "displaylogo": False,
                                     "modeBarButtonsToRemove": ["select2d", "lasso2d", "toImage"]})
@@ -951,7 +1007,9 @@ with st.container():
 
         st.markdown("<div style='height:48px'></div>", unsafe_allow_html=True)
 
-# ── Auto-refresh ──────────────────────────────────────────────────────────────
-if auto_refresh:
-    time.sleep(30)
-    st.rerun()
+# ── Auto-refresh (always-on, configurable interval) ───────────────────────────
+# This is the ONLY place st.rerun() is called for live updates.
+# After the full page renders, we sleep N seconds then trigger the next cycle.
+_sleep = st.session_state.get("refresh_secs", 5)
+time.sleep(_sleep)
+st.rerun()

@@ -112,9 +112,18 @@ def get_signal(df: pd.DataFrame, strategy: str, threshold: float = 0.0003) -> Tu
     return "HOLD", f"Unknown strategy: {strategy}"
 
 
+def calculate_rsi(series: pd.Series, period: int = 14) -> pd.Series:
+    delta = series.diff()
+    gain  = delta.clip(lower=0).rolling(period).mean()
+    loss  = (-delta.clip(upper=0)).rolling(period).mean()
+    rs    = gain / loss.replace(0, np.nan)
+    return 100 - (100 / (1 + rs))
+
+
 def get_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
-    df["ema9"] = calculate_ema(df["close"], 9)
-    df["ema21"] = calculate_ema(df["close"], 21)
+    df["ema9"]    = calculate_ema(df["close"], 9)
+    df["ema21"]   = calculate_ema(df["close"], 21)
     df["stoch_k"], df["stoch_d"] = calculate_stochastic(df)
+    df["rsi"]     = calculate_rsi(df["close"])
     return df

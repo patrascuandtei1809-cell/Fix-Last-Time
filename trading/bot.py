@@ -25,6 +25,32 @@ from binance_client import public_klines, public_price
 _bot: Optional["TradingBot"] = None
 _bot_lock = threading.Lock()
 
+# ── Shared live state (bot writes → dashboard reads every rerun) ───────────────
+_state_lock = threading.Lock()
+_shared: Dict = {
+    "df":         None,   # pd.DataFrame with indicators
+    "price":      None,   # float
+    "updated_at": None,   # datetime
+}
+
+def get_shared_df():
+    with _state_lock:
+        return _shared.get("df")
+
+def get_shared_price():
+    with _state_lock:
+        return _shared.get("price")
+
+def get_shared_updated_at():
+    with _state_lock:
+        return _shared.get("updated_at")
+
+def _set_shared(df=None, price=None):
+    with _state_lock:
+        if df    is not None: _shared["df"]    = df
+        if price is not None: _shared["price"] = price
+        _shared["updated_at"] = datetime.now()
+
 # ── Data paths ────────────────────────────────────────────────────────────────
 _DIR      = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR  = os.path.join(_DIR, "data")
@@ -244,6 +270,7 @@ class TradingBot:
         price = self._get_price()
         if price is None:
             return
+        _set_shared(price=price)
         log_activity("INFO", f"💰 {self.symbol} = ${price:,.4f}")
 
         # ── 2. Manage open positions (SL / TP) ───────────────────────────────
@@ -287,6 +314,13 @@ class TradingBot:
         df = self._get_klines()
         if df is None:
             return
+
+        # Push live klines (with indicators) to shared state for dashboard
+        try:
+            from strategy import get_indicators as _gi
+            _set_shared(df=_gi(df))
+        except Exception:
+            _set_shared(df=df)
 
         signal, reason = get_signal(df, self.strategy, threshold=self.threshold)
         log_activity("SIGNAL", f"📊 [{self.strategy}] → {signal} | {reason}")
