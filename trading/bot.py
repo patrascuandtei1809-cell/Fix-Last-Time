@@ -1,3 +1,14 @@
+"""
+TradingBot — background daemon thread, survives Streamlit reruns.
+
+Key design:
+  - Module-level global `_bot` is the singleton. Streamlit imports this module
+    once per process; the global persists across script reruns.
+  - Supports authenticated BinanceClient OR public-API-only (paper mode, no key).
+  - One thread, no duplicates. start() is a no-op if the thread is alive.
+  - All state (trades, activity) written to JSON on disk so it survives restarts.
+"""
+
 import threading
 import time
 import json
@@ -8,30 +19,33 @@ from typing import Optional, List, Dict
 
 from strategy import get_signal
 from risk import RiskManager, RiskSettings
+from binance_client import public_klines, public_price
 
-# ── Global singleton ─────────────────────────────────────────────────────────
+# ── Singleton ─────────────────────────────────────────────────────────────────
 _bot: Optional["TradingBot"] = None
 _bot_lock = threading.Lock()
 
 # ── Data paths ────────────────────────────────────────────────────────────────
-_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(_DIR, "data")
+_DIR      = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR  = os.path.join(_DIR, "data")
 os.makedirs(DATA_DIR, exist_ok=True)
-TRADES_FILE = os.path.join(DATA_DIR, "trades.json")
+
+TRADES_FILE   = os.path.join(DATA_DIR, "trades.json")
 ACTIVITY_FILE = os.path.join(DATA_DIR, "activity.json")
-_file_lock = threading.Lock()
+_file_lock    = threading.Lock()
+MAX_ACTIVITY  = 500
 
-MAX_ACTIVITY = 500
 
-
-# ── Persistence helpers ───────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# Persistence helpers
+# ─────────────────────────────────────────────────────────────────────────────
 
 def load_trades() -> List[Dict]:
     with _file_lock:
         if not os.path.exists(TRADES_FILE):
             return []
         try:
-            with open(TRADES_FILE, "r") as f:
+            with open(TRADES_FILE) as f:
                 return json.load(f)
         except Exception:
             return []
@@ -48,22 +62,21 @@ def load_activity() -> List[Dict]:
         if not os.path.exists(ACTIVITY_FILE):
             return []
         try:
-            with open(ACTIVITY_FILE, "r") as f:
-                data = json.load(f)
-                return data[-MAX_ACTIVITY:]
+            with open(ACTIVITY_FILE) as f:
+                return json.load(f)[-MAX_ACTIVITY:]
         except Exception:
             return []
 
 
-def _write_activity(entry: Dict):
+def _append_activity(entry: Dict):
     with _file_lock:
-        data = []
+        data: List[Dict] = []
         if os.path.exists(ACTIVITY_FILE):
             try:
-                with open(ACTIVITY_FILE, "r") as f:
+                with open(ACTIVITY_FILE) as f:
                     data = json.load(f)
             except Exception:
-                data = []
+                pass
         data.append(entry)
         data = data[-MAX_ACTIVITY:]
         with open(ACTIVITY_FILE, "w") as f:
@@ -71,9 +84,9 @@ def _write_activity(entry: Dict):
 
 
 def log_activity(level: str, message: str):
-    _write_activity({
-        "time": datetime.now().isoformat(),
-        "level": level,
+    _append_activity({
+        "time":    datetime.now().isoformat(),
+        "level":   level,
         "message": message,
     })
 
@@ -100,19 +113,19 @@ def close_trade(trade_id: str, exit_price: float, reason: str) -> Optional[Dict]
     trades = load_trades()
     for t in trades:
         if t.get("id") == trade_id and t.get("status") == "open":
-            t["exit_price"] = exit_price
-            t["close_time"] = datetime.now().isoformat()
-            t["status"] = "closed"
-            t["close_reason"] = reason
-            invested = t.get("invested", 0) or 0
-            entry = t["entry_price"]
-            side = t["side"]
+            invested = t.get("invested") or 0
+            entry    = t["entry_price"]
+            side     = t["side"]
             if side == "BUY":
-                t["profit_loss"] = (exit_price - entry) / entry * invested
+                t["profit_loss"]     = (exit_price - entry) / entry * invested
                 t["profit_loss_pct"] = (exit_price - entry) / entry * 100
             else:
-                t["profit_loss"] = (entry - exit_price) / entry * invested
+                t["profit_loss"]     = (entry - exit_price) / entry * invested
                 t["profit_loss_pct"] = (entry - exit_price) / entry * 100
+            t["exit_price"]  = exit_price
+            t["close_time"]  = datetime.now().isoformat()
+            t["close_reason"] = reason
+            t["status"]      = "closed"
             save_trades(trades)
             return t
     return None
@@ -120,266 +133,339 @@ def close_trade(trade_id: str, exit_price: float, reason: str) -> Optional[Dict]
 
 def reset_all_data():
     with _file_lock:
-        for f in [TRADES_FILE, ACTIVITY_FILE]:
-            if os.path.exists(f):
-                os.remove(f)
+        for fpath in [TRADES_FILE, ACTIVITY_FILE]:
+            if os.path.exists(fpath):
+                os.remove(fpath)
 
 
-# ── Trading Bot ───────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# TradingBot
+# ─────────────────────────────────────────────────────────────────────────────
 
 class TradingBot:
+    """
+    Parameters
+    ----------
+    client : BinanceClient | None
+        Authenticated client. If None the bot runs in paper-only mode using
+        the public Binance REST API for market data. No API key required.
+    symbol, strategy, risk_manager, interval, check_every, paper_mode, threshold
+        Self-explanatory trading parameters.
+    """
+
     def __init__(
         self,
-        client,
-        symbol: str,
-        strategy: str,
-        risk_manager: RiskManager,
-        interval: str = "5m",
-        check_every: int = 30,
-        paper_mode: bool = True,
+        client,                          # BinanceClient or None
+        symbol:          str,
+        strategy:        str,
+        risk_manager:    RiskManager,
+        interval:        str   = "5m",
+        check_every:     int   = 30,
+        paper_mode:      bool  = True,
         price_threshold: float = 0.0003,
     ):
-        self.client = client
-        self.symbol = symbol
-        self.strategy = strategy
-        self.risk = risk_manager
-        self.interval = interval
+        self.client      = client
+        self.symbol      = symbol
+        self.strategy    = strategy
+        self.risk        = risk_manager
+        self.interval    = interval
         self.check_every = check_every
-        self.paper = paper_mode
-        self.threshold = price_threshold
+        self.paper       = paper_mode
+        self.threshold   = price_threshold
 
-        self._thread: Optional[threading.Thread] = None
-        self._running = False
+        # If no authenticated client, force paper mode
+        if self.client is None:
+            self.paper = True
 
-    # ── Public control ────────────────────────────────────────────────────────
+        self._thread:  Optional[threading.Thread] = None
+        self._running: bool = False
+
+    # ── Control ───────────────────────────────────────────────────────────────
 
     def start(self) -> bool:
         if self._thread and self._thread.is_alive():
-            log_activity("WARNING", "⚠️ Bot already running — ignoring duplicate start request")
+            log_activity("WARNING", "⚠️ Bot already running — ignoring duplicate start")
             return False
         self._running = True
-        self._thread = threading.Thread(
+        self._thread  = threading.Thread(
             target=self._loop,
             daemon=True,
-            name=f"bot-{self.symbol}",
+            name=f"alphatrade-{self.symbol}",
         )
         self._thread.start()
-        mode = "PAPER" if self.paper else "LIVE"
+        auth_label = "auth client" if self.client else "public API (no key)"
+        mode_label = "PAPER" if self.paper else "LIVE"
         log_activity(
             "INFO",
-            f"🚀 Bot started | {self.symbol} | Strategy: {self.strategy} | "
-            f"Mode: {mode} | Interval: {self.interval} | Check every {self.check_every}s",
+            f"🚀 Bot started | {self.symbol} | {self.strategy} | {mode_label} | "
+            f"Data: {auth_label} | interval={self.interval} | "
+            f"check={self.check_every}s | SL={self.risk.settings.stop_loss_pct}% | "
+            f"TP={self.risk.settings.take_profit_pct}%",
         )
         return True
 
     def stop(self):
         self._running = False
-        log_activity("INFO", f"⛔ Bot stop requested for {self.symbol}")
+        log_activity("INFO", f"⛔ Bot stopping for {self.symbol}")
 
     def is_running(self) -> bool:
         return bool(self._thread and self._thread.is_alive() and self._running)
 
-    def update_settings(
-        self,
-        strategy: str = None,
-        interval: str = None,
-        check_every: int = None,
-        paper_mode: bool = None,
-        threshold: float = None,
-    ):
-        if strategy:
-            self.strategy = strategy
-        if interval:
-            self.interval = interval
-        if check_every is not None:
-            self.check_every = check_every
-        if paper_mode is not None:
-            self.paper = paper_mode
-        if threshold is not None:
-            self.threshold = threshold
+    def update_settings(self, **kwargs):
+        for k, v in kwargs.items():
+            if hasattr(self, k):
+                setattr(self, k, v)
 
     # ── Main loop ─────────────────────────────────────────────────────────────
 
     def _loop(self):
-        log_activity("INFO", f"📡 Bot thread running | checks every {self.check_every}s")
+        log_activity("INFO", f"📡 Bot thread alive — ticking every {self.check_every}s")
         while self._running:
             try:
                 self._tick()
             except Exception as exc:
-                log_activity("ERROR", f"Bot error: {exc}")
-            # Interruptible sleep
+                log_activity("ERROR", f"Unhandled bot error: {exc}")
+            # Interruptible sleep — checks _running every second
             for _ in range(self.check_every):
                 if not self._running:
                     break
                 time.sleep(1)
         log_activity("INFO", f"🛑 Bot thread exited for {self.symbol}")
 
+    # ── Single tick ───────────────────────────────────────────────────────────
+
     def _tick(self):
         # Emergency stop guard
         if self.risk.settings.emergency_stop:
-            log_activity("WARNING", "🚨 Emergency stop is ON — skipping tick")
+            log_activity("WARNING", "🚨 Emergency stop active — tick skipped")
             return
 
-        # Get current price
-        try:
-            price = self.client.get_symbol_price(self.symbol)
-        except Exception as e:
-            log_activity("ERROR", f"Failed to fetch price: {e}")
+        # ── 1. Get current price ──────────────────────────────────────────────
+        price = self._get_price()
+        if price is None:
             return
-        log_activity("INFO", f"💰 Price check | {self.symbol} = ${price:,.4f}")
+        log_activity("INFO", f"💰 {self.symbol} = ${price:,.4f}")
 
-        # Manage open positions (SL / TP)
-        open_trades = get_open_trades()
-        bot_open = [t for t in open_trades if t.get("type") == "bot" and t.get("coin") == self.symbol]
+        # ── 2. Manage open positions (SL / TP) ───────────────────────────────
+        open_trades  = get_open_trades()
+        my_open      = [t for t in open_trades
+                        if t.get("type") == "bot" and t.get("coin") == self.symbol]
 
-        for trade in bot_open:
+        for trade in my_open:
             entry = trade["entry_price"]
-            side = trade["side"]
+            side  = trade["side"]
+
             sl_hit, sl_msg = self.risk.check_stop_loss(entry, price, side)
             tp_hit, tp_msg = self.risk.check_take_profit(entry, price, side)
 
-            if sl_hit:
-                log_activity("ORDER", f"🔴 STOP LOSS | Trade {trade['id']} | {sl_msg}")
-                self._close(trade, price, sl_msg)
-                return
-            if tp_hit:
-                log_activity("ORDER", f"🟢 TAKE PROFIT | Trade {trade['id']} | {tp_msg}")
-                self._close(trade, price, tp_msg)
-                return
+            pnl_now = (price - entry) / entry * 100 if side == "BUY" else (entry - price) / entry * 100
 
             log_activity(
                 "INFO",
-                f"📌 Position open | {trade['id']} | Entry: ${entry:.4f} | "
-                f"SL: ${self.risk.stop_loss_price(entry, side):.4f} | "
-                f"TP: ${self.risk.take_profit_price(entry, side):.4f} | "
-                f"Current: ${price:.4f}",
+                f"📌 Open {trade['id']} | {side} @ ${entry:.4f} | "
+                f"Now ${price:.4f} | Δ {pnl_now:+.2f}% | "
+                f"SL ${self.risk.stop_loss_price(entry, side):.4f} | "
+                f"TP ${self.risk.take_profit_price(entry, side):.4f}",
             )
 
-        # Check if a new trade can be opened
-        can, block = self.risk.can_open_trade(len(open_trades))
-        if not can:
-            log_activity("INFO", f"⏸️ Cannot open trade: {block}")
+            if sl_hit:
+                log_activity("ORDER", f"🔴 STOP LOSS | {trade['id']} | {sl_msg}")
+                self._close(trade, price, sl_msg)
+                return
+            if tp_hit:
+                log_activity("ORDER", f"🟢 TAKE PROFIT | {trade['id']} | {tp_msg}")
+                self._close(trade, price, tp_msg)
+                return
+
+        # ── 3. Can we open a new trade? ───────────────────────────────────────
+        can_trade, block_reason = self.risk.can_open_trade(len(open_trades))
+        if not can_trade:
+            log_activity("INFO", f"⏸️ {block_reason}")
             return
 
-        # Compute signal
-        try:
-            df = self.client.get_klines(self.symbol, self.interval, limit=150)
-        except Exception as e:
-            log_activity("ERROR", f"Failed to fetch klines: {e}")
+        # ── 4. Compute signal from klines ─────────────────────────────────────
+        df = self._get_klines()
+        if df is None:
             return
 
         signal, reason = get_signal(df, self.strategy, threshold=self.threshold)
         log_activity("SIGNAL", f"📊 [{self.strategy}] → {signal} | {reason}")
 
         if signal == "HOLD":
-            log_activity("INFO", "⏭️ No action — signal is HOLD")
+            log_activity("INFO", "⏭️ HOLD — no trade opened")
             return
 
-        # Compute size
-        try:
-            balance = self.client.get_account_balance("USDT")
-        except Exception as e:
-            log_activity("ERROR", f"Failed to fetch balance: {e}")
-            return
-
+        # ── 5. Size the position ──────────────────────────────────────────────
+        balance  = self._get_balance()
         invested = self.risk.calculate_invested(balance)
+
         if invested < 10:
-            log_activity("WARNING", f"⚠️ Investment too small (${invested:.2f}) — need ≥$10")
+            log_activity(
+                "WARNING",
+                f"⚠️ Skipping — invested amount ${invested:.2f} < $10 minimum "
+                f"(balance=${balance:.2f}, risk={self.risk.settings.risk_per_trade_pct}%)"
+            )
             return
 
-        qty = self.risk.calculate_quantity(balance, price)
-        try:
-            qty = self.client.round_quantity(self.symbol, qty)
-        except Exception:
-            pass
+        qty     = self.risk.calculate_quantity(balance, price)
+        qty     = self._round_qty(qty)
+        sl_p    = self.risk.stop_loss_price(price, signal)
+        tp_p    = self.risk.take_profit_price(price, signal)
 
-        sl_price = self.risk.stop_loss_price(price, signal)
-        tp_price = self.risk.take_profit_price(price, signal)
-
-        # Place order or paper record
-        if not self.paper:
+        # ── 6. Execute ────────────────────────────────────────────────────────
+        if not self.paper and self.client:
             try:
-                order = self.client.place_market_order(self.symbol, signal, qty)
+                order      = self.client.place_market_order(self.symbol, signal, qty)
                 fill_price = float(order.get("fills", [{}])[0].get("price", price))
-                log_activity("ORDER", f"✅ LIVE {signal} | {qty} {self.symbol} @ ${fill_price:.4f}")
-                price = fill_price
+                price      = fill_price
+                log_activity("ORDER",
+                    f"✅ LIVE {signal} | {qty} {self.symbol} @ ${price:.4f}")
             except Exception as e:
-                log_activity("ERROR", f"Order placement failed: {e}")
+                log_activity("ERROR", f"Order failed: {e}")
                 return
         else:
             log_activity(
                 "ORDER",
                 f"📋 PAPER {signal} | {qty:.6f} {self.symbol} @ ${price:.4f} | "
-                f"Invested: ${invested:.2f} | SL: ${sl_price:.4f} | TP: ${tp_price:.4f}",
+                f"${invested:.2f} invested | SL ${sl_p:.4f} | TP ${tp_p:.4f}",
             )
 
+        # ── 7. Record trade ───────────────────────────────────────────────────
         trade = {
-            "coin": self.symbol,
-            "exchange": "Binance Testnet" if self.client.testnet else "Binance Live",
-            "type": "bot",
-            "strategy": self.strategy,
-            "side": signal,
-            "entry_price": price,
-            "exit_price": None,
-            "quantity": qty,
-            "invested": invested,
-            "profit_loss": None,
+            "coin":            self.symbol,
+            "exchange":        "Binance Testnet" if (self.client and self.client.testnet) else
+                               ("Binance Live"   if self.client else "Paper (public data)"),
+            "type":            "bot",
+            "strategy":        self.strategy,
+            "side":            signal,
+            "entry_price":     price,
+            "exit_price":      None,
+            "quantity":        qty,
+            "invested":        invested,
+            "profit_loss":     None,
             "profit_loss_pct": None,
-            "open_time": datetime.now().isoformat(),
-            "close_time": None,
-            "reason": reason,
-            "close_reason": None,
-            "stop_loss": sl_price,
-            "take_profit": tp_price,
-            "status": "open",
-            "paper": self.paper,
+            "open_time":       datetime.now().isoformat(),
+            "close_time":      None,
+            "reason":          reason,
+            "close_reason":    None,
+            "stop_loss":       sl_p,
+            "take_profit":     tp_p,
+            "status":          "open",
+            "paper":           self.paper,
         }
         added = add_trade(trade)
-        log_activity("INFO", f"📝 Trade recorded | ID: {added['id']} | {signal} {self.symbol}")
+        log_activity("INFO",
+            f"📝 Trade recorded | ID:{added['id']} | {signal} {self.symbol} | "
+            f"SL ${sl_p:.4f} | TP ${tp_p:.4f}")
+
+    # ── Close helper ──────────────────────────────────────────────────────────
 
     def _close(self, trade: Dict, price: float, reason: str):
-        if not self.paper:
+        if not self.paper and self.client:
             opposite = "SELL" if trade["side"] == "BUY" else "BUY"
             try:
                 self.client.place_market_order(self.symbol, opposite, trade["quantity"])
             except Exception as e:
                 log_activity("ERROR", f"Close order failed: {e}")
                 return
+
         closed = close_trade(trade["id"], price, reason)
         if closed:
-            pnl = closed.get("profit_loss") or 0
-            pct = closed.get("profit_loss_pct") or 0
+            pnl  = closed.get("profit_loss") or 0
+            pct  = closed.get("profit_loss_pct") or 0
             icon = "🟢" if pnl >= 0 else "🔴"
             log_activity(
                 "ORDER",
-                f"{icon} Trade closed | ID: {closed['id']} | "
-                f"P&L: ${pnl:+.4f} ({pct:+.2f}%) | {reason}",
+                f"{icon} Closed {closed['id']} | P&L ${pnl:+.4f} ({pct:+.2f}%) | {reason}",
             )
 
+    # ── Data helpers ──────────────────────────────────────────────────────────
 
-# ── Singleton helpers ─────────────────────────────────────────────────────────
+    def _get_price(self) -> Optional[float]:
+        # Prefer authenticated client (testnet might differ from mainnet)
+        if self.client:
+            try:
+                return self.client.get_symbol_price(self.symbol)
+            except Exception as e:
+                log_activity("WARNING", f"Auth price failed, falling back to public: {e}")
+
+        # Public API — no key needed
+        try:
+            return public_price(self.symbol, testnet=False)
+        except Exception as e:
+            log_activity("ERROR", f"Public price fetch failed: {e}")
+            return None
+
+    def _get_klines(self):
+        if self.client:
+            try:
+                return self.client.get_klines(self.symbol, self.interval, limit=150)
+            except Exception as e:
+                log_activity("WARNING", f"Auth klines failed, falling back to public: {e}")
+
+        try:
+            return public_klines(self.symbol, self.interval, limit=150, testnet=False)
+        except Exception as e:
+            log_activity("ERROR", f"Public klines fetch failed: {e}")
+            return None
+
+    def _get_balance(self) -> float:
+        """Return USDT balance. Uses simulated balance of $1000 when no auth client."""
+        if self.client and not self.paper:
+            try:
+                return self.client.get_account_balance("USDT")
+            except Exception as e:
+                log_activity("WARNING", f"Balance fetch failed: {e}")
+        # Paper or no auth — derive from initial assumption
+        # The actual invested balance is tracked by the risk manager settings
+        # We return a nominal $1000 when no real balance is available
+        all_closed = [t for t in load_trades() if t.get("status") == "closed"]
+        total_pnl  = sum((t.get("profit_loss") or 0) for t in all_closed)
+        return max(100.0, 1000.0 + total_pnl)
+
+    def _round_qty(self, qty: float) -> float:
+        if self.client:
+            try:
+                return self.client.round_quantity(self.symbol, qty)
+            except Exception:
+                pass
+        return round(qty, 6)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Singleton API
+# ─────────────────────────────────────────────────────────────────────────────
 
 def get_bot() -> Optional[TradingBot]:
     return _bot
 
 
-def create_bot(client, symbol, strategy, risk_manager, interval, check_every, paper_mode, threshold) -> TradingBot:
+def create_bot(
+    client,
+    symbol:       str,
+    strategy:     str,
+    risk_manager: RiskManager,
+    interval:     str   = "5m",
+    check_every:  int   = 30,
+    paper_mode:   bool  = True,
+    threshold:    float = 0.0003,
+) -> TradingBot:
     global _bot
     with _bot_lock:
         if _bot and _bot.is_running():
             _bot.stop()
-            time.sleep(1)
+            time.sleep(0.5)
         _bot = TradingBot(
-            client=client,
-            symbol=symbol,
-            strategy=strategy,
-            risk_manager=risk_manager,
-            interval=interval,
-            check_every=check_every,
-            paper_mode=paper_mode,
-            price_threshold=threshold,
+            client          = client,
+            symbol          = symbol,
+            strategy        = strategy,
+            risk_manager    = risk_manager,
+            interval        = interval,
+            check_every     = check_every,
+            paper_mode      = paper_mode,
+            price_threshold = threshold,
         )
-        return _bot
+    return _bot
 
 
 def stop_bot():

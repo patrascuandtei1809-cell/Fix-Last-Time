@@ -434,31 +434,26 @@ with st.sidebar:
 
     bc1, bc2 = st.columns(2)
     with bc1:
-        start_disabled = bot_running
-        if st.button("▶ Start", use_container_width=True, disabled=start_disabled):
-            # Bot uses public API for data if not authenticated
+        if st.button("▶ Start", use_container_width=True, disabled=bot_running):
             c = _cl()
             if c is None and not paper_tog:
-                st.error("Connect to Binance first for live trading.")
+                st.error("Connect to Binance first — live trading requires API keys.")
             else:
-                # If paper mode with no auth, we need a fake client stub for the bot
-                # or pass None and bot uses public functions
+                # client=None is fine; bot falls back to public Binance API
+                b = bot_module.create_bot(
+                    client=c,
+                    symbol=st.session_state.symbol,
+                    strategy=st.session_state.strategy,
+                    risk_manager=st.session_state.risk_manager,
+                    interval=intv_sel,
+                    check_every=ck_val,
+                    paper_mode=True if c is None else paper_tog,
+                    threshold=thr_val / 100,
+                )
+                b.start()
                 if c is None:
-                    st.warning("No API key — bot will use public data, paper trades only.")
-
-                if c is not None:
-                    b = bot_module.create_bot(
-                        client=c,
-                        symbol=st.session_state.symbol,
-                        strategy=st.session_state.strategy,
-                        risk_manager=st.session_state.risk_manager,
-                        interval=intv_sel,
-                        check_every=ck_val,
-                        paper_mode=paper_tog,
-                        threshold=thr_val / 100,
-                    )
-                    b.start()
-                    st.rerun()
+                    st.info("🔓 Running in paper mode with public Binance data — no API key needed.")
+                st.rerun()
     with bc2:
         if st.button("⏹ Stop", use_container_width=True, disabled=not bot_running):
             bot_module.stop_bot()
@@ -581,20 +576,24 @@ with st.container():
         with tb4:
             emg_btn  = st.button("🚨 STOP", use_container_width=True, type="secondary")
         with tb5:
-            if st.button("⏩ Bot", use_container_width=True,
-                          help="Start/Stop bot"):
+            bot_label = "⏹ Bot OFF" if bot_running else "⏩ Bot ON"
+            if st.button(bot_label, use_container_width=True,
+                          help="Toggle bot on/off"):
                 if bot_running:
                     bot_module.stop_bot()
                 else:
                     c = _cl()
-                    if c:
+                    if c is None and not st.session_state.paper_mode:
+                        st.error("Connect first for live trading.")
+                    else:
                         b = bot_module.create_bot(
-                            client=c, symbol=st.session_state.symbol,
+                            client=c,
+                            symbol=st.session_state.symbol,
                             strategy=st.session_state.strategy,
                             risk_manager=st.session_state.risk_manager,
                             interval=st.session_state.interval,
                             check_every=st.session_state.check_every,
-                            paper_mode=st.session_state.paper_mode,
+                            paper_mode=True if c is None else st.session_state.paper_mode,
                             threshold=st.session_state.threshold / 100,
                         )
                         b.start()
