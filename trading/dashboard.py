@@ -1408,10 +1408,10 @@ with st.container():
                     line=dict(color="#c9d1d9", width=1.2, dash="dot"), name="%D",
                     hovertemplate="%D: %{y:.1f}<extra></extra>",
                 ), row=2, col=1)
-                fig.add_hline(y=80, line=dict(color="#ef535060", width=1, dash="dash"), row=2, col=1)
-                fig.add_hline(y=20, line=dict(color="#26a69a60", width=1, dash="dash"), row=2, col=1)
-                fig.add_hrect(y0=80, y1=100, fillcolor="#ef535010", line_width=0, row=2, col=1)
-                fig.add_hrect(y0=0,  y1=20,  fillcolor="#26a69a10", line_width=0, row=2, col=1)
+                fig.add_hline(y=80, line=dict(color="rgba(239,83,80,0.38)",   width=1, dash="dash"), row=2, col=1)
+                fig.add_hline(y=20, line=dict(color="rgba(38,166,154,0.38)",  width=1, dash="dash"), row=2, col=1)
+                fig.add_hrect(y0=80, y1=100, fillcolor="rgba(239,83,80,0.06)",  line_width=0, row=2, col=1)
+                fig.add_hrect(y0=0,  y1=20,  fillcolor="rgba(38,166,154,0.06)", line_width=0, row=2, col=1)
 
             # ── RSI (row 3) ────────────────────────────────────────────────────
             if _has_rsi:
@@ -1424,11 +1424,11 @@ with st.container():
                     fill="tozeroy", fillcolor="rgba(121,176,255,0.05)",
                     hovertemplate="RSI: %{y:.1f}<extra></extra>",
                 ), row=3, col=1)
-                fig.add_hline(y=70, line=dict(color="#ef535060", width=1, dash="dash"), row=3, col=1)
-                fig.add_hline(y=30, line=dict(color="#26a69a60", width=1, dash="dash"), row=3, col=1)
-                fig.add_hline(y=50, line=dict(color="#48505830", width=1, dash="dot"), row=3, col=1)
-                fig.add_hrect(y0=70, y1=100, fillcolor="#ef535010", line_width=0, row=3, col=1)
-                fig.add_hrect(y0=0,  y1=30,  fillcolor="#26a69a10", line_width=0, row=3, col=1)
+                fig.add_hline(y=70, line=dict(color="rgba(239,83,80,0.38)",   width=1, dash="dash"), row=3, col=1)
+                fig.add_hline(y=30, line=dict(color="rgba(38,166,154,0.38)",  width=1, dash="dash"), row=3, col=1)
+                fig.add_hline(y=50, line=dict(color="rgba(72,80,88,0.19)",    width=1, dash="dot"),  row=3, col=1)
+                fig.add_hrect(y0=70, y1=100, fillcolor="rgba(239,83,80,0.06)",  line_width=0, row=3, col=1)
+                fig.add_hrect(y0=0,  y1=30,  fillcolor="rgba(38,166,154,0.06)", line_width=0, row=3, col=1)
 
             # ── Layout ─────────────────────────────────────────────────────────
             G = "#1a2030"
