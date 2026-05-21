@@ -26,6 +26,7 @@ from bot import (
 )
 from strategy import get_indicators
 from risk import RiskManager, RiskSettings
+import telegram_notifier as tg
 from binance_client import public_klines, public_price, public_24h
 
 # ── Page config ───────────────────────────────────────────────────────────────
@@ -273,6 +274,9 @@ def _init():
         "alert_open_ids":      [],
         "alert_closed_ids":    [],
         "pending_live_trade":  None,   # dict stored between reruns for live confirmation
+        "tg_enabled":          False,
+        "tg_token":            "",
+        "tg_chat_id":          "",
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -284,6 +288,13 @@ def _init():
         if not hasattr(_r, "invest_per_trade"):      _r.invest_per_trade      = 50.0
         if not hasattr(_r, "max_trade_usdt"):        _r.max_trade_usdt        = 100.0
         if not hasattr(_r, "max_trades_per_session"):_r.max_trades_per_session= 0
+
+    # ── Re-apply Telegram config on every cold-start ─────────────────────────
+    tg.configure(
+        token   = st.session_state.get("tg_token",   ""),
+        chat_id = st.session_state.get("tg_chat_id", ""),
+        enabled = st.session_state.get("tg_enabled", False),
+    )
 
 _init()
 
@@ -754,6 +765,7 @@ with st.sidebar:
         st.session_state.risk.emergency_stop = True
         bot_module.stop_bot()
         log_activity("WARNING", "🚨 EMERGENCY STOP activated — all trading halted")
+        tg.bot_event("emergency", "All trading halted by user")
         st.rerun()
 
     if st.session_state.risk.emergency_stop:
@@ -896,6 +908,58 @@ with st.sidebar:
     if st.button("🗑 Reset All Data", use_container_width=True):
         reset_all_data()
         st.rerun()
+
+    st.markdown('<hr class="s-div"/>', unsafe_allow_html=True)
+
+    # ── Telegram Notifications ──────────────────────────────────────────────
+    st.markdown('<div class="sec-lbl">Telegram Notifications</div>', unsafe_allow_html=True)
+    _tg_on = st.toggle(
+        "Enable notifications",
+        value=st.session_state.tg_enabled,
+        help="Send alerts for every trade, error, and bot event to your phone",
+    )
+    st.session_state.tg_enabled = _tg_on
+
+    _tg_token = st.text_input(
+        "Bot Token",
+        value=st.session_state.tg_token,
+        type="password",
+        placeholder="1234567890:ABCDef...",
+        help="From @BotFather on Telegram",
+    )
+    _tg_cid = st.text_input(
+        "Chat ID",
+        value=st.session_state.tg_chat_id,
+        placeholder="-100123456789  or  123456789",
+        help="Your personal chat ID or a group chat ID",
+    )
+    if _tg_token != st.session_state.tg_token or _tg_cid != st.session_state.tg_chat_id:
+        st.session_state.tg_token   = _tg_token
+        st.session_state.tg_chat_id = _tg_cid
+
+    tg.configure(
+        token   = st.session_state.tg_token,
+        chat_id = st.session_state.tg_chat_id,
+        enabled = st.session_state.tg_enabled,
+    )
+
+    if st.button("📨 Send Test Notification", use_container_width=True):
+        if not st.session_state.tg_token or not st.session_state.tg_chat_id:
+            st.warning("Enter Token and Chat ID first.")
+        else:
+            tg.configure(st.session_state.tg_token, st.session_state.tg_chat_id, enabled=True)
+            _ok, _msg = tg.test_notification()
+            if _ok:
+                st.success(f"✅ {_msg}")
+            else:
+                st.error(f"❌ {_msg}")
+
+    if tg.is_enabled():
+        st.caption("🟢 Notifications active")
+    elif st.session_state.tg_token and st.session_state.tg_chat_id:
+        st.caption("🔴 Toggle ON to activate")
+    else:
+        st.caption("Enter Token + Chat ID to enable")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1140,6 +1204,7 @@ with st.container():
                         add_trade(_t)
                         log_activity("ORDER",
                             f"⚡ LIVE {_plt_side} | {_plt_qty:.6f} {st.session_state.symbol} @ ${_exec_price:.4f}")
+                        tg.trade_open(st.session_state.symbol, _plt_side, _exec_price, _plt_inv, "Manual trade", mode="LIVE")
                     st.session_state.pending_live_trade = None
                     st.rerun()
             with _cf2:
@@ -1207,6 +1272,8 @@ with st.container():
                     log_activity("ORDER",
                         f"👤 Manual {side} | {qty:.6f} {st.session_state.symbol} "
                         f"@ ${price:.4f} | ${invested:.2f} invested | ID:{added['id']}")
+                    _m_mode = "PAPER" if st.session_state.paper_mode else "TESTNET"
+                    tg.trade_open(st.session_state.symbol, side, price, invested, "Manual trade", mode=_m_mode)
                     st.success(f"✅ {side} @ ${price:.4f} — ID: {added['id']}")
 
         if emg_btn:

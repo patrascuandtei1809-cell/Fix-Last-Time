@@ -20,6 +20,7 @@ from typing import Optional, List, Dict
 from strategy import get_signal
 from risk import RiskManager, RiskSettings
 from binance_client import public_klines, public_price
+import telegram_notifier as tg
 
 # ── Singleton ─────────────────────────────────────────────────────────────────
 _bot: Optional["TradingBot"] = None
@@ -238,11 +239,17 @@ class TradingBot:
             f"Invest ${_invest:.2f} USDT/trade (cap ${_cap:.2f}) | {_sess_label} | "
             f"SL={self.risk.settings.stop_loss_pct}% | TP={self.risk.settings.take_profit_pct}%",
         )
+        tg.bot_event(
+            "started",
+            f"{self.symbol} | {self.strategy} | {mode_label}\n"
+            f"Invest ${_invest:.2f} USDT/trade | {_sess_label}",
+        )
         return True
 
     def stop(self):
         self._running = False
         log_activity("INFO", f"⛔ Bot stopping for {self.symbol}")
+        tg.bot_event("stopped", self.symbol)
 
     def is_running(self) -> bool:
         return bool(self._thread and self._thread.is_alive() and self._running)
@@ -261,6 +268,7 @@ class TradingBot:
                 self._tick()
             except Exception as exc:
                 log_activity("ERROR", f"Unhandled bot error: {exc}")
+                tg.error_alert(f"Unhandled bot error on {self.symbol}: {exc}")
             # Interruptible sleep — checks _running every second
             for _ in range(self.check_every):
                 if not self._running:
@@ -354,6 +362,7 @@ class TradingBot:
         tp_p    = self.risk.take_profit_price(price, signal)
 
         # ── 6. Execute ────────────────────────────────────────────────────────
+        _mode_tag = "PAPER" if self.paper else ("TESTNET" if (self.client and self.client.testnet) else "LIVE")
         if not self.paper and self.client:
             try:
                 order      = self.client.place_market_order(self.symbol, signal, qty)
@@ -363,6 +372,7 @@ class TradingBot:
                     f"✅ LIVE {signal} | {qty} {self.symbol} @ ${price:.4f}")
             except Exception as e:
                 log_activity("ERROR", f"Order failed: {e}")
+                tg.error_alert(f"Order FAILED — {signal} {self.symbol}\n{e}")
                 return
         else:
             log_activity(
@@ -370,6 +380,7 @@ class TradingBot:
                 f"📋 PAPER {signal} | {qty:.6f} {self.symbol} @ ${price:.4f} | "
                 f"${invested:.2f} invested | SL ${sl_p:.4f} | TP ${tp_p:.4f}",
             )
+        tg.trade_open(self.symbol, signal, price, invested, reason, mode=_mode_tag)
 
         # ── 7. Record trade ───────────────────────────────────────────────────
         trade = {
@@ -422,6 +433,17 @@ class TradingBot:
             log_activity(
                 "ORDER",
                 f"{icon} Closed {closed['id']} | P&L ${pnl:+.4f} ({pct:+.2f}%) | {reason}",
+            )
+            _cmode = "PAPER" if trade.get("paper") else ("TESTNET" if (self.client and self.client.testnet) else "LIVE")
+            tg.trade_close(
+                symbol     = trade["coin"],
+                side       = trade["side"],
+                entry      = trade["entry_price"],
+                exit_price = price,
+                pnl        = pnl,
+                pct        = pct,
+                reason     = reason,
+                mode       = _cmode,
             )
 
     # ── Data helpers ──────────────────────────────────────────────────────────
