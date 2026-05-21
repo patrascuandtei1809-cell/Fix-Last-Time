@@ -592,6 +592,30 @@ if _alert_events:
 """
     st_html.html(_alert_html, height=0)
 
+# ── Market overview strip ──────────────────────────────────────────────────────
+_mkt = _market_overview()
+_cur_sym = st.session_state.symbol
+_tiles_html = ""
+for _s in SYMBOLS:
+    _d = _mkt.get(_s, {})
+    _mp   = float(_d.get("lastPrice", 0))    if _d else 0
+    _mc   = float(_d.get("priceChangePercent", 0)) if _d else 0
+    _mv   = float(_d.get("volume", 0))       if _d else 0
+    _active_cls = " mkt-active" if _s == _cur_sym else ""
+    _chg_cls    = "mt-up" if _mc >= 0 else "mt-dn"
+    _chg_sign   = "+" if _mc >= 0 else ""
+    _price_str  = f"${_mp:,.2f}" if _mp >= 1 else f"${_mp:.4f}"
+    _vol_str    = f"Vol {_mv/1e6:.1f}M" if _mv >= 1e6 else f"Vol {_mv/1e3:.0f}K"
+    _sym_short  = _s.replace("USDT","")
+    _tiles_html += f"""
+  <div class="mkt-tile{_active_cls}">
+    <div class="mt-sym">{_sym_short}</div>
+    <div class="mt-price">{_price_str if _mp else "—"}</div>
+    <div class="mt-chg {_chg_cls}">{_chg_sign}{_mc:.2f}%</div>
+    <div class="mt-vol">{_vol_str if _mp else ""}</div>
+  </div>"""
+st.markdown(f'<div class="mkt-strip">{_tiles_html}</div>', unsafe_allow_html=True)
+
 # ─────────────────────────────────────────────────────────────────────────────
 # SIDEBAR
 # ─────────────────────────────────────────────────────────────────────────────
@@ -705,6 +729,61 @@ with st.sidebar:
             st.session_state.risk.emergency_stop = False
             log_activity("INFO", "✅ Emergency stop cleared — trading resumed")
             st.rerun()
+
+    # ── Bot performance stats ──────────────────────────────────────────────
+    _all_tr   = load_trades()
+    _bt       = [t for t in _all_tr if t.get("type") == "bot"]
+    _bt_cl    = [t for t in _bt if t.get("status") == "closed"]
+    _bt_wins  = sum(1 for t in _bt_cl if (t.get("profit_loss") or 0) >= 0)
+    _bt_wr    = (_bt_wins / len(_bt_cl) * 100) if _bt_cl else 0.0
+    _bt_pnl   = sum((t.get("profit_loss") or 0) for t in _bt_cl)
+    _bt_avg   = (_bt_pnl / len(_bt_cl)) if _bt_cl else 0.0
+    _wr_cls   = "up" if _bt_wr  >= 50 else ("dn" if _bt_cl else "")
+    _pnl_cls  = "up" if _bt_pnl >= 0  else "dn"
+    _avg_cls  = "up" if _bt_avg >= 0  else "dn"
+    _pnl_sign = "+" if _bt_pnl >= 0 else ""
+    _avg_sign = "+" if _bt_avg >= 0 else ""
+
+    st.markdown(f"""
+<div style="margin-top:4px;">
+<div class="bsc-lbl" style="margin-bottom:4px;">BOT PERFORMANCE</div>
+<div class="bot-stat-grid">
+  <div class="bot-stat-cell">
+    <div class="bsc-lbl">Signals</div>
+    <div class="bsc-val">{len(_bt)}</div>
+  </div>
+  <div class="bot-stat-cell">
+    <div class="bsc-lbl">Win Rate</div>
+    <div class="bsc-val {_wr_cls}">{_bt_wr:.0f}%</div>
+  </div>
+  <div class="bot-stat-cell">
+    <div class="bsc-lbl">Total P&amp;L</div>
+    <div class="bsc-val {_pnl_cls}">{_pnl_sign}${abs(_bt_pnl):.2f}</div>
+  </div>
+  <div class="bot-stat-cell">
+    <div class="bsc-lbl">Avg / Trade</div>
+    <div class="bsc-val {_avg_cls}">{_avg_sign}${abs(_bt_avg):.2f}</div>
+  </div>
+</div>
+</div>""", unsafe_allow_html=True)
+
+    # ── Next-check countdown (only while bot is running) ──────────────────
+    if bot_running:
+        _last_tick = get_shared_last_tick()
+        if _last_tick:
+            from datetime import datetime as _dt
+            _elapsed  = (_dt.now() - _last_tick).total_seconds()
+            _chk_ev   = st.session_state.check_every
+            _remain   = max(0.0, _chk_ev - (_elapsed % _chk_ev))
+            _fill_pct = (1 - _remain / _chk_ev) * 100
+            st.markdown(f"""
+<div style="margin-top:8px;">
+  <div class="cd-row">
+    <span>NEXT CHECK</span>
+    <span style="font-family:'JetBrains Mono',monospace;">{_remain:.0f}s</span>
+  </div>
+  <div class="cd-bar"><div class="cd-fill" style="width:{_fill_pct:.1f}%;"></div></div>
+</div>""", unsafe_allow_html=True)
 
     st.markdown('<hr class="s-div"/>', unsafe_allow_html=True)
 
@@ -1023,6 +1102,30 @@ with st.container():
                     name="EMA 21",
                     hovertemplate="EMA21: %{y:.4f}<extra></extra>",
                 ), row=1, col=1)
+
+            # ── Volume histogram (scaled to bottom 18% of price panel) ──────────
+            if "volume" in df_chart.columns:
+                _prange = df_chart["high"].max() - df_chart["low"].min()
+                _vmax   = df_chart["volume"].max()
+                if _prange > 0 and _vmax > 0:
+                    _vscaled = df_chart["volume"] / _vmax * _prange * 0.18
+                    _vbase   = df_chart["low"].min() - _prange * 0.02
+                    _vcols   = [
+                        "rgba(38,166,154,0.40)" if df_chart["close"].iloc[i] >= df_chart["open"].iloc[i]
+                        else "rgba(239,83,80,0.40)"
+                        for i in range(len(df_chart))
+                    ]
+                    fig.add_trace(go.Bar(
+                        x=df_chart["open_time"],
+                        y=_vscaled,
+                        base=_vbase,
+                        name="Volume",
+                        marker_color=_vcols,
+                        marker_line_width=0,
+                        showlegend=False,
+                        customdata=df_chart["volume"],
+                        hovertemplate="Vol: %{customdata:,.0f}<extra></extra>",
+                    ), row=1, col=1)
 
             # ── Live price line ────────────────────────────────────────────────
             if live_price:
