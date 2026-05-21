@@ -577,6 +577,81 @@ with st.container():
 </div>
 """, unsafe_allow_html=True)
 
+        # ── Equity Curve Sparkline ─────────────────────────────────────────────
+        _cum       = 0.0
+        _spark_trades = sorted(
+            [t for t in closed_trades if t.get("close_time")],
+            key=lambda t: t["close_time"],
+        )
+        # Anchor point: first trade open time, or today's start if no trades yet
+        if _spark_trades:
+            _t0 = datetime.fromisoformat(_spark_trades[0].get("open_time") or _spark_trades[0]["close_time"])
+        else:
+            _t0 = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        _eq_times  = [_t0]
+        _eq_vals   = [0.0]
+        if _spark_trades:
+            for _t in _spark_trades:
+                _cum += _t.get("profit_loss") or 0
+                _eq_times.append(datetime.fromisoformat(_t["close_time"]))
+                _eq_vals.append(round(_cum, 4))
+            # extend to now with current unrealized P&L
+            _unreal = sum(
+                ((live_price - ot["entry_price"]) / ot["entry_price"] * (ot.get("invested") or 0))
+                if ot.get("side") == "BUY"
+                else ((ot["entry_price"] - live_price) / ot["entry_price"] * (ot.get("invested") or 0))
+                for ot in open_trades
+                if live_price and ot.get("entry_price")
+            )
+            _eq_times.append(datetime.now())
+            _eq_vals.append(round(_cum + _unreal, 4))
+
+        _spark_color = "#26a69a" if _eq_vals[-1] >= 0 else "#ef5350"
+        _spark_fill  = "rgba(38,166,154,0.08)" if _eq_vals[-1] >= 0 else "rgba(239,83,80,0.08)"
+
+        _sfig = go.Figure()
+        _sfig.add_trace(go.Scatter(
+            x=_eq_times, y=_eq_vals,
+            mode="lines",
+            line=dict(color=_spark_color, width=2),
+            fill="tozeroy", fillcolor=_spark_fill,
+            hovertemplate="$%{y:+.4f}<br>%{x|%H:%M %b %d}<extra></extra>",
+        ))
+        # zero baseline
+        _sfig.add_hline(y=0, line=dict(color="#30363d", width=1))
+        # current dot
+        _sfig.add_trace(go.Scatter(
+            x=[_eq_times[-1]], y=[_eq_vals[-1]],
+            mode="markers",
+            marker=dict(color=_spark_color, size=7,
+                        line=dict(color="#0a0c10", width=2)),
+            showlegend=False,
+            hovertemplate=f"Now: ${_eq_vals[-1]:+.4f}<extra></extra>",
+        ))
+        _sfig.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            height=72,
+            margin=dict(l=0, r=0, t=0, b=0),
+            showlegend=False,
+            xaxis=dict(visible=False),
+            yaxis=dict(visible=False, zeroline=False),
+            hovermode="x unified",
+            hoverlabel=dict(bgcolor="#161b22", bordercolor="#30363d",
+                            font_color="#c9d1d9", font_size=11),
+        )
+
+        _sp_lbl = f'<span style="font-size:10px;color:#6e7681;text-transform:uppercase;letter-spacing:.1em;font-weight:600;">Equity Curve</span>'
+        _sp_val = f'<span style="font-size:13px;font-weight:700;font-family:\'JetBrains Mono\',monospace;color:{_spark_color};">{"+" if _eq_vals[-1]>=0 else ""}${_eq_vals[-1]:,.4f}</span>'
+        _sp_cnt = f'<span style="font-size:10px;color:#484f58;">{len(_spark_trades)} closed trade{"s" if len(_spark_trades)!=1 else ""}</span>'
+        st.markdown(
+            f'<div style="display:flex;align-items:center;gap:12px;margin-bottom:2px;">'
+            f'{_sp_lbl}&nbsp;&nbsp;{_sp_val}&nbsp;&nbsp;{_sp_cnt}</div>',
+            unsafe_allow_html=True,
+        )
+        st.plotly_chart(_sfig, use_container_width=True,
+                        config={"displayModeBar": False, "staticPlot": False})
+
         # ── Chart toolbar ─────────────────────────────────────────────────────
         tb1, tb2, tb3, tb4, tb5, tb6 = st.columns([4, 1, 1, 1, 1, 1])
         with tb1:

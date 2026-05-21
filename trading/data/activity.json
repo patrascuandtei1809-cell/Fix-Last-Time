@@ -33,5 +33,40 @@
     "time": "2026-05-21T17:36:25.918687",
     "level": "ERROR",
     "message": "Public price fetch failed: Public price fetch failed: 451 Client Error:  for url: https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
+  },
+  {
+    "time": "2026-05-21T17:36:56.004457",
+    "level": "ERROR",
+    "message": "Public price fetch failed: Public price fetch failed: 451 Client Error:  for url: https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
+  },
+  {
+    "time": "2026-05-21T17:37:26.057113",
+    "level": "ERROR",
+    "message": "Public price fetch failed: Public price fetch failed: 451 Client Error:  for url: https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
+  },
+  {
+    "time": "2026-05-21T17:37:56.099955",
+    "level": "ERROR",
+    "message": "Public price fetch failed: Public price fetch failed: 451 Client Error:  for url: https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
+  },
+  {
+    "time": "2026-05-21T17:38:26.139160",
+    "level": "ERROR",
+    "message": "Public price fetch failed: Public price fetch failed: 451 Client Error:  for url: https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
+  },
+  {
+    "time": "2026-05-21T17:38:56.178626",
+    "level": "ERROR",
+    "message": "Public price fetch failed: Public price fetch failed: 451 Client Error:  for url: https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
+  },
+  {
+    "time": "2026-05-21T17:39:26.215929",
+    "level": "ERROR",
+    "message": "Public price fetch failed: Public price fetch failed: 451 Client Error:  for url: https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
+  },
+  {
+    "time": "2026-05-21T17:39:56.257227",
+    "level": "ERROR",
+    "message": "Public price fetch failed: Public price fetch failed: 451 Client Error:  for url: https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
   }
 ]
