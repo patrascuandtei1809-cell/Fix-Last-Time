@@ -113,5 +113,20 @@
     "time": "2026-05-21T20:34:13.967925",
     "level": "ERROR",
     "message": "Public price fetch failed: Public price fetch failed: 451 Client Error:  for url: https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
+  },
+  {
+    "time": "2026-05-21T21:02:09.424760",
+    "level": "INFO",
+    "message": "\ud83d\udce1 Bot thread alive \u2014 ticking every 30s"
+  },
+  {
+    "time": "2026-05-21T21:02:09.424882",
+    "level": "INFO",
+    "message": "\ud83d\ude80 Bot started | BTCUSDT | EMA Crossover | PAPER | Data: public API (no key) | interval=5m | check=30s | Invest $50.00 USDT/trade (cap $100.00) | unlimited/session | SL=2.0% | TP=4.0%"
+  },
+  {
+    "time": "2026-05-21T21:02:09.495307",
+    "level": "ERROR",
+    "message": "Public price fetch failed: Public price fetch failed: 451 Client Error:  for url: https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
   }
 ]
