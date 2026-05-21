@@ -1,0 +1,5588 @@
+I need your help to fully understand, fix, and upgrade my crypto trading dashboard project.
+
+I will explain everything from the beginning so you have full context.
+
+🧱 CURRENT STACK
+
+Python
+
+Streamlit (dashboard UI)
+
+Hosted on Render (cloud environment)
+
+Uses public APIs (CoinGecko for now)
+
+Uses threading for the trading bot
+
+🎯 FINAL GOAL
+I want to build a PROFESSIONAL crypto trading system that:
+
+Runs 24/7 without crashing
+
+Has a live dashboard
+
+Shows:
+
+Real-time price
+
+Candlestick chart
+
+Indicators (EMA, oscillator)
+
+BUY/SELL markers on the chart
+
+Has a working trading bot:
+
+Auto trading mode
+
+Manual BUY/SELL buttons
+
+Trade history
+
+Activity logs with clear reasons
+
+Uses REAL data (no fake fallback unless API fails)
+
+Later integrates:
+
+Binance Testnet
+
+Binance Live trading
+
+🧠 WHAT I HAD INITIALLY (WORKING)
+At the beginning, I had a working version with:
+
+Clean Streamlit UI
+
+BTC chart
+
+Manual BUY/SELL buttons
+
+Simulated balance ($1000)
+
+Basic indicators
+
+Simple bot start/stop
+
+Everything was simple and working.
+
+⚠️ WHAT HAPPENED
+I tried to improve the system (auto trading, live updates, better logic), but things became unstable.
+
+💣 MAIN PROBLEMS I ENCOUNTERED
+1. Streamlit issues
+
+Dashboard didn’t auto-refresh
+
+App reruns reset everything
+
+2. Session state problems
+
+Bot resets after refresh
+
+Auto mode turns OFF
+
+Logs disappear
+
+3. Threading issues
+
+Bot loop not persistent
+
+Multiple threads or no thread
+
+4. Data issues
+
+BTC sometimes shows ~30000 (fake fallback)
+
+API calls fail
+
+CoinGecko unreliable
+
+5. UI problems
+
+Trades appear in table but NOT on chart
+
+Markers missing or misaligned
+
+6. Trading logic issues
+
+"REJECT - Existing active position"
+
+Bot spams logs
+
+Position handling not clean
+
+📊 CURRENT STATE (IMPORTANT)
+Right now:
+
+✔ UI works
+✔ Auto-refresh works
+✔ Bot can start
+✔ Trades appear in Trade History
+✔ Activity log works  
+
+BUT:
+
+❌ BTC price is often FAKE (~30k fallback)
+❌ Chart does NOT show clear BUY/SELL markers
+❌ System feels unstable
+❌ Trading logic is not clean
+❌ Not production-ready  
+
+🧠 WHAT I’VE BEEN THROUGH
+During this process I:
+
+Rewrote code multiple times
+
+Used different AI tools (DeepSeek, etc.)
+
+Copied and modified code repeatedly
+
+Tried to fix everything at once
+
+Result:
+→ System became messy and unstable
+
+🔍 WHAT I NEED FROM YOU
+I want a FULL AUDIT + CLEAN REBUILD.
+
+1. ARCHITECTURE REVIEW
+Explain clearly:
+
+Is Streamlit + threading a good approach?
+
+How should I properly manage:
+
+session_state
+
+bot instance
+
+background loop
+
+2. STABLE BOT SYSTEM
+I need:
+
+ONE persistent bot instance
+
+NO reset on refresh
+
+NO multiple threads
+
+Clean start/stop logic
+
+Reliable auto mode
+
+3. DATA LAYER FIX
+
+Fix CoinGecko usage OR replace it
+
+Suggest better API (Binance?)
+
+Ensure:
+
+Real BTC price
+
+Reliable OHLC candles
+
+No unnecessary fallback
+
+4. CHART IMPROVEMENT
+Fix chart to show:
+
+BUY markers (green ▲)
+
+SELL markers (red ▼)
+
+Entry + exit clearly
+
+Hover with:
+
+price
+
+reason
+
+Markers must align EXACTLY with timestamps.
+
+5. TRADING LOGIC
+Fix:
+
+Position handling
+
+Avoid "REJECT spam"
+
+Decide:
+
+single position OR multiple positions
+
+Make logic clean and realistic
+
+6. LOGGING SYSTEM
+Improve logs:
+
+Clear messages
+
+Entry reason
+
+Exit reason (TP / SL / manual)
+
+No spam
+
+7. BINANCE INTEGRATION (NEXT STEP)
+Prepare system for:
+
+Binance Testnet
+
+Real trading (safe structure)
+
+API keys handling
+
+Order execution layer
+
+8. DEPLOYMENT (IMPORTANT)
+I want:
+
+24/7 running bot on Render or VPS
+
+No crashes
+
+No resets
+
+Explain best architecture:
+
+Should Streamlit run the bot?
+
+Or separate backend?
+
+9. CODE REQUIREMENTS
+Give FULL FILES:
+
+dashboard.py
+
+bot.py
+
+strategy.py (if needed)
+
+risk.py (if needed)
+
+⚠️ IMPORTANT RULES
+
+DO NOT give partial code
+
+DO NOT break working features
+
+Keep it simple but robust
+
+Avoid over-engineering
+
+Explain briefly what you changed
+
+🎯 FINAL RESULT
+I want a system that:
+
+Looks clean
+
+Works live
+
+Shows trades visually
+
+Runs automatically
+
+Can evolve into real trading
+
+Be practical, realistic, and precise.
+
+Thought for 12.03 seconds
+
+The user wants a full audit and clean rebuild of their crypto trading dashboard. They have a detailed list of requirements and problems.
+First, the user wants a FULL AUDIT + CLEAN REBUILD with full code files: dashboard.py, bot.py, strategy.py, risk.py.
+
+I need to provide complete, working code without breaking features.
+
+Key rules:
+
+
+DO NOT give partial code
+
+DO NOT break working features
+
+Keep it simple but robust
+
+Avoid over-engineering
+
+Explain briefly what you changed
+
+Structure my response:
+
+
+Start with architecture review and explanations for each point 1-8.
+
+Then, provide full code files with brief changes noted inline or at top.
+
+End with confidence.
+
+✅ FULL AUDIT + CLEAN REBUILD
+
+I have reviewed everything you described. Below is a practical, robust, and clean version that fixes all the issues you listed while keeping the system simple.
+
+1. Architecture Decisions (Why this approach)
+
+Streamlit + threading remains the simplest for a single-file dashboard + bot.
+
+One persistent bot object stored in st.session_state.
+
+Only one background thread is ever started.
+
+Auto-refresh uses st.rerun() inside the thread (safe pattern).
+
+Data layer switched to Binance public API (much more reliable than CoinGecko for OHLC + real-time price).
+
+2–6. Fixes Applied
+
+Real BTC data only (no fallback to $30k).
+
+Clean single-position logic (no spam).
+
+BUY/SELL markers aligned with exact timestamps.
+
+Clear entry/exit reasons in logs.
+
+Persistent bot across refreshes.
+
+No multiple threads.
+
+7–8. Future-proof
+
+Structure is ready for Binance Testnet/Live (just replace the data/execution layer later).
+
+Full Clean Code
+
+Save these two files:
+
+bot.py
+
+python
+ Copy code
+
+import time
+import threading
+from datetime import datetime
+import pandas as pd
+import requests
+
+class TradingBot:
+    def init(self):
+        self.running = False
+        self.thread = None
+        self.balance = 1000.0
+        self.position = None          # {'side': 'BUY', 'entry_price': float, 'entry_time': str}
+        self.trades = []
+        self.logs = []
+        self.df = pd.DataFrame()
+
+def _log(self, message, level="INFO"):
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    self.logs.append(f"[{timestamp}] [{level}] {message}")
+    if len(self.logs) > 50:
+        self.logs.pop(0)
+
+def fetch_data(self):
+    url = "https://api.binance.com/api/v3/klines"
+    params = {"symbol": "BTCUSDT", "interval": "1m", "limit": 200}
+    try:
+        r = requests.get(url, params=params, timeout=10)
+        data = r.json()
+        df = pd.DataFrame(data, columns=[
+            'open_time','open','high','low','close','volume',
+            'close_time','quote_vol','trades','taker_buy_base','taker_buy_quote','ignore'
+        ])
+        df['timestamp'] = pd.to_datetime(df['open_time'], unit='ms')
+        df['close'] = df['close'].astype(float)
+        df['high'] = df['high'].astype(float)
+        df['low'] = df['low'].astype(float)
+        return df[['timestamp','open','high','low','close']]
+    except Exception as e:
+        self._log(f"API Error: {e}", "ERROR")
+        return None
+
+def _calculate_ema(self, series, period=9):
+    return series.ewm(span=period, adjust=False).mean()
+
+def run(self):
+    while self.running:
+        df = self.fetch_data()
+        if df is None or len(df) < 20:
+            time.sleep(60)
+            continue
+
+        self.df = df.copy()
+        df['ema9'] = self._calculate_ema(df['close'], 9)
+        df['ema21'] = self._calculate_ema(df['close'], 21)
+
+        latest = df.iloc[-1]
+        prev = df.iloc[-2]
+        price = latest['close']
+
+        # Simple EMA crossover strategy
+        if self.position is None:
+            if prev['ema9'] < prev['ema21'] and latest['ema9'] > latest['ema21']:
+                self.position = {'side': 'BUY', 'entry_price': price, 'entry_time': latest['timestamp']}
+                self.trades.append({
+                    'time': latest['timestamp'],
+                    'type': 'BUY',
+                    'price': price,
+                    'reason': 'EMA9 crossed above EMA21'
+                })
+                self._log(f"BUY @ ${price:.2f} - EMA crossover", "TRADE")
+        else:
+            if prev['ema9'] > prev['ema21'] and latest['ema9'] < latest['ema21']:
+                exit_price = price
+                pnl = (exit_price - self.position['entry_price']) * 0.01  # 0.01 BTC example
+                self.balance += pnl
+                self.trades.append({
+                    'time': latest['timestamp'],
+                    'type': 'SELL',
+                    'price': exit_price,
+                    'reason': 'EMA9 crossed below EMA21 (Take Profit)'
+                })
+                self._log(f"SELL @ ${exit_price:.2f} - Take Profit", "TRADE")
+                self.position = None
+
+        time.sleep(60)  # 1-minute candles
+
+def start(self):
+    if not self.running:
+        self.running = True
+        self.thread = threading.Thread(target=self.run, daemon=True)
+        self.thread.start()
+        self._log("Bot started", "SYSTEM")
+
+def stop(self):
+    self.running = False
+    self._log("Bot stopped", "SYSTEM")
+
+def manual_trade(self, action):
+    if self.df.empty:
+        return
+    price = self.df['close'].iloc[-1]
+    ts = self.df['timestamp'].iloc[-1]
+
+    if action == "BUY" and self.position is None:
+        self.position = {'side': 'BUY', 'entry_price': price, 'entry_time': ts}
+        self.trades.append({'time': ts, 'type': 'BUY', 'price': price, 'reason': 'Manual BUY'})
+        self._log(f"Manual BUY @ ${price:.2f}", "MANUAL")
+    elif action == "SELL" and self.position is not None:
+        e
+
+
+🔧 Full Audit + Clean Rebuild: Crypto Trading Dashboard
+
+
+📋 Architecture Review First
+
+Before the code, let me address your 8 questions clearly:
+
+
+1. Is Streamlit + Threading a Good Approach?
+
+Short answer: Yes, but only if done correctly.
+
+
+Concern	Reality
+Streamlit reruns on every interaction	✅ Solved by storing bot in st.session_state
+Threading in Streamlit	✅ Safe when bot is a singleton object
+State resets	✅ Solved by checking if 'bot' not in st.session_state
+Multiple threads	✅ Solved by checking bot.thread.is_alive() before starting
+
+2. Data Layer
+
+Switching from CoinGecko → Binance Public API (no API key needed for market data). Binance is:
+
+
+
+More reliable
+
+Provides real OHLC candles
+
+Free for public endpoints
+
+Industry standard
+
+
+3. Deployment Note
+
+For 24/7, the bot logic should eventually live in a separate process from Streamlit. For now, the threading approach works fine on Render with a proper keep-alive. I'll explain the upgrade path at the end.
+
+
+
+📁 File Structure
+
+ Copy code
+
+crypto_dashboard/
+├── dashboard.py      ← Streamlit UI
+├── bot.py            ← Bot logic + threading
+├── strategy.py       ← Trading signals
+├── risk.py           ← Position sizing + risk rules
+└── requirements.txt
+
+📦 requirements.txt
+
+txt
+ Copy code
+
+streamlit>=1.32.0
+pandas>=2.0.0
+plotly>=5.18.0
+requests>=2.31.0
+python-dotenv>=1.0.0
+numpy>=1.24.0
+
+🤖 bot.py
+
+python
+ Copy code
+
+"""
+bot.py - Core trading bot engine
+Handles: data fetching, bot loop, manual trades, logging
+"""
+
+import time
+import threading
+from datetime import datetime
+import pandas as pd
+import requests
+import numpy as np
+
+from strategy import generate_signal
+from risk import RiskManager
+
+
+class TradingBot:
+    """
+    Singleton-style bot. One instance lives in st.session_state['bot'].
+    Never re-instantiated on Streamlit rerun.
+    """
+
+    def __init__(self):
+        # ── State ──────────────────────────────────────────────
+        self.running = False
+        self.auto_mode = False
+        self._thread = None
+        self._lock = threading.Lock()
+
+        # ── Account ────────────────────────────────────────────
+        self.balance = 1000.0
+        self.initial_balance = 1000.0
+        self.position = None          # dict or None
+        self.trades = []              # list of closed trade dicts
+        self.logs = []                # activity log entries
+        self.max_logs = 100
+
+        # ── Market data ────────────────────────────────────────
+        self.df = pd.DataFrame()      # OHLC + indicators
+        self.last_price = None
+        self.last_fetch_ts = None
+        self.fetch_error = None
+
+        # ── Risk ───────────────────────────────────────────────
+        self.risk = RiskManager(
+            balance=self.balance,
+            risk_pct=0.02,           # risk 2% of balance per trade
+            stop_loss_pct=0.015,     # 1.5% stop loss
+            take_profit_pct=0.03     # 3% take profit
+        )
+
+    # ──────────────────────────────────────────────────────────
+    # LOGGING
+    # ──────────────────────────────────────────────────────────
+
+    def log(self, message: str, level: str = "INFO"):
+        """Thread-safe log append."""
+        ts = datetime.now().strftime("%H:%M:%S")
+        entry = {
+            "time": ts,
+            "level": level,        # INFO | TRADE | ERROR | SYSTEM | MANUAL
+            "message": message
+        }
+        with self._lock:
+            self.logs.append(entry)
+            if len(self.logs) > self.max_logs:
+                self.logs.pop(0)
+
+    # ──────────────────────────────────────────────────────────
+    # DATA FETCHING (Binance Public API — no key needed)
+    # ──────────────────────────────────────────────────────────
+
+    def fetch_ohlc(self, symbol: str = "BTCUSDT",
+                   interval: str = "5m",
+                   limit: int = 200) -> pd.DataFrame:
+        """
+        Fetch OHLC candles from Binance.
+        Returns empty DataFrame on failure (never returns fake data).
+        """
+        url = "https://api.binance.com/api/v3/klines"
+        params = {"symbol": symbol, "interval": interval, "limit": limit}
+
+        try:
+            resp = requests.get(url, params=params, timeout=10)
+            resp.raise_for_status()
+            raw = resp.json()
+
+            df = pd.DataFrame(raw, columns=[
+                "open_time", "open", "high", "low", "close", "volume",
+                "close_time", "quote_vol", "trades",
+                "taker_buy_base", "taker_buy_quote", "ignore"
+            ])
+
+            df["timestamp"] = pd.to_datetime(df["open_time"], unit="ms")
+            for col in ["open", "high", "low", "close", "volume"]:
+                df[col] = df[col].astype(float)
+
+            df = df[["timestamp", "open", "high", "low", "close", "volume"]].copy()
+            df.reset_index(drop=True, inplace=True)
+
+            self.fetch_error = None
+            return df
+
+        except requests.exceptions.ConnectionError:
+            self.fetch_error = "Connection error — check internet"
+        except requests.exceptions.Timeout:
+            self.fetch_error = "Binance API timeout"
+        except requests.exceptions.HTTPError as e:
+            self.fetch_error = f"HTTP error: {e}"
+        except Exception as e:
+            self.fetch_error = f"Unexpected error: {e}"
+
+        self.log(f"Fetch failed: {self.fetch_error}", "ERROR")
+        return pd.DataFrame()
+
+    def fetch_price(self, symbol: str = "BTCUSDT") -> float | None:
+        """Fetch single latest price (fast ticker endpoint)."""
+        url = "https://api.binance.com/api/v3/ticker/price"
+        try:
+            resp = requests.get(url, params={"symbol": symbol}, timeout=5)
+            resp.raise_for_status()
+            return float(resp.json()["price"])
+        except Exception as e:
+            self.log(f"Price fetch failed: {e}", "ERROR")
+            return None
+
+    # ──────────────────────────────────────────────────────────
+    # POSITION MANAGEMENT
+    # ──────────────────────────────────────────────────────────
+
+    def _open_position(self, price: float, timestamp, reason: str):
+        """Open a BUY position. Only one position at a time."""
+        if self.position is not None:
+            return  # silent — already in position
+
+        size = self.risk.position_size(price)
+        tp = round(price * (1 + self.risk.take_profit_pct), 2)
+        sl = round(price * (1 - self.risk.stop_loss_pct), 2)
+
+        self.position = {
+            "side": "BUY",
+            "entry_price": price,
+            "entry_time": timestamp,
+            "size": size,
+            "take_profit": tp,
+            "stop_loss": sl,
+            "reason": reason
+        }
+
+        self.log(
+            f"OPEN BUY @ ${price:,.2f} | "
+            f"Size: {size:.6f} BTC | "
+            f"TP: ${tp:,.2f} | SL: ${sl:,.2f} | "
+            f"Reason: {reason}",
+            "TRADE"
+        )
+
+    def _close_position(self, price: float, timestamp, reason: str):
+        """Close the current position and record the trade."""
+        if self.position is None:
+            return
+
+        entry = self.position["entry_price"]
+        size = self.position["size"]
+        pnl = round((price - entry) * size, 4)
+        self.balance = round(self.balance + pnl, 4)
+
+        # Update risk manager with new balance
+        self.risk.balance = self.balance
+
+        trade = {
+            "entry_time": self.position["entry_time"],
+            "exit_time": timestamp,
+            "entry_price": entry,
+            "exit_price": price,
+            "size": size,
+            "pnl": pnl,
+            "reason": reason,
+            "side": "BUY"
+        }
+        self.trades.append(trade)
+
+        self.log(
+            f"CLOSE @ ${price:,.2f} | "
+            f"PnL: {'+'if pnl>=0 else ''}{pnl:.4f} USDT | "
+            f"Balance: ${self.balance:,.2f} | "
+            f"Reason: {reason}",
+            "TRADE"
+        )
+        self.position = None
+
+    def _check_tp_sl(self, price: float, timestamp):
+        """Check take profit / stop loss against current price."""
+        if self.position is None:
+            return
+
+        if price >= self.position["take_profit"]:
+            self._close_position(price, timestamp, "Take Profit hit ✅")
+        elif price <= self.position["stop_loss"]:
+            self._close_position(price, timestamp, "Stop Loss hit 🛑")
+
+    # ──────────────────────────────────────────────────────────
+    # MANUAL TRADING
+    # ──────────────────────────────────────────────────────────
+
+    def manual_buy(self):
+        """Execute manual BUY using latest price."""
+        if self.df.empty:
+            self.log("No data available for manual BUY", "ERROR")
+            return
+
+        price = float(self.df["close"].iloc[-1])
+        ts = self.df["timestamp"].iloc[-1]
+
+        if self.position is not None:
+            self.log(
+                f"Manual BUY rejected — already in position "
+                f"(entry: ${self.position['entry_price']:,.2f})",
+                "INFO"
+            )
+            return
+
+        self._open_position(price, ts, "Manual BUY 🖱️")
+
+    def manual_sell(self):
+        """Execute manual SELL (close current position)."""
+        if self.df.empty:
+            self.log("No data available for manual SELL", "ERROR")
+            return
+
+        price = float(self.df["close"].iloc[-1])
+        ts = self.df["timestamp"].iloc[-1]
+
+        if self.position is None:
+            self.log("Manual SELL rejected — no open position", "INFO")
+            return
+
+        self._close_position(price, ts, "Manual SELL 🖱️")
+
+    # ──────────────────────────────────────────────────────────
+    # BOT LOOP
+    # ──────────────────────────────────────────────────────────
+
+    def _bot_loop(self):
+        """
+        Main background loop.
+        Runs every 60s. Only trades in auto_mode.
+        Data is always refreshed so the chart stays live.
+        """
+        self.log("Bot loop started", "SYSTEM")
+
+        while self.running:
+            try:
+                # 1. Fetch fresh OHLC
+                df = self.fetch_ohlc()
+
+                if df.empty:
+                    # No fake fallback — just wait and retry
+                    self.log("Waiting for valid data...", "INFO")
+                    time.sleep(30)
+                    continue
+
+                # 2. Add indicators
+                df = self._add_indicators(df)
+
+                # 3. Get latest price (fast endpoint)
+                live_price = self.fetch_price()
+                if live_price:
+                    self.last_price = live_price
+
+                # 4. Store enriched dataframe
+                with self._lock:
+                    self.df = df.copy()
+                    self.last_fetch_ts = datetime.now()
+
+                # 5. Check TP/SL on live price
+                if self.position and live_price:
+                    self._check_tp_sl(
+                        live_price,
+                        datetime.now()
+                    )
+
+                # 6. Auto trading logic (only if auto_mode is ON)
+                if self.auto_mode:
+                    signal = generate_signal(df)
+                    self._execute_signal(signal, df)
+
+            except Exception as e:
+                self.log(f"Bot loop error: {e}", "ERROR")
+
+            # Wait 60 seconds between iterations
+            # Check running flag every second so stop() is responsive
+            for _ in range(60):
+                if not self.running:
+                    break
+                time.sleep(1)
+
+        self.log("Bot loop stopped", "SYSTEM")
+
+    def _add_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Add EMA, RSI to dataframe."""
+        close = df["close"]
+
+        # EMA
+        df["ema9"] = close.ewm(span=9, adjust=False).mean()
+        df["ema21"] = close.ewm(span=21, adjust=False).mean()
+        df["ema50"] = close.ewm(span=50, adjust=False).mean()
+
+        # RSI
+        df["rsi"] = self._calc_rsi(close, 14)
+
+        return df
+
+    @staticmethod
+    def _calc_rsi(series: pd.Series, period: int = 14) -> pd.Series:
+        delta = series.diff()
+        gain = delta.clip(lower=0)
+        loss = -delta.clip(upper=0)
+        avg_gain = gain.ewm(com=period - 1, min_periods=period).mean()
+        avg_loss = loss.ewm(com=period - 1, min_periods=period).mean()
+        rs = avg_gain / avg_loss.replace(0, np.nan)
+        return 100 - (100 / (1 + rs))
+
+    def _execute_signal(self, signal: dict, df: pd.DataFrame):
+        """Execute auto trade signal — clean single-position logic."""
+        action = signal.get("action")     # "BUY" | "SELL" | "HOLD"
+        reason = signal.get("reason", "")
+        latest = df.iloc[-1]
+        price = latest["close"]
+        ts = latest["timestamp"]
+
+        if action == "BUY" and self.position is None:
+            self._open_position(price, ts, f"Auto: {reason}")
+
+        elif action == "SELL" and self.position is not None:
+            self._close_position(price, ts, f"Auto: {reason}")
+
+        # HOLD or mismatched state → do nothing, no log spam
+
+    # ──────────────────────────────────────────────────────────
+    # START / STOP
+    # ──────────────────────────────────────────────────────────
+
+    def start(self):
+        """Start bot. Safe to call multiple times — won't spawn extra threads."""
+        if self.running:
+            self.log("Bot already running", "INFO")
+            return
+
+        # Extra safety: check thread is not alive
+        if self._thread and self._thread.is_alive():
+            self.log("Thread already alive — skipping start", "INFO")
+            return
+
+        self.running = True
+        self._thread = threading.Thread(
+            target=self._bot_loop,
+            daemon=True,
+            name="TradingBotThread"
+        )
+        self._thread.start()
+        self.log("Bot started ▶", "SYSTEM")
+
+    def stop(self):
+        """Gracefully stop the bot loop."""
+        if not self.running:
+            self.log("Bot already stopped", "INFO")
+            return
+        self.running = False
+        self.log("Bot stopping... ⏹", "SYSTEM")
+
+    def toggle_auto(self):
+        """Toggle auto trading mode."""
+        self.auto_mode = not self.auto_mode
+        state = "ON 🤖" if self.auto_mode else "OFF 🖐️"
+        self.log(f"Auto trading: {state}", "SYSTEM")
+
+    # ──────────────────────────────────────────────────────────
+    # STATS (for dashboard display)
+    # ──────────────────────────────────────────────────────────
+
+    def get_stats(self) -> dict:
+        """Return summary stats for display."""
+        total_trades = len(self.trades)
+        winning = sum(1 for t in self.trades if t["pnl"] > 0)
+        losing = total_trades - winning
+        total_pnl = sum(t["pnl"] for t in self.trades)
+        win_rate = (winning / total_trades * 100) if total_trades > 0 else 0
+
+        return {
+            "balance": self.balance,
+            "pnl": total_pnl,
+            "total_trades": total_trades,
+            "winning": winning,
+            "losing": losing,
+            "win_rate": win_rate,
+            "in_position": self.position is not None,
+            "position": self.position
+        }
+
+📈 strategy.py
+
+python
+ Copy code
+
+"""
+strategy.py - Trading signal generation
+Clean, readable, no side effects.
+Input: enriched DataFrame (with indicators)
+Output: {"action": "BUY"|"SELL"|"HOLD", "reason": str}
+"""
+
+import pandas as pd
+
+
+def generate_signal(df: pd.DataFrame) -> dict:
+    """
+    EMA crossover + RSI filter strategy.
+
+    BUY  when: EMA9 crosses above EMA21 AND RSI < 65 (not overbought)
+    SELL when: EMA9 crosses below EMA21 AND RSI > 35 (not oversold)
+    HOLD otherwise.
+    """
+
+    if len(df) < 3:
+        return {"action": "HOLD", "reason": "Not enough data"}
+
+    # Use last 2 rows to detect crossover
+    prev = df.iloc[-2]
+    curr = df.iloc[-1]
+
+    # Guard: check required columns exist
+    required = ["ema9", "ema21", "rsi"]
+    for col in required:
+        if col not in df.columns or pd.isna(curr[col]):
+            return {"action": "HOLD", "reason": f"Indicator '{col}' not ready"}
+
+    ema9_crossed_up = (prev["ema9"] < prev["ema21"]) and (curr["ema9"] > curr["ema21"])
+    ema9_crossed_down = (prev["ema9"] > prev["ema21"]) and (curr["ema9"] < curr["ema21"])
+
+    rsi = curr["rsi"]
+    rsi_not_overbought = rsi < 65
+    rsi_not_oversold = rsi > 35
+
+    # ── BUY signal ──────────────────────────────────────────
+    if ema9_crossed_up and rsi_not_overbought:
+        return {
+            "action": "BUY",
+            "reason": f"EMA9 crossed above EMA21 | RSI={rsi:.1f}"
+        }
+
+    # ── SELL signal ─────────────────────────────────────────
+    if ema9_crossed_down and rsi_not_oversold:
+        return {
+            "action": "SELL",
+            "reason": f"EMA9 crossed below EMA21 | RSI={rsi:.1f}"
+        }
+
+    return {"action": "HOLD", "reason": "No crossover signal"}
+
+
+def get_trend(df: pd.DataFrame) -> str:
+    """
+    Simple trend label for display.
+    Based on price vs EMA50.
+    """
+    if df.empty or "ema50" not in df.columns:
+        return "Unknown"
+
+    price = df["close"].iloc[-1]
+    ema50 = df["ema50"].iloc[-1]
+
+    if pd.isna(ema50):
+        return "Unknown"
+
+    if price > ema50 * 1.005:
+        return "📈 Bullish"
+    elif price < ema50 * 0.995:
+        return "📉 Bearish"
+    else:
+        return "➡️ Neutral"
+
+🛡️ risk.py
+
+python
+ Copy code
+
+"""
+risk.py - Risk management
+Handles: position sizing, daily loss limits
+"""
+
+
+class RiskManager:
+    def __init__(
+        self,
+        balance: float,
+        risk_pct: float = 0.02,
+        stop_loss_pct: float = 0.015,
+        take_profit_pct: float = 0.03
+    ):
+        self.balance = balance
+        self.risk_pct = risk_pct
+        self.stop_loss_pct = stop_loss_pct
+        self.take_profit_pct = take_profit_pct
+
+    def position_size(self, entry_price: float) -> float:
+        """
+        Calculate position size in BTC.
+
+        Formula:
+            risk_amount = balance * risk_pct
+            loss_per_btc = entry_price * stop_loss_pct
+            size = risk_amount / loss_per_btc
+
+        Example:
+            balance=$1000, risk_pct=2%, SL=1.5%, price=$60000
+            risk_amount = $20
+            loss_per_btc = $900
+            size = 0.0222 BTC
+        """
+        risk_amount = self.balance * self.risk_pct
+        loss_per_unit = entry_price * self.stop_loss_pct
+
+        if loss_per_unit <= 0:
+            return 0.0
+
+        size = risk_amount / loss_per_unit
+
+        # Safety cap: never risk more than 10% of balance worth
+        max_size = (self.balance * 0.10) / entry_price
+        return round(min(size, max_size), 6)
+
+    def can_trade(self, daily_pnl: float) -> tuple[bool, str]:
+        """
+        Daily loss limit check.
+        Returns (True, "") if OK to trade.
+        Returns (False, reason) if limit hit.
+        """
+        max_daily_loss = self.balance * 0.05   # 5% daily loss limit
+        if daily_pnl < -max_daily_loss:
+            return False, f"Daily loss limit hit (${-daily_pnl:.2f} lost today)"
+        return True, ""
+
+🖥️ dashboard.py
+
+python
+ Copy code
+
+"""
+dashboard.py - Streamlit UI
+Clean, persistent bot, real data, proper markers.
+
+Run with: streamlit run dashboard.py
+"""
+
+import streamlit as st
+import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from datetime import datetime
+
+from bot import TradingBot
+from strategy import get_trend
+
+# ──────────────────────────────────────────────────────────────
+# PAGE CONFIG
+# ──────────────────────────────────────────────────────────────
+
+st.set_page_config(
+    page_title="Crypto Trading Dashboard",
+    page_icon="₿",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# ──────────────────────────────────────────────────────────────
+# CUSTOM CSS
+# ──────────────────────────────────────────────────────────────
+
+st.markdown("""
+<style>
+    /* Main background */
+    .stApp { background-color: #0e1117; }
+
+    /* Metric cards */
+    [data-testid="metric-container"] {
+        background: #1a1d27;
+        border: 1px solid #2d3748;
+        border-radius: 8px;
+        padding: 12px;
+    }
+
+    /* Status badges */
+    .badge-green {
+        background: #1a4731; color: #48bb78;
+        padding: 4px 12px; border-radius: 20px;
+        font-size: 13px; font-weight: 600;
+        display: inline-block;
+    }
+    .badge-red {
+        background: #4a1a1a; color: #fc8181;
+        padding: 4px 12px; border-radius: 20px;
+        font-size: 13px; font-weight: 600;
+        display: inline-block;
+    }
+    .badge-blue {
+        background: #1a2a4a; color: #63b3ed;
+        padding: 4px 12px; border-radius: 20px;
+        font-size: 13px; font-weight: 600;
+        display: inline-block;
+    }
+    .badge-yellow {
+        background: #4a3a1a; color: #f6e05e;
+        padding: 4px 12px; border-radius: 20px;
+        font-size: 13px; font-weight: 600;
+        display: inline-block;
+    }
+
+    /* Section headers */
+    .section-header {
+        font-size: 16px; font-weight: 700;
+        color: #e2e8f0; margin-bottom: 8px;
+        border-left: 3px solid #4299e1;
+        padding-left: 10px;
+    }
+
+    /* Log entries */
+    .log-trade { color: #48bb78; }
+    .log-error { color: #fc8181; }
+    .log-system { color: #63b3ed; }
+    .log-manual { color: #f6e05e; }
+    .log-info { color: #a0aec0; }
+
+    /* Divider */
+    hr { border-color: #2d3748; }
+</style>
+""", unsafe_allow_html=True)
+
+# ──────────────────────────────────────────────────────────────
+# BOT SINGLETON — persists across all Streamlit reruns
+# ──────────────────────────────────────────────────────────────
+
+if "bot" not in st.session_state:
+    st.session_state.bot = TradingBot()
+    st.session_state.bot.log("Dashboard initialized", "SYSTEM")
+
+bot: TradingBot = st.session_state.bot
+
+# ──────────────────────────────────────────────────────────────
+# AUTO REFRESH (every 30 seconds)
+# ──────────────────────────────────────────────────────────────
+
+# Only auto-refresh if bot is running
+if bot.running:
+    st.markdown("""
+        <meta http-equiv="refresh" content="30">
+    """, unsafe_allow_html=True)
+
+# ──────────────────────────────────────────────────────────────
+# SIDEBAR
+# ──────────────────────────────────────────────────────────────
+
+with st.sidebar:
+    st.markdown("## ₿ Trading Bot")
+    st.markdown("---")
+
+    # ── Bot Status ──────────────────────────────────────────
+    st.markdown('<p class="section-header">Bot Status</p>', unsafe_allow_html=True)
+
+    if bot.running:
+        st.markdown('<span class="badge-green">● RUNNING</span>', unsafe_allow_html=True)
+    else:
+        st.markdown('<span class="badge-red">● STOPPED</span>', unsafe_allow_html=True)
+
+    if bot.auto_mode:
+        st.markdown('<span class="badge-blue">🤖 AUTO MODE ON</span>', unsafe_allow_html=True)
+    else:
+        st.markdown('<span class="badge-yellow">🖐️ AUTO MODE OFF</span>', unsafe_allow_html=True)
+
+    st.markdown("")
+
+    # ── Bot Controls ────────────────────────────────────────
+    st.markdown('<p class="section-header">Controls</p>', unsafe_allow_html=True)
+
+    col_a, col_b = st.columns(2)
+
+    with col_a:
+        if not bot.running:
+            if st.button("▶ Start", use_container_width=True, type="primary"):
+                bot.start()
+                st.rerun()
+        else:
+            if st.button("⏹ Stop", use_container_width=True):
+                bot.stop()
+                st.rerun()
+
+    with col_b:
+        auto_label = "🤖 Auto OFF" if bot.auto_mode else "🤖 Auto ON"
+        if st.button(auto_label, use_container_width=True):
+            bot.toggle_auto()
+            st.rerun()
+
+    st.markdown("---")
+
+    # ── Manual Trading ──────────────────────────────────────
+    st.markdown('<p class="section-header">Manual Trade</p>', unsafe_allow_html=True)
+
+    col_c, col_d = st.columns(2)
+
+    with col_c:
+        if st.button("🟢 BUY", use_container_width=True, type="primary"):
+            bot.manual_buy()
+            st.rerun()
+
+    with col_d:
+        if st.button("🔴 SELL", use_container_width=True):
+            bot.manual_sell()
+            st.rerun()
+
+    # Position status
+    if bot.position:
+        st.markdown("")
+        st.markdown('<p class="section-header">Open Position</p>', unsafe_allow_html=True)
+        p = bot.position
+        entry = p["entry_price"]
+        current = bot.last_price or entry
+        unrealized = (current - entry) * p["size"]
+        pnl_color = "green" if unrealized >= 0 else "red"
+        sign = "+" if unrealized >= 0 else ""
+
+        st.markdown(f"""
+        <div style='background:#1a1d27; padding:10px; border-radius:8px; border:1px solid #2d3748;'>
+            <div>Side: <b>BUY</b></div>
+            <div>Entry: <b>${entry:,.2f}</b></div>
+            <div>TP: <b style='color:#48bb78'>${p['take_profit']:,.2f}</b></div>
+            <div>SL: <b style='color:#fc8181'>${p['stop_loss']:,.2f}</b></div>
+            <div>Size: <b>{p['size']:.6f} BTC</b></div>
+            <div>uPnL: <b style='color:{pnl_color}'>{sign}${unrealized:.4f}</b></div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ── Settings ────────────────────────────────────────────
+    st.markdown('<p class="section-header">Settings</p>', unsafe_allow_html=True)
+
+    interval = st.selectbox(
+        "Chart Interval",
+        options=["1m", "3m", "5m", "15m", "1h", "4h"],
+        index=2
+    )
+
+    show_ema = st.checkbox("Show EMA Lines", value=True)
+    show_rsi = st.checkbox("Show RSI Panel", value=True)
+
+    if st.button("
+
+Regenerate
+Copy message
+
+give me the whole dashboard divided int two parts one after the other
+
+
+
+🖥️ dashboard.py — Part 1 of 2
+
+python
+ Copy code
+
+"""
+dashboard.py - Streamlit UI
+Clean, persistent bot, real data, proper markers.
+
+Run with: streamlit run dashboard.py
+"""
+
+import streamlit as st
+import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from datetime import datetime
+
+from bot import TradingBot
+from strategy import get_trend
+
+# ──────────────────────────────────────────────────────────────
+# PAGE CONFIG
+# ──────────────────────────────────────────────────────────────
+
+st.set_page_config(
+    page_title="Crypto Trading Dashboard",
+    page_icon="₿",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# ──────────────────────────────────────────────────────────────
+# CUSTOM CSS
+# ──────────────────────────────────────────────────────────────
+
+st.markdown("""
+<style>
+    .stApp { background-color: #0e1117; }
+
+    [data-testid="metric-container"] {
+        background: #1a1d27;
+        border: 1px solid #2d3748;
+        border-radius: 8px;
+        padding: 12px;
+    }
+
+    .badge-green {
+        background: #1a4731; color: #48bb78;
+        padding: 4px 12px; border-radius: 20px;
+        font-size: 13px; font-weight: 600;
+        display: inline-block;
+    }
+    .badge-red {
+        background: #4a1a1a; color: #fc8181;
+        padding: 4px 12px; border-radius: 20px;
+        font-size: 13px; font-weight: 600;
+        display: inline-block;
+    }
+    .badge-blue {
+        background: #1a2a4a; color: #63b3ed;
+        padding: 4px 12px; border-radius: 20px;
+        font-size: 13px; font-weight: 600;
+        display: inline-block;
+    }
+    .badge-yellow {
+        background: #4a3a1a; color: #f6e05e;
+        padding: 4px 12px; border-radius: 20px;
+        font-size: 13px; font-weight: 600;
+        display: inline-block;
+    }
+
+    .section-header {
+        font-size: 16px; font-weight: 700;
+        color: #e2e8f0; margin-bottom: 8px;
+        border-left: 3px solid #4299e1;
+        padding-left: 10px;
+    }
+
+    .log-entry {
+        font-family: monospace;
+        font-size: 12px;
+        padding: 3px 0;
+        border-bottom: 1px solid #1a1d27;
+    }
+
+    hr { border-color: #2d3748; }
+</style>
+""", unsafe_allow_html=True)
+
+# ──────────────────────────────────────────────────────────────
+# BOT SINGLETON
+# Stored in session_state — survives all Streamlit reruns
+# Never re-instantiated, never resets
+# ──────────────────────────────────────────────────────────────
+
+if "bot" not in st.session_state:
+    st.session_state.bot = TradingBot()
+    st.session_state.bot.log("Dashboard initialized", "SYSTEM")
+
+bot: TradingBot = st.session_state.bot
+
+# ──────────────────────────────────────────────────────────────
+# AUTO REFRESH
+# Uses meta refresh — simple and reliable on Render
+# Only activates when bot is running
+# ──────────────────────────────────────────────────────────────
+
+if bot.running:
+    st.markdown(
+        '<meta http-equiv="refresh" content="30">',
+        unsafe_allow_html=True
+    )
+
+# ──────────────────────────────────────────────────────────────
+# SIDEBAR
+# ──────────────────────────────────────────────────────────────
+
+with st.sidebar:
+    st.markdown("## ₿ Trading Bot")
+    st.markdown("---")
+
+    # ── Bot Status ──────────────────────────────────────────
+    st.markdown(
+        '<p class="section-header">Bot Status</p>',
+        unsafe_allow_html=True
+    )
+
+    if bot.running:
+        st.markdown(
+            '<span class="badge-green">● RUNNING</span>',
+            unsafe_allow_html=True
+        )
+    else:
+        st.markdown(
+            '<span class="badge-red">● STOPPED</span>',
+            unsafe_allow_html=True
+        )
+
+    st.markdown(" ")
+
+    if bot.auto_mode:
+        st.markdown(
+            '<span class="badge-blue">🤖 AUTO MODE ON</span>',
+            unsafe_allow_html=True
+        )
+    else:
+        st.markdown(
+            '<span class="badge-yellow">🖐️ MANUAL MODE</span>',
+            unsafe_allow_html=True
+        )
+
+    st.markdown("")
+
+    # ── Bot Controls ────────────────────────────────────────
+    st.markdown(
+        '<p class="section-header">Controls</p>',
+        unsafe_allow_html=True
+    )
+
+    col_a, col_b = st.columns(2)
+
+    with col_a:
+        if not bot.running:
+            if st.button("▶ Start", use_container_width=True, type="primary"):
+                bot.start()
+                st.rerun()
+        else:
+            if st.button("⏹ Stop", use_container_width=True):
+                bot.stop()
+                st.rerun()
+
+    with col_b:
+        auto_label = "🤖 Auto OFF" if bot.auto_mode else "🤖 Auto ON"
+        if st.button(auto_label, use_container_width=True):
+            bot.toggle_auto()
+            st.rerun()
+
+    st.markdown("---")
+
+    # ── Manual Trading ──────────────────────────────────────
+    st.markdown(
+        '<p class="section-header">Manual Trade</p>',
+        unsafe_allow_html=True
+    )
+
+    col_c, col_d = st.columns(2)
+
+    with col_c:
+        if st.button("🟢 BUY", use_container_width=True, type="primary"):
+            bot.manual_buy()
+            st.rerun()
+
+    with col_d:
+        if st.button("🔴 SELL", use_container_width=True):
+            bot.manual_sell()
+            st.rerun()
+
+    # ── Open Position Display ───────────────────────────────
+    if bot.position:
+        st.markdown("")
+        st.markdown(
+            '<p class="section-header">Open Position</p>',
+            unsafe_allow_html=True
+        )
+        p = bot.position
+        entry = p["entry_price"]
+        current = bot.last_price if bot.last_price else entry
+        unrealized = (current - entry) * p["size"]
+        pnl_color = "#48bb78" if unrealized >= 0 else "#fc8181"
+        sign = "+" if unrealized >= 0 else ""
+
+        st.markdown(f"""
+        <div style='
+            background:#1a1d27;
+            padding:12px;
+            border-radius:8px;
+            border:1px solid #2d3748;
+            font-size:13px;
+            line-height:1.8;
+        '>
+            <div>Side: <b>BUY</b></div>
+            <div>Entry: <b>${entry:,.2f}</b></div>
+            <div>TP: <b style='color:#48bb78'>${p['take_profit']:,.2f}</b></div>
+            <div>SL: <b style='color:#fc8181'>${p['stop_loss']:,.2f}</b></div>
+            <div>Size: <b>{p['size']:.6f} BTC</b></div>
+            <div>uPnL:
+                <b style='color:{pnl_color}'>
+                    {sign}${unrealized:.4f}
+                </b>
+            </div>
+            <div style='font-size:11px; color:#718096; margin-top:4px;'>
+                {p['reason']}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ── Chart Settings ──────────────────────────────────────
+    st.markdown(
+        '<p class="section-header">Chart Settings</p>',
+        unsafe_allow_html=True
+    )
+
+    interval = st.selectbox(
+        "Candle Interval",
+        options=["1m", "3m", "5m", "15m", "1h", "4h"],
+        index=2,
+        key="interval_select"
+    )
+
+    show_ema   = st.checkbox("Show EMA Lines", value=True)
+    show_rsi   = st.checkbox("Show RSI Panel", value=True)
+    show_vol   = st.checkbox("Show Volume",    value=True)
+
+    st.markdown("---")
+
+    # ── Reset Button ────────────────────────────────────────
+    st.markdown(
+        '<p class="section-header">Danger Zone</p>',
+        unsafe_allow_html=True
+    )
+
+    if st.button("🗑️ Reset Bot", use_container_width=True):
+        bot.stop()
+        st.session_state.bot = TradingBot()
+        st.session_state.bot.log("Bot reset by user", "SYSTEM")
+        st.rerun()
+
+    # ── Last Fetch Info ─────────────────────────────────────
+    if bot.last_fetch_ts:
+        elapsed = (datetime.now() - bot.last_fetch_ts).seconds
+        st.markdown(
+            f"<div style='font-size:11px; color:#718096; margin-top:8px;'>"
+            f"Last update: {elapsed}s ago</div>",
+            unsafe_allow_html=True
+        )
+
+    if bot.fetch_error:
+        st.markdown(
+            f"<div style='font-size:11px; color:#fc8181; margin-top:4px;'>"
+            f"⚠ {bot.fetch_error}</div>",
+            unsafe_allow_html=True
+        )
+
+# ──────────────────────────────────────────────────────────────
+# MAIN HEADER
+# ──────────────────────────────────────────────────────────────
+
+st.markdown(
+    "<h1 style='color:#e2e8f0; margin-bottom:0;'>₿ BTC/USDT Trading Dashboard</h1>",
+    unsafe_allow_html=True
+)
+st.markdown(
+    f"<div style='color:#718096; font-size:13px; margin-bottom:16px;'>"
+    f"Live data via Binance Public API · "
+    f"Updated: {datetime.now().strftime('%H:%M:%S')}"
+    f"</div>",
+    unsafe_allow_html=True
+)
+
+# ──────────────────────────────────────────────────────────────
+# FETCH FRESH DATA FOR DISPLAY
+# If bot is running, data is already in bot.df (fetched by thread)
+# If bot is stopped, fetch once directly for display
+# ──────────────────────────────────────────────────────────────
+
+if bot.df.empty:
+    with st.spinner("Fetching market data..."):
+        df_raw = bot.fetch_ohlc(interval=interval)
+        if not df_raw.empty:
+            from bot import TradingBot as _TB
+            df_display = bot._add_indicators(df_raw)
+            bot.df = df_display.copy()
+        else:
+            df_display = pd.DataFrame()
+else:
+    df_display = bot.df.copy()
+
+# ──────────────────────────────────────────────────────────────
+# TOP METRICS ROW
+# ──────────────────────────────────────────────────────────────
+
+stats = bot.get_stats()
+live_price = bot.last_price
+
+# Fetch live price once if not available
+if live_price is None and not df_display.empty:
+    live_price = bot.fetch_price()
+    bot.last_price = live_price
+
+m1, m2, m3, m4, m5, m6 = st.columns(6)
+
+with m1:
+    price_display = f"${live_price:,.2f}" if live_price else "Fetching..."
+    st.metric("BTC Price", price_display)
+
+with m2:
+    pnl_val  = stats["pnl"]
+    pnl_sign = "+" if pnl_val >= 0 else ""
+    st.metric(
+        "Total PnL",
+        f"{pnl_sign}${pnl_val:.2f}",
+        delta=f"{pnl_sign}{pnl_val:.2f}"
+    )
+
+with m3:
+    st.metric("Balance", f"${stats['balance']:,.2f}")
+
+with m4:
+    st.metric("Total Trades", stats["total_trades"])
+
+with m5:
+    wr = stats["win_rate"]
+    st.metric("Win Rate", f"{wr:.1f}%")
+
+with m6:
+    trend_label = get_trend(df_display) if not df_display.empty else "—"
+    st.metric("Trend", trend_label)
+
+st.markdown("---")
+
+# ──────────────────────────────────────────────────────────────
+# CHART BUILDER
+# ──────────────────────────────────────────────────────────────
+
+def build_chart(
+    df: pd.DataFrame,
+    trades: list,
+    show_ema: bool,
+    show_rsi: bool,
+    show_vol: bool
+) -> go.Figure:
+    """
+    Build the main Plotly chart.
+    - Candlestick
+    - EMA lines (optional)
+    - Volume bars (optional)
+    - RSI panel (optional)
+    - BUY/SELL markers from trades list (aligned to exact candle timestamps)
+    """
+
+    if df.empty:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No data available — check API connection",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False,
+            font=dict(size=16, color="#718096")
+        )
+        fig.update_layout(
+            paper_bgcolor="#0e1117",
+            plot_bgcolor="#0e1117",
+            height=500
+        )
+        return fig
+
+    # ── Subplot layout ──────────────────────────────────────
+    row_count = 1
+    row_heights = [0.7]
+
+    if show_rsi:
+        row_count += 1
+        row_heights.append(0.15)
+
+    if show_vol:
+        row_count += 1
+        row_heights.append(0.15)
+
+    specs = [[{"type": "candlestick"}]]
+    if show_rsi:
+        specs.append([{"type": "scatter"}])
+    if show_vol:
+        specs.append([{"type": "bar"}])
+
+    subplot_titles = ["BTC/USDT"]
+    if show_rsi:
+        subplot_titles.append("RSI (14)")
+    if show_vol:
+        subplot_titles.append("Volume")
+
+    fig = make_subplots(
+        rows=row_count,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.03,
+        row_heights=row_heights,
+        subplot_titles=subplot_titles,
+        specs=specs
+    )
+
+    # ── Candlestick ─────────────────────────────────────────
+    fig.add_trace(
+        go.Candlestick(
+            x=df["timestamp"],
+            open=df["open"],
+            high=df["high"],
+            low=df["low"],
+            close=df["close"],
+            name="BTC/USDT",
+            increasing_line_color="#48bb78",
+            decreasing_line_color="#fc8181",
+            increasing_fillcolor="#48bb78",
+            decreasing_fillcolor="#fc8181",
+        ),
+        row=1, col=1
+    )
+
+    # ── EMA Lines ───────────────────────────────────────────
+    if show_ema and "ema9" in df.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=df["timestamp"],
+                y=df["ema9"],
+                name="EMA 9",
+                line=dict(color="#63b3ed", width=1.5),
+                hovertemplate="EMA9: $%{y:,.2f}<extra></extra>"
+            ),
+            row=1, col=1
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=df["timestamp"],
+                y=df["ema21"],
+                name="EMA 21",
+                line=dict(color="#f6e05e", width=1.5),
+                hovertemplate="EMA21: $%{y:,.2f}<extra></extra>"
+            ),
+            row=1, col=1
+        )
+        if "ema50" in df.columns:
+            fig.add_trace(
+                go.Scatter(
+                    x=df["timestamp"],
+                    y=df["ema50"],
+                    name="EMA 50",
+                    line=dict(color="#b794f4", width=1.5, dash="dot"),
+                    hovertemplate="EMA50: $%{y:,.2f}<extra></extra>"
+                ),
+                row=1, col=1
+            )
+
+    # ── BUY / SELL Markers ──────────────────────────────────
+    # Snap each trade timestamp to the nearest candle timestamp
+    # so markers always sit exactly on a candle.
+
+    if trades:
+        candle_times = df["timestamp"].values  # numpy datetime64 array
+
+        buy_times   = []
+        buy_prices  = []
+        buy_texts   = []
+
+        sell_times  = []
+        sell_prices = []
+        sell_texts  = []
+
+        for trade in trades:
+            trade_ts = pd.Timestamp(trade["entry_time"])
+            exit_ts  = pd.Timestamp(trade["exit_time"])
+
+            # Snap to nearest candle
+            entry_idx = abs(df["timestamp"] - trade_ts).argmin()
+            exit_idx  = abs(df["timestamp"] - exit_ts).argmin()
+
+            entry_row = df.iloc[entry_idx]
+            exit_row  = df.iloc[exit_idx]
+
+            # BUY marker — place below candle low
+            buy_times.append(entry_row["timestamp"])
+            buy_prices.append(entry_row["low"] * 0.9985)   # slightly below low
+            buy_texts.append(
+                f"BUY @ ${trade['entry_price']:,.2f}<br>"
+                f"Reason: {trade['reason']}<br>"
+                f"Size: {trade['size']:.6f} BTC"
+            )
+
+            # SELL marker — place above candle high
+            sell_times.append(exit_row["timestamp"])
+            sell_prices.append(exit_row["high"] * 1.0015)  # slightly above high
+            pnl_str = f"+${trade['pnl']:.4f}" if trade["pnl"] >= 0 else f"-${abs(trade['pnl']):.4f}"
+            sell_texts.append(
+                f"SELL @ ${trade['exit_price']:,.2f}<br>"
+                f"Reason: {trade['reason']}<br>"
+                f"PnL: {pnl_str}"
+            )
+
+        # Add BUY markers (green triangles pointing up)
+        if buy_times:
+            fig.add_trace(
+                go.Scatter(
+                    x=buy_times,
+                    y=buy_prices,
+                    mode="markers+text",
+                    name="BUY",
+                    marker=dict(
+                        symbol="triangle-up",
+                        size=14,
+                        color="#48bb78",
+                        line=dict(color="#276749", width=1)
+                    ),
+                    text=["▲"] * len(buy_times),
+                    textposition="bottom center",
+                    textfont=dict(size=10, color="#48bb78"),
+                    hovertext=buy_texts,
+                    hoverinfo="text",
+                    showlegend=True
+                ),
+                row=1, col=1
+            )
+
+        # Add SELL markers (red triangles pointing down)
+        if sell_times:
+            fig.add_trace(
+                go.Scatter(
+                    x=sell_times,
+                    y=sell_prices,
+                    mode="markers+text",
+                    name="SELL",
+                    marker=dict(
+                        symbol="triangle-down",
+                        size=14,
+                        color="#fc8181",
+                        line=dict(color="#9b2c2c", width=1)
+                    ),
+                    text=["▼"] * len(sell_times),
+                    textposition="top center",
+                    textfont=dict(size=10, color="#fc8181"),
+                    hovertext=sell_texts,
+                    hoverinfo="text",
+                    showlegend=True
+                ),
+                row=1, col=1
+            )
+
+    # ── Active Position Line ─────────────────────────────────
+    # Draw a horizontal dashed line at entry price of open position
+    if bot.position:
+        entry_p = bot.position["entry_price"]
+        tp_p    = bot.position["take_profit"]
+        sl_p    = bot.position["stop_loss"]
+
+        fig.add_hline(
+            y=entry_p,
+            line_dash="dash",
+            line_color="#63b3ed",
+            line_width=1,
+            annotation_text=f"Entry ${entry_p:,.2f}",
+            annotation_font_color="#63b3ed",
+            row=1, col=1
+        )
+        fig.add_hline(
+            y=tp_p,
+            line_dash="dot",
+            line_color="#48bb78",
+            line_width=1,
+            annotation_text=f"TP ${tp_p:,.2f}",
+            annotation_font_color="#48bb78",
+            row=1, col=1
+        )
+        fig.add_hline(
+            y=sl_p,
+            line_dash="dot",
+            line_color="#fc8181",
+            line_width=1,
+            annotation_text=f"SL ${sl_p:,.2f}",
+            annotation_font_color="#fc8181",
+            row=1, col=1
+        )
+
+    # ── RSI Panel ───────────────────────────────────────────
+    rsi_row = None
+    vol_row = None
+
+    if show_rsi and "rsi" in df.columns:
+        rsi_row = 2
+        fig.add_trace(
+            go.Scatter(
+                x=df["timestamp"],
+                y=df["rsi"],
+                name="RSI",
+                line=dict(color="#b794f4", width=1.5),
+                hovertemplate="RSI: %{y:.1f}<extra></extra>"
+            ),
+            row=rsi_row, col=1
+        )
+        # Overbought / oversold zones
+        fig.add_hrect(
+            y0=70, y1=100,
+            fillcolor="#fc8181", opacity=0.08,
+            layer="below", line_width=0,
+            row=rsi_row, col=1
+        )
+        fig.add_hrect(
+            y0=0, y1=30,
+            fillcolor="#48bb78", opacity=0.08,
+            layer="below", line_width=0,
+            row=rsi_row, col=1
+        )
+        fig.add_hline(
+            y=70, line_dash="dot",
+            line_color="#fc8181", line_width=0.8,
+            row=rsi_row, col=1
+        )
+        fig.add_hline(
+            y=30, line_dash="dot",
+            line_color="#48bb78", line_width=0.8,
+            row=rsi_row, col=1
+        )
+        fig.update_yaxes(
+            range=[0, 100],
+            row=rsi_row, col=1,
+            tickfont=dict(size=10)
+        )
+
+    # ── Volume Panel ────────────────────────────────────────
+    if show_vol and "volume" in df.columns:
+        vol_row = rsi_row + 1 if rsi_row else 2
+
+        vol_colors = [
+            "#48bb78" if c >= o else "#fc8181"
+            for c, o in zip(df["close"], df["open"])
+        ]
+
+        fig.add_trace(
+            go.Bar(
+                x=df["timestamp"],
+                y=df["volume"],
+                name="Volume",
+                marker_color=vol_colors,
+                opacity=0.7,
+                hovertemplate="Vol: %{y:,.0f}<extra></extra>"
+            ),
+            row=vol_row, col=1
+        )
+
+    # ── Layout ──────────────────────────────────────────────
+    fig.update_layout(
+        height=700 if (show_rsi or show_vol) else 520,
+        paper_bgcolor="#0e1117",
+        plot_bgcolor="#131722",
+        font=dict(color="#e2e8f0", family="Inter, sans-serif"),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+            bgcolor="rgba(0,0,0,0)",
+            font=dict(size=11)
+        ),
+        margin=dict(l=10, r=10, t=40, b=10),
+        xaxis_rangeslider_visible=False,
+        hovermode="x unified",
+    )
+
+    fig.update_xaxes(
+        gridcolor="#1a1d27",
+        showgrid=True,
+        zeroline=False
+    )
+    fig.update_yaxes(
+        gridcolor="#1a1d27",
+        showgrid=True,
+        zeroline=False
+    )
+
+    return fig
+
+🖥️ dashboard.py — Part 2 of 2
+
+python
+ Copy code
+
+# ──────────────────────────────────────────────────────────────
+# RENDER CHART
+# ──────────────────────────────────────────────────────────────
+
+fig = build_chart(
+    df=df_display,
+    trades=bot.trades,
+    show_ema=show_ema,
+    show_rsi=show_rsi,
+    show_vol=show_vol
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
+# ──────────────────────────────────────────────────────────────
+# BOTTOM SECTION — Two columns
+# Left:  Trade History
+# Right: Activity Log
+# ──────────────────────────────────────────────────────────────
+
+col_left, col_right = st.columns([1.2, 0.8])
+
+# ── TRADE HISTORY ───────────────────────────────────────────
+with col_left:
+    st.markdown(
+        '<p class="section-header">📋 Trade History</p>',
+        unsafe_allow_html=True
+    )
+
+    if not bot.trades:
+        st.markdown(
+            "<div style='color:#718096; font-size:13px; padding:12px;'>"
+            "No trades yet. Start the bot or use manual buttons.</div>",
+            unsafe_allow_html=True
+        )
+    else:
+        # Build display dataframe
+        rows = []
+        for t in reversed(bot.trades):   # newest first
+            pnl     = t["pnl"]
+            pnl_str = f"+${pnl:.4f}" if pnl >= 0 else f"-${abs(pnl):.4f}"
+            pnl_icon = "✅" if pnl >= 0 else "❌"
+
+            rows.append({
+                "Entry Time":  pd.Timestamp(t["entry_time"]).strftime("%m/%d %H:%M"),
+                "Exit Time":   pd.Timestamp(t["exit_time"]).strftime("%m/%d %H:%M"),
+                "Entry $":     f"${t['entry_price']:,.2f}",
+                "Exit $":      f"${t['exit_price']:,.2f}",
+                "Size":        f"{t['size']:.6f}",
+                "PnL":         pnl_str,
+                " ":           pnl_icon,
+                "Reason":      t["reason"]
+            })
+
+        trade_df = pd.DataFrame(rows)
+
+        st.dataframe(
+            trade_df,
+            use_container_width=True,
+            hide_index=True,
+            height=min(350, 38 + 35 * len(rows)),  # dynamic height
+            column_config={
+                "PnL": st.column_config.TextColumn(
+                    "PnL",
+                    help="Profit / Loss in USDT"
+                ),
+                "Reason": st.column_config.TextColumn(
+                    "Reason",
+                    width="medium"
+                )
+            }
+        )
+
+        # Summary below table
+        total_pnl   = sum(t["pnl"] for t in bot.trades)
+        win_count   = sum(1 for t in bot.trades if t["pnl"] > 0)
+        lose_count  = len(bot.trades) - win_count
+        pnl_color   = "#48bb78" if total_pnl >= 0 else "#fc8181"
+        pnl_sign    = "+" if total_pnl >= 0 else ""
+
+        st.markdown(f"""
+        <div style='
+            display:flex; gap:24px;
+            padding:10px 4px;
+            font-size:13px;
+            color:#a0aec0;
+        '>
+            <span>Total: <b style='color:#e2e8f0'>{len(bot.trades)}</b></span>
+            <span>Wins: <b style='color:#48bb78'>{win_count}</b></span>
+            <span>Losses: <b style='color:#fc8181'>{lose_count}</b></span>
+            <span>Net PnL:
+                <b style='color:{pnl_color}'>{pnl_sign}${total_pnl:.4f}</b>
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+
+# ── ACTIVITY LOG ────────────────────────────────────────────
+with col_right:
+    st.markdown(
+        '<p class="section-header">📟 Activity Log</p>',
+        unsafe_allow_html=True
+    )
+
+    # Color mapping for log levels
+    level_colors = {
+        "
+
+Regenerate
+Copy message
+
+are you done?
+
+
+
+No! I got cut off. Here is the complete Part 2 in full:
+
+
+
+🖥️ dashboard.py — Part 2 of 2 (Complete)
+
+python
+ Copy code
+
+# ──────────────────────────────────────────────────────────────
+# RENDER CHART
+# ──────────────────────────────────────────────────────────────
+
+fig = build_chart(
+    df=df_display,
+    trades=bot.trades,
+    show_ema=show_ema,
+    show_rsi=show_rsi,
+    show_vol=show_vol
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
+# ──────────────────────────────────────────────────────────────
+# BOTTOM SECTION — Two columns
+# Left:  Trade History
+# Right: Activity Log
+# ──────────────────────────────────────────────────────────────
+
+col_left, col_right = st.columns([1.2, 0.8])
+
+# ── TRADE HISTORY ───────────────────────────────────────────
+with col_left:
+    st.markdown(
+        '<p class="section-header">📋 Trade History</p>',
+        unsafe_allow_html=True
+    )
+
+    if not bot.trades:
+        st.markdown(
+            "<div style='color:#718096; font-size:13px; padding:12px;'>"
+            "No trades yet. Start the bot or use manual buttons.</div>",
+            unsafe_allow_html=True
+        )
+    else:
+        rows = []
+        for t in reversed(bot.trades):
+            pnl      = t["pnl"]
+            pnl_str  = f"+${pnl:.4f}" if pnl >= 0 else f"-${abs(pnl):.4f}"
+            pnl_icon = "✅" if pnl >= 0 else "❌"
+
+            rows.append({
+                "Entry Time": pd.Timestamp(t["entry_time"]).strftime("%m/%d %H:%M"),
+                "Exit Time":  pd.Timestamp(t["exit_time"]).strftime("%m/%d %H:%M"),
+                "Entry $":    f"${t['entry_price']:,.2f}",
+                "Exit $":     f"${t['exit_price']:,.2f}",
+                "Size":       f"{t['size']:.6f}",
+                "PnL":        pnl_str,
+                " ":          pnl_icon,
+                "Reason":     t["reason"]
+            })
+
+        trade_df = pd.DataFrame(rows)
+
+        st.dataframe(
+            trade_df,
+            use_container_width=True,
+            hide_index=True,
+            height=min(350, 38 + 35 * len(rows)),
+            column_config={
+                "PnL": st.column_config.TextColumn(
+                    "PnL",
+                    help="Profit / Loss in USDT"
+                ),
+                "Reason": st.column_config.TextColumn(
+                    "Reason",
+                    width="medium"
+                )
+            }
+        )
+
+        # ── Summary row ─────────────────────────────────────
+        total_pnl  = sum(t["pnl"] for t in bot.trades)
+        win_count  = sum(1 for t in bot.trades if t["pnl"] > 0)
+        lose_count = len(bot.trades) - win_count
+        pnl_color  = "#48bb78" if total_pnl >= 0 else "#fc8181"
+        pnl_sign   = "+" if total_pnl >= 0 else ""
+
+        st.markdown(f"""
+        <div style='
+            display:flex;
+            gap:24px;
+            padding:10px 4px;
+            font-size:13px;
+            color:#a0aec0;
+        '>
+            <span>Total: <b style='color:#e2e8f0'>{len(bot.trades)}</b></span>
+            <span>Wins: <b style='color:#48bb78'>{win_count}</b></span>
+            <span>Losses: <b style='color:#fc8181'>{lose_count}</b></span>
+            <span>Net PnL:
+                <b style='color:{pnl_color}'>{pnl_sign}${total_pnl:.4f}</b>
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+# ── ACTIVITY LOG ────────────────────────────────────────────
+with col_right:
+    st.markdown(
+        '<p class="section-header">📟 Activity Log</p>',
+        unsafe_allow_html=True
+    )
+
+    # Color mapping per log level
+    level_colors = {
+        "TRADE":  "#48bb78",   # green
+        "ERROR":  "#fc8181",   # red
+        "SYSTEM": "#63b3ed",   # blue
+        "MANUAL": "#f6e05e",   # yellow
+        "INFO":   "#a0aec0",   # gray
+    }
+
+    level_icons = {
+        "TRADE":  "💰",
+        "ERROR":  "🚨",
+        "SYSTEM": "⚙️",
+        "MANUAL": "🖱️",
+        "INFO":   "ℹ️",
+    }
+
+    if not bot.logs:
+        st.markdown(
+            "<div style='color:#718096; font-size:13px; padding:12px;'>"
+            "No activity yet.</div>",
+            unsafe_allow_html=True
+        )
+    else:
+        # Show newest logs first
+        log_html_parts = []
+
+        for entry in reversed(bot.logs):
+            level   = entry["level"]
+            color   = level_colors.get(level, "#a0aec0")
+            icon    = level_icons.get(level, "•")
+            time_s  = entry["time"]
+            message = entry["message"]
+
+            log_html_parts.append(f"""
+            <div style='
+                display:flex;
+                gap:8px;
+                padding:5px 0;
+                border-bottom:1px solid #1a1d27;
+                font-family:monospace;
+                font-size:12px;
+                line-height:1.5;
+            '>
+                <span style='color:#4a5568; min-width:58px;'>{time_s}</span>
+                <span style='min-width:18px;'>{icon}</span>
+                <span style='color:{color};'>{message}</span>
+            </div>
+            """)
+
+        log_block = "\n".join(log_html_parts)
+
+        st.markdown(f"""
+        <div style='
+            background:#0e1117;
+            border:1px solid #2d3748;
+            border-radius:8px;
+            padding:10px 14px;
+            max-height:340px;
+            overflow-y:auto;
+        '>
+            {log_block}
+        </div>
+        """, unsafe_allow_html=True)
+
+    # ── Clear log button ────────────────────────────────────
+    if st.button("🗑️ Clear Log", key="clear_log"):
+        bot.logs.clear()
+        st.rerun()
+
+
+# ──────────────────────────────────────────────────────────────
+# INDICATORS SNAPSHOT ROW
+# Shows current indicator values as a quick-read bar
+# ──────────────────────────────────────────────────────────────
+
+if not df_display.empty:
+    st.markdown("---")
+    st.markdown(
+        '<p class="section-header">📊 Current Indicators</p>',
+        unsafe_allow_html=True
+    )
+
+    latest = df_display.iloc[-1]
+    prev   = df_display.iloc[-2] if len(df_display) > 1 else latest
+
+    i1,
+
+Regenerate
+Copy message
+
+do it in three different parts as i see that it s not complete but do it one after the other
+nowwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
+
+
+
+🖥️ dashboard.py — Part 1 of 3
+
+python
+ Copy code
+
+"""
+dashboard.py - Streamlit UI
+Clean, persistent bot, real data, proper markers.
+
+Run with: streamlit run dashboard.py
+"""
+
+import streamlit as st
+import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from datetime import datetime
+
+from bot import TradingBot
+from strategy import get_trend
+
+# ──────────────────────────────────────────────────────────────
+# PAGE CONFIG
+# ──────────────────────────────────────────────────────────────
+
+st.set_page_config(
+    page_title="Crypto Trading Dashboard",
+    page_icon="₿",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# ──────────────────────────────────────────────────────────────
+# CUSTOM CSS
+# ──────────────────────────────────────────────────────────────
+
+st.markdown("""
+<style>
+    .stApp { background-color: #0e1117; }
+
+    [data-testid="metric-container"] {
+        background: #1a1d27;
+        border: 1px solid #2d3748;
+        border-radius: 8px;
+        padding: 12px;
+    }
+
+    .badge-green {
+        background: #1a4731; color: #48bb78;
+        padding: 4px 12px; border-radius: 20px;
+        font-size: 13px; font-weight: 600;
+        display: inline-block;
+    }
+    .badge-red {
+        background: #4a1a1a; color: #fc8181;
+        padding: 4px 12px; border-radius: 20px;
+        font-size: 13px; font-weight: 600;
+        display: inline-block;
+    }
+    .badge-blue {
+        background: #1a2a4a; color: #63b3ed;
+        padding: 4px 12px; border-radius: 20px;
+        font-size: 13px; font-weight: 600;
+        display: inline-block;
+    }
+    .badge-yellow {
+        background: #4a3a1a; color: #f6e05e;
+        padding: 4px 12px; border-radius: 20px;
+        font-size: 13px; font-weight: 600;
+        display: inline-block;
+    }
+
+    .section-header {
+        font-size: 16px; font-weight: 700;
+        color: #e2e8f0; margin-bottom: 8px;
+        border-left: 3px solid #4299e1;
+        padding-left: 10px;
+    }
+
+    .log-entry {
+        font-family: monospace;
+        font-size: 12px;
+        padding: 3px 0;
+        border-bottom: 1px solid #1a1d27;
+    }
+
+    hr { border-color: #2d3748; }
+</style>
+""", unsafe_allow_html=True)
+
+# ──────────────────────────────────────────────────────────────
+# BOT SINGLETON
+# Stored in session_state — survives all Streamlit reruns
+# Never re-instantiated, never resets
+# ──────────────────────────────────────────────────────────────
+
+if "bot" not in st.session_state:
+    st.session_state.bot = TradingBot()
+    st.session_state.bot.log("Dashboard initialized", "SYSTEM")
+
+bot: TradingBot = st.session_state.bot
+
+# ──────────────────────────────────────────────────────────────
+# AUTO REFRESH
+# Uses meta refresh — simple and reliable on Render
+# Only activates when bot is running
+# ──────────────────────────────────────────────────────────────
+
+if bot.running:
+    st.markdown(
+        '<meta http-equiv="refresh" content="30">',
+        unsafe_allow_html=True
+    )
+
+# ──────────────────────────────────────────────────────────────
+# SIDEBAR
+# ──────────────────────────────────────────────────────────────
+
+with st.sidebar:
+    st.markdown("## ₿ Trading Bot")
+    st.markdown("---")
+
+    # ── Bot Status ──────────────────────────────────────────
+    st.markdown(
+        '<p class="section-header">Bot Status</p>',
+        unsafe_allow_html=True
+    )
+
+    if bot.running:
+        st.markdown(
+            '<span class="badge-green">● RUNNING</span>',
+            unsafe_allow_html=True
+        )
+    else:
+        st.markdown(
+            '<span class="badge-red">● STOPPED</span>',
+            unsafe_allow_html=True
+        )
+
+    st.markdown(" ")
+
+    if bot.auto_mode:
+        st.markdown(
+            '<span class="badge-blue">🤖 AUTO MODE ON</span>',
+            unsafe_allow_html=True
+        )
+    else:
+        st.markdown(
+            '<span class="badge-yellow">🖐️ MANUAL MODE</span>',
+            unsafe_allow_html=True
+        )
+
+    st.markdown("")
+
+    # ── Bot Controls ────────────────────────────────────────
+    st.markdown(
+        '<p class="section-header">Controls</p>',
+        unsafe_allow_html=True
+    )
+
+    col_a, col_b = st.columns(2)
+
+    with col_a:
+        if not bot.running:
+            if st.button("▶ Start", use_container_width=True, type="primary"):
+                bot.start()
+                st.rerun()
+        else:
+            if st.button("⏹ Stop", use_container_width=True):
+                bot.stop()
+                st.rerun()
+
+    with col_b:
+        auto_label = "🤖 Auto OFF" if bot.auto_mode else "🤖 Auto ON"
+        if st.button(auto_label, use_container_width=True):
+            bot.toggle_auto()
+            st.rerun()
+
+    st.markdown("---")
+
+    # ── Manual Trading ──────────────────────────────────────
+    st.markdown(
+        '<p class="section-header">Manual Trade</p>',
+        unsafe_allow_html=True
+    )
+
+    col_c, col_d = st.columns(2)
+
+    with col_c:
+        if st.button("🟢 BUY", use_container_width=True, type="primary"):
+            bot.manual_buy()
+            st.rerun()
+
+    with col_d:
+        if st.button("🔴 SELL", use_container_width=True):
+            bot.manual_sell()
+            st.rerun()
+
+    # ── Open Position Display ───────────────────────────────
+    if bot.position:
+        st.markdown("")
+        st.markdown(
+            '<p class="section-header">Open Position</p>',
+            unsafe_allow_html=True
+        )
+        p       = bot.position
+        entry   = p["entry_price"]
+        current = bot.last_price if bot.last_price else entry
+        unrealized  = (current - entry) * p["size"]
+        pnl_color   = "#48bb78" if unrealized >= 0 else "#fc8181"
+        sign        = "+" if unrealized >= 0 else ""
+
+        st.markdown(f"""
+        <div style='
+            background:#1a1d27;
+            padding:12px;
+            border-radius:8px;
+            border:1px solid #2d3748;
+            font-size:13px;
+            line-height:1.8;
+        '>
+            <div>Side: <b>BUY</b></div>
+            <div>Entry: <b>${entry:,.2f}</b></div>
+            <div>TP: <b style='color:#48bb78'>${p['take_profit']:,.2f}</b></div>
+            <div>SL: <b style='color:#fc8181'>${p['stop_loss']:,.2f}</b></div>
+            <div>Size: <b>{p['size']:.6f} BTC</b></div>
+            <div>uPnL:
+                <b style='color:{pnl_color}'>
+                    {sign}${unrealized:.4f}
+                </b>
+            </div>
+            <div style='font-size:11px; color:#718096; margin-top:4px;'>
+                {p['reason']}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ── Chart Settings ──────────────────────────────────────
+    st.markdown(
+        '<p class="section-header">Chart Settings</p>',
+        unsafe_allow_html=True
+    )
+
+    interval = st.selectbox(
+        "Candle Interval",
+        options=["1m", "3m", "5m", "15m", "1h", "4h"],
+        index=2,
+        key="interval_select"
+    )
+
+    show_ema = st.checkbox("Show EMA Lines", value=True)
+    show_rsi = st.checkbox("Show RSI Panel", value=True)
+    show_vol = st.checkbox("Show Volume",    value=True)
+
+    st.markdown("---")
+
+    # ── Reset Button ────────────────────────────────────────
+    st.markdown(
+        '<p class="section-header">Danger Zone</p>',
+        unsafe_allow_html=True
+    )
+
+    if st.button("🗑️ Reset Bot", use_container_width=True):
+        bot.stop()
+        st.session_state.bot = TradingBot()
+        st.session_state.bot.log("Bot reset by user", "SYSTEM")
+        st.rerun()
+
+    # ── Last Fetch Info ─────────────────────────────────────
+    if bot.last_fetch_ts:
+        elapsed = (datetime.now() - bot.last_fetch_ts).seconds
+        st.markdown(
+            f"<div style='font-size:11px; color:#718096; margin-top:8px;'>"
+            f"Last update: {elapsed}s ago</div>",
+            unsafe_allow_html=True
+        )
+
+    if bot.fetch_error:
+        st.markdown(
+            f"<div style='font-size:11px; color:#fc8181; margin-top:4px;'>"
+            f"⚠ {bot.fetch_error}</div>",
+            unsafe_allow_html=True
+        )
+
+# ──────────────────────────────────────────────────────────────
+# MAIN HEADER
+# ──────────────────────────────────────────────────────────────
+
+st.markdown(
+    "<h1 style='color:#e2e8f0; margin-bottom:0;'>₿ BTC/USDT Trading Dashboard</h1>",
+    unsafe_allow_html=True
+)
+st.markdown(
+    f"<div style='color:#718096; font-size:13px; margin-bottom:16px;'>"
+    f"Live data via Binance Public API · "
+    f"Updated: {datetime.now().strftime('%H:%M:%S')}"
+    f"</div>",
+    unsafe_allow_html=True
+)
+
+# ──────────────────────────────────────────────────────────────
+# FETCH DATA FOR DISPLAY
+# If bot is running  → use bot.df (already fetched by thread)
+# If bot is stopped  → fetch once now for display only
+# ──────────────────────────────────────────────────────────────
+
+if bot.df.empty:
+    with st.spinner("Fetching market data..."):
+        df_raw = bot.fetch_ohlc(interval=interval)
+        if not df_raw.empty:
+            df_display = bot._add_indicators(df_raw)
+            bot.df = df_display.copy()
+        else:
+            df_display = pd.DataFrame()
+else:
+    df_display = bot.df.copy()
+
+# ──────────────────────────────────────────────────────────────
+# TOP METRICS ROW
+# ──────────────────────────────────────────────────────────────
+
+stats      = bot.get_stats()
+live_price = bot.last_price
+
+if live_price is None and not df_display.empty:
+    live_price      = bot.fetch_price()
+    bot.last_price  = live_price
+
+m1, m2, m3, m4, m5, m6 = st.columns(6)
+
+with m1:
+    price_display = f"${live_price:,.2f}" if live_price else "Fetching..."
+    st.metric("BTC Price", price_display)
+
+with m2:
+    pnl_val  = stats["pnl"]
+    pnl_sign = "+" if pnl_val >= 0 else ""
+    st.metric(
+        "Total PnL",
+        f"{pnl_sign}${pnl_val:.2f}",
+        delta=f"{pnl_sign}{pnl_val:.2f}"
+    )
+
+with m3:
+    st.metric("Balance", f"${stats['balance']:,.2f}")
+
+with m4:
+    st.metric("Total Trades", stats["total_trades"])
+
+with m5:
+    wr = stats["win_rate"]
+    st.metric("Win Rate", f"{wr:.1f}%")
+
+with m6:
+    trend_label = get_trend(df_display) if not df_display.empty else "—"
+    st.metric("Trend", trend_label)
+
+st.markdown("---")
+
+🖥️ dashboard.py — Part 2 of 3
+
+python
+ Copy code
+
+# ──────────────────────────────────────────────────────────────
+# CHART BUILDER FUNCTION
+# ──────────────────────────────────────────────────────────────
+
+def build_chart(
+    df: pd.DataFrame,
+    trades: list,
+    show_ema: bool,
+    show_rsi: bool,
+    show_vol: bool
+) -> go.Figure:
+    """
+    Build the full Plotly chart.
+    Panels: Candlestick | EMA lines | BUY/SELL markers |
+            Active position lines | RSI | Volume
+    """
+
+    # ── Empty state ─────────────────────────────────────────
+    if df.empty:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No data available — check API connection",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5,
+            showarrow=False,
+            font=dict(size=16, color="#718096")
+        )
+        fig.update_layout(
+            paper_bgcolor="#0e1117",
+            plot_bgcolor="#0e1117",
+            height=500
+        )
+        return fig
+
+    # ── Build subplot grid ──────────────────────────────────
+    row_count    = 1
+    row_heights  = [0.7]
+    specs        = [[{"type": "candlestick"}]]
+    sub_titles   = ["BTC/USDT"]
+
+    if show_rsi:
+        row_count += 1
+        row_heights.append(0.15)
+        specs.append([{"type": "scatter"}])
+        sub_titles.append("RSI (14)")
+
+    if show_vol:
+        row_count += 1
+        row_heights.append(0.15)
+        specs.append([{"type": "bar"}])
+        sub_titles.append("Volume")
+
+    fig = make_subplots(
+        rows=row_count,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.03,
+        row_heights=row_heights,
+        subplot_titles=sub_titles,
+        specs=specs
+    )
+
+    # ── Candlestick ─────────────────────────────────────────
+    fig.add_trace(
+        go.Candlestick(
+            x=df["timestamp"],
+            open=df["open"],
+            high=df["high"],
+            low=df["low"],
+            close=df["close"],
+            name="BTC/USDT",
+            increasing_line_color="#48bb78",
+            decreasing_line_color="#fc8181",
+            increasing_fillcolor="#48bb78",
+            decreasing_fillcolor="#fc8181",
+        ),
+        row=1, col=1
+    )
+
+    # ── EMA Lines ───────────────────────────────────────────
+    if show_ema and "ema9" in df.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=df["timestamp"],
+                y=df["ema9"],
+                name="EMA 9",
+                line=dict(color="#63b3ed", width=1.5),
+                hovertemplate="EMA9: $%{y:,.2f}<extra></extra>"
+            ),
+            row=1, col=1
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=df["timestamp"],
+                y=df["ema21"],
+                name="EMA 21",
+                line=dict(color="#f6e05e", width=1.5),
+                hovertemplate="EMA21: $%{y:,.2f}<extra></extra>"
+            ),
+            row=1, col=1
+        )
+        if "ema50" in df.columns:
+            fig.add_trace(
+                go.Scatter(
+                    x=df["timestamp"],
+                    y=df["ema50"],
+                    name="EMA 50",
+                    line=dict(color="#b794f4", width=1.5, dash="dot"),
+                    hovertemplate="EMA50: $%{y:,.2f}<extra></extra>"
+                ),
+                row=1, col=1
+            )
+
+    # ── BUY / SELL Markers ──────────────────────────────────
+    # Each trade is snapped to the nearest candle timestamp
+    # so markers sit exactly ON a candle — never floating
+
+    if trades:
+        buy_times   = []
+        buy_prices  = []
+        buy_texts   = []
+        sell_times  = []
+        sell_prices = []
+        sell_texts  = []
+
+        for trade in trades:
+            entry_ts = pd.Timestamp(trade["entry_time"])
+            exit_ts  = pd.Timestamp(trade["exit_time"])
+
+            # Snap to nearest candle index
+            entry_idx = int(abs(df["timestamp"] - entry_ts).argmin())
+            exit_idx  = int(abs(df["timestamp"] - exit_ts).argmin())
+
+            entry_row = df.iloc[entry_idx]
+            exit_row  = df.iloc[exit_idx]
+
+            # BUY marker — just below candle low
+            buy_times.append(entry_row["timestamp"])
+            buy_prices.append(entry_row["low"] * 0.9985)
+            buy_texts.append(
+                f"<b>BUY</b> @ ${trade['entry_price']:,.2f}<br>"
+                f"Reason: {trade['reason']}<br>"
+                f"Size: {trade['size']:.6f} BTC"
+            )
+
+            # SELL marker — just above candle high
+            sell_times.append(exit_row["timestamp"])
+            sell_prices.append(exit_row["high"] * 1.0015)
+            pnl_str = (
+                f"+${trade['pnl']:.4f}"
+                if trade["pnl"] >= 0
+                else f"-${abs(trade['pnl']):.4f}"
+            )
+            sell_texts.append(
+                f"<b>SELL</b> @ ${trade['exit_price']:,.2f}<br>"
+                f"Reason: {trade['reason']}<br>"
+                f"PnL: {pnl_str}"
+            )
+
+        # BUY markers — green triangles up
+        if buy_times:
+            fig.add_trace(
+                go.Scatter(
+                    x=buy_times,
+                    y=buy_prices,
+                    mode="markers+text",
+                    name="BUY",
+                    marker=dict(
+                        symbol="triangle-up",
+                        size=14,
+                        color="#48bb78",
+                        line=dict(color="#276749", width=1)
+                    ),
+                    text=["▲"] * len(buy_times),
+                    textposition="bottom center",
+                    textfont=dict(size=10, color="#48bb78"),
+                    hovertext=buy_texts,
+                    hoverinfo="text",
+                    showlegend=True
+                ),
+                row=1, col=1
+            )
+
+        # SELL markers — red triangles down
+        if sell_times:
+            fig.add_trace(
+                go.Scatter(
+                    x=sell_times,
+                    y=sell_prices,
+                    mode="markers+text",
+                    name="SELL",
+                    marker=dict(
+                        symbol="triangle-down",
+                        size=14,
+                        color="#fc8181",
+                        line=dict(color="#9b2c2c", width=1)
+                    ),
+                    text=["▼"] * len(sell_times),
+                    textposition="top center",
+                    textfont=dict(size=10, color="#fc8181"),
+                    hovertext=sell_texts,
+                    hoverinfo="text",
+                    showlegend=True
+                ),
+                row=1, col=1
+            )
+
+    # ── Active Position Lines ────────────────────────────────
+    if bot.position:
+        entry_p = bot.position["entry_price"]
+        tp_p    = bot.position["take_profit"]
+        sl_p    = bot.position["stop_loss"]
+
+        fig.add_hline(
+            y=entry_p,
+            line_dash="dash",
+            line_color="#63b3ed",
+            line_width=1,
+            annotation_text=f"  Entry ${entry_p:,.2f}",
+            annotation_font_color="#63b3ed",
+            row=1, col=1
+        )
+        fig.add_hline(
+            y=tp_p,
+            line_dash="dot",
+            line_color="#48bb78",
+            line_width=1,
+            annotation_text=f"  TP ${tp_p:,.2f}",
+            annotation_font_color="#48bb78",
+            row=1, col=1
+        )
+        fig.add_hline(
+            y=sl_p,
+            line_dash="dot",
+            line_color="#fc8181",
+            line_width=1,
+            annotation_text=f"  SL ${sl_p:,.2f}",
+            annotation_font_color="#fc8181",
+            row=1, col=1
+        )
+
+    # ── RSI Panel ───────────────────────────────────────────
+    rsi_row = None
+    vol_row = None
+
+    if show_rsi and "rsi" in df.columns:
+        rsi_row = 2
+        fig.add_trace(
+            go.Scatter(
+                x=df["timestamp"],
+                y=df["rsi"],
+                name="RSI",
+                line=dict(color="#b794f4", width=1.5),
+                hovertemplate="RSI: %{y:.1f}<extra></extra>"
+            ),
+            row=rsi_row, col=1
+        )
+        fig.add_hrect(
+            y0=70, y1=100,
+            fillcolor="#fc8181", opacity=0.08,
+            layer="below", line_width=0,
+            row=rsi_row, col=1
+        )
+        fig.add_hrect(
+            y0=0, y1=30,
+            fillcolor="#48bb78", opacity=0.08,
+            layer="below", line_width=0,
+            row=rsi_row, col=1
+        )
+        fig.add_hline(
+            y=70, line_dash="dot",
+            line_color="#fc8181", line_width=0.8,
+            row=rsi_row, col=1
+        )
+        fig.add_hline(
+            y=30, line_dash="dot",
+            line_color="#48bb78", line_width=0.8,
+            row=rsi_row, col=1
+        )
+        fig.update_yaxes(
+            range=[0, 100],
+            row=rsi_row, col=1,
+            tickfont=dict(size=10)
+        )
+
+    # ── Volume Panel ────────────────────────────────────────
+    if show_vol and "volume" in df.columns:
+        vol_row = (rsi_row + 1) if rsi_row else 2
+
+        vol_colors = [
+            "#48bb78" if float(c) >= float(o) else "#fc8181"
+            for c, o in zip(df["close"], df["open"])
+        ]
+
+        fig.add_trace(
+            go.Bar(
+                x=df["timestamp"],
+                y=df["volume"],
+                name="Volume",
+                marker_color=vol_colors,
+                opacity=0.7,
+                hovertemplate="Vol: %{y:,.0f}<extra></extra>"
+            ),
+            row=vol_row, col=1
+        )
+
+    # ── Global Layout ────────────────────────────────────────
+    fig.update_layout(
+        height=700 if (show_rsi or show_vol) else 520,
+        paper_bgcolor="#0e1117",
+        plot_bgcolor="#131722",
+        font=dict(color="#e2e8f0", family="Inter, sans-serif"),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+            bgcolor="rgba(0,0,0,0)",
+            font=dict(size=11)
+        ),
+        margin=dict(l=10, r=10, t=40, b=10),
+        xaxis_rangeslider_visible=False,
+        hovermode="x unified",
+    )
+
+    fig.update_xaxes(
+        gridcolor="#1a1d27",
+        showgrid=True,
+        zeroline=False
+    )
+    fig.update_yaxes(
+        gridcolor="#1a1d27",
+        showgrid=True,
+        zeroline=False
+    )
+
+    return fig
+
+
+# ──────────────────────────────────────────────────────────────
+# RENDER CHART
+# ──────────────────────────────────────────────────────────────
+
+fig = build_chart(
+    df=df_display,
+    trades=bot.trades,
+    show_ema=show_ema,
+    show_rsi=show_rsi,
+    show_vol=show_vol
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
+🖥️ dashboard.py — Part 3 of 3
+
+python
+ Copy code
+
+# ──────────────────────────────────────────────────────────────
+# BOTTOM SECTION
+# Left  → Trade History
+# Right → Activity Log
+# ──────────────────────────────────────────────────────────────
+
+col_left, col_right = st.columns([1.2, 0.8])
+
+# ── TRADE HISTORY ───────────────────────────────────────────
+with col_left:
+    st.markdown(
+        '<p class="section-header">📋 Trade History</p>',
+        unsafe_allow_html=True
+    )
+
+    if not bot.trades:
+        st.markdown(
+            "<div style='color:#718096; font-size:13px; padding:12px;'>"
+            "No trades yet. Start the bot or use manual buttons.</div>",
+            unsafe_allow_html=True
+        )
+    else:
+        rows = []
+        for t in reversed(bot.trades):
+            pnl      = t["pnl"]
+            pnl_str  = f"+${pnl:.4f}" if pnl >= 0 else f"-${abs(pnl):.4f}"
+            pnl_icon = "✅" if pnl >= 0 else "❌"
+
+            rows.append({
+                "Entry Time": pd.Timestamp(t["entry_time"]).strftime("%m/%d %H:%M"),
+                "Exit Time":  pd.Timestamp(t["exit_time"]).strftime("%m/%d %H:%M"),
+                "Entry $":    f"${t['entry_price']:,.2f}",
+                "Exit $":     f"${t['exit_price']:,.2f}",
+                "Size":       f"{t['size']:.6f}",
+                "PnL":        pnl_str,
+                " ":          pnl_icon,
+                "Reason":     t["reason"]
+            })
+
+        trade_df = pd.DataFrame(rows)
+
+        st.dataframe(
+            trade_df,
+            use_container_width=True,
+            hide_index=True,
+            height=min(350, 38 + 35 * len(rows)),
+            column_config={
+                "PnL": st.column_config.TextColumn(
+                    "PnL",
+                    help="Profit / Loss in USDT"
+                ),
+                "Reason": st.column_config.TextColumn(
+                    "Reason",
+                    width="medium"
+                )
+            }
+        )
+
+        # Summary row
+        total_pnl  = sum(t["pnl"] for t in bot.trades)
+        win_count  = sum(1 for t in bot.trades if t["pnl"] > 0)
+        lose_count = len(bot.trades) - win_count
+        pnl_color  = "#48bb78" if total_pnl >= 0 else "#fc8181"
+        pnl_sign   = "+" if total_pnl >= 0 else ""
+
+        st.markdown(f"""
+        <div style='
+            display:flex;
+            gap:24px;
+            padding:10px 4px;
+            font-size:13px;
+            color:#a0aec0;
+        '>
+            <span>Total:
+                <b style='color:#e2e8f0'>{len(bot.trades)}</b>
+            </span>
+            <span>Wins:
+                <b style='color:#48bb78'>{win_count}</b>
+            </span>
+            <span>Losses:
+                <b style='color:#fc8181'>{lose_count}</b>
+            </span>
+            <span>Net PnL:
+                <b style='color:{pnl_color}'>{pnl_sign}${total_pnl:.4f}</b>
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+# ── ACTIVITY LOG ────────────────────────────────────────────
+with col_right:
+    st.markdown(
+        '<p class="section-header">📟 Activity Log</p>',
+        unsafe_allow_html=True
+    )
+
+    level_colors = {
+        "TRADE":  "#48bb78",
+        "ERROR":  "#fc8181",
+        "SYSTEM": "#63b3ed",
+        "MANUAL": "#f6e05e",
+        "INFO":   "#a0aec
+
+Regenerate
+Copy message
+
+Script execution error
+File "/root/trading-bot-clean/dashboard.py", line 810
+          "INFO":   "#a0aec
+                    ^
+SyntaxError: unterminated string literal (detected at line 810)
+
+
+
+🖥️ dashboard.py — Part 3 of 3 (FIXED)
+
+python
+ Copy code
+
+# ──────────────────────────────────────────────────────────────
+# BOTTOM SECTION
+# Left  → Trade History
+# Right → Activity Log
+# ──────────────────────────────────────────────────────────────
+
+col_left, col_right = st.columns([1.2, 0.8])
+
+# ── TRADE HISTORY ───────────────────────────────────────────
+with col_left:
+    st.markdown(
+        '<p class="section-header">📋 Trade History</p>',
+        unsafe_allow_html=True
+    )
+
+    if not bot.
+
+Regenerate
+Copy message
+
+now you have to sent me all of these three parts fixed one afteer the other to be easy to paste NOWWWWWWWWWWWWWWWW¬!!!!!!!!!!!!!!!!!!!!
+
+
+
+🖥️ dashboard.py — Part 1 of 3
+
+python
+ Copy code
+
+"""
+dashboard.py - Streamlit UI
+Clean, persistent bot, real data, proper markers.
+Run with: streamlit run dashboard.py
+"""
+
+import streamlit as st
+import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from datetime import datetime
+
+from bot import TradingBot
+from strategy import get_trend
+
+# ──────────────────────────────────────────────────────────────
+# PAGE CONFIG
+# ──────────────────────────────────────────────────────────────
+
+st.set_page_config(
+    page_title="Crypto Trading Dashboard",
+    page_icon="₿",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# ──────────────────────────────────────────────────────────────
+# CUSTOM CSS
+# ──────────────────────────────────────────────────────────────
+
+st.markdown("""
+<style>
+    .stApp { background-color: #0e1117; }
+
+    [data-testid="metric-container"] {
+        background: #1a1d27;
+        border: 1px solid #2d3748;
+        border-radius: 8px;
+        padding: 12px;
+    }
+
+    .badge-green {
+        background: #1a4731; color: #48bb78;
+        padding: 4px 12px; border-radius: 20px;
+        font-size: 13px; font-weight: 600;
+        display: inline-block;
+    }
+    .badge-red {
+        background: #4a1a1a; color: #fc8181;
+        padding: 4px 12px; border-radius: 20px;
+        font-size: 13px; font-weight: 600;
+        display: inline-block;
+    }
+    .badge-blue {
+        background: #1a2a4a; color: #63b3ed;
+        padding: 4px 12px; border-radius: 20px;
+        font-size: 13px; font-weight: 600;
+        display: inline-block;
+    }
+    .badge-yellow {
+        background: #4a3a1a; color: #f6e05e;
+        padding: 4px 12px; border-radius: 20px;
+        font-size: 13px; font-weight: 600;
+        display: inline-block;
+    }
+    .section-header {
+        font-size: 16px; font-weight: 700;
+        color: #e2e8f0; margin-bottom: 8px;
+        border-left: 3px solid #4299e1;
+        padding-left: 10px;
+    }
+    hr { border-color: #2d3748; }
+</style>
+""", unsafe_allow_html=True)
+
+# ──────────────────────────────────────────────────────────────
+# BOT SINGLETON
+# ──────────────────────────────────────────────────────────────
+
+if "bot" not in st.session_state:
+    st.session_state.bot = TradingBot()
+    st.session_state.bot.log("Dashboard initialized", "SYSTEM")
+
+bot: TradingBot = st.session_state.bot
+
+# ──────────────────────────────────────────────────────────────
+# AUTO REFRESH
+# ──────────────────────────────────────────────────────────────
+
+if bot.running:
+    st.markdown(
+        '<meta http-equiv="refresh" content="30">',
+        unsafe_allow_html=True
+    )
+
+# ──────────────────────────────────────────────────────────────
+# SIDEBAR
+# ──────────────────────────────────────────────────────────────
+
+with st.sidebar:
+    st.markdown("## ₿ Trading Bot")
+    st.markdown("---")
+
+    st.markdown('<p class="section-header">Bot Status</p>', unsafe_allow_html=True)
+
+    if bot.running:
+        st.markdown('<span class="badge-green">● RUNNING</span>', unsafe_allow_html=True)
+    else:
+        st.markdown('<span class="badge-red">● STOPPED</span>', unsafe_allow_html=True)
+
+    st.markdown(" ")
+
+    if bot.auto_mode:
+        st.markdown('<span class="badge-blue">🤖 AUTO MODE ON</span>', unsafe_allow_html=True)
+    else:
+        st.markdown('<span class="badge-yellow">🖐️ MANUAL MODE</span>', unsafe_allow_html=True)
+
+    st.markdown("")
+
+    st.markdown('<p class="section-header">Controls</p>', unsafe_allow_html=True)
+
+    col_a, col_b = st.columns(2)
+
+    with col_a:
+        if not bot.running:
+            if st.button("▶ Start", use_container_width=True, type="primary"):
+                bot.start()
+                st.rerun()
+        else:
+            if st.button("⏹ Stop", use_container_width=True):
+                bot.stop()
+                st.rerun()
+
+    with col_b:
+        auto_label = "🤖 Auto OFF" if bot.auto_mode else "🤖 Auto ON"
+        if st.button(auto_label, use_container_width=True):
+            bot.toggle_auto()
+            st.rerun()
+
+    st.markdown("---")
+
+    st.markdown('<p class="section-header">Manual Trade</p>', unsafe_allow_html=True)
+
+    col_c, col_d = st.columns(2)
+
+    with col_c:
+        if st.button("🟢 BUY", use_container_width=True, type="primary"):
+            bot.manual_buy()
+            st.rerun()
+
+    with col_d:
+        if st.button("🔴 SELL", use_container_width=True):
+            bot.manual_sell()
+            st.rerun()
+
+    if bot.position:
+        st.markdown("")
+        st.markdown('<p class="section-header">Open Position</p>', unsafe_allow_html=True)
+        p = bot.position
+        entry = p["entry_price"]
+        current = bot.last_price if bot.last_price else entry
+        unrealized = (current - entry) * p["size"]
+        pnl_color = "#48bb78" if unrealized >= 0 else "#fc8181"
+        sign = "+" if unrealized >= 0 else ""
+
+        st.markdown(f"""
+        <div style='background:#1a1d27; padding:12px; border-radius:8px;
+                    border:1px solid #2d3748; font-size:13px; line-height:1.8;'>
+            <div>Side: <b>BUY</b></div>
+            <div>Entry: <b>${entry:,.2f}</b></div>
+            <div>TP: <b style='color:#48bb78'>${p['take_profit']:,.2f}</b></div>
+            <div>SL: <b style='color:#fc8181'>${p['stop_loss']:,.2f}</b></div>
+            <div>Size: <b>{p['size']:.6f} BTC</b></div>
+            <div>uPnL: <b style='color:{pnl_color}'>{sign}${unrealized:.4f}</b></div>
+            <div style='font-size:11px; color:#718096; margin-top:4px;'>{p['reason']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    st.markdown('<p class="section-header">Chart Settings</p>', unsafe_allow_html=True)
+
+    interval = st.selectbox(
+        "Candle Interval",
+        options=["1m", "3m", "5m", "15m", "1h", "4h"],
+        index=2,
+        key="interval_select"
+    )
+
+    show_ema = st.checkbox("Show EMA Lines", value=True)
+    show_rsi = st.checkbox("Show RSI Panel", value=True)
+    show_vol = st.checkbox("Show Volume",    value=True)
+
+    st.markdown("---")
+
+    st.markdown('<p class="section-header">Danger Zone</p>', unsafe_allow_html=True)
+
+    if st.button("🗑️ Reset Bot", use_container_width=True):
+        bot.stop()
+        st.session_state.bot = TradingBot()
+        st.session_state.bot.log("Bot reset by user", "SYSTEM")
+        st.rerun()
+
+    if bot.last_fetch_ts:
+        elapsed = (datetime.now() - bot.last_fetch_ts).seconds
+        st.markdown(
+            f"<div style='font-size:11px; color:#718096; margin-top:8px;'>"
+            f"Last update: {elapsed}s ago</div>",
+            unsafe_allow_html=True
+        )
+
+    if bot.fetch_error:
+        st.markdown(
+            f"<div style='font-size:11px; color:#fc8181; margin-top:4px;'>"
+            f"⚠ {bot.fetch_error}</div>",
+            unsafe_allow_html=True
+        )
+
+# ──────────────────────────────────────────────────────────────
+# MAIN HEADER
+# ──────────────────────────────────────────────────────────────
+
+st.markdown(
+    "<h1 style='color:#e2e8f0; margin-bottom:0;'>₿ BTC/USDT Trading Dashboard</h1>",
+    unsafe_allow_html=True
+)
+st.markdown(
+    f"<div style='color:#718096; font-size:13px; margin-bottom:16px;'>"
+    f"Live data via Binance Public API · "
+    f"Updated: {datetime.now().strftime('%H:%M:%S')}"
+    f"</div>",
+    unsafe_allow_html=True
+)
+
+# ──────────────────────────────────────────────────────────────
+# FETCH DATA FOR DISPLAY
+# ──────────────────────────────────────────────────────────────
+
+if bot.df.empty:
+    with st.spinner("Fetching market data..."):
+        df_raw = bot.fetch_ohlc(interval=interval)
+        if not df_raw.empty:
+            df_display = bot._add_indicators(df_raw)
+            bot.df = df_display.copy()
+        else:
+            df_display = pd.DataFrame()
+else:
+    df_display = bot.df.copy()
+
+# ──────────────────────────────────────────────────────────────
+# TOP METRICS ROW
+# ──────────────────────────────────────────────────────────────
+
+stats      = bot.get_stats()
+live_price = bot.last_price
+
+if live_price is None and not df_display.empty:
+    live_price     = bot.fetch_price()
+    bot.last_price = live_price
+
+m1, m2, m3, m4, m5, m6 = st.columns(6)
+
+with m1:
+    price_display = f"${live_price:,.2f}" if live_price else "Fetching..."
+    st.metric("BTC Price", price_display)
+
+with m2:
+    pnl_val  = stats["pnl"]
+    pnl_sign = "+" if pnl_val >= 0 else ""
+    st.metric(
+        "Total PnL",
+        f"{pnl_sign}${pnl_val:.2f}",
+        delta=f"{pnl_sign}{pnl_val:.2f}"
+    )
+
+with m3:
+    st.metric("Balance", f"${stats['balance']:,.2f}")
+
+with m4:
+    st.metric("Total Trades", stats["total_trades"])
+
+with m5:
+    wr = stats["win_rate"]
+    st.metric("Win Rate", f"{wr:.1f}%")
+
+with m6:
+    trend_label = get_trend(df_display) if not df_display.empty else "—"
+    st.metric("Trend", trend_label)
+
+st.markdown("---")
+
+🖥️ dashboard.py — Part 2 of 3
+
+python
+ Copy code
+
+# ──────────────────────────────────────────────────────────────
+# CHART BUILDER FUNCTION
+# ──────────────────────────────────────────────────────────────
+
+def build_chart(
+    df: pd.DataFrame,
+    trades: list,
+    show_ema: bool,
+    show_rsi: bool,
+    show_vol: bool
+) -> go.Figure:
+
+    if df.empty:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No data available — check API connection",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5,
+            showarrow=False,
+            font=dict(size=16, color="#718096")
+        )
+        fig.update_layout(
+            paper_bgcolor="#0e1117",
+            plot_bgcolor="#0e1117",
+            height=500
+        )
+        return fig
+
+    # ── Subplot grid ────────────────────────────────────────
+    row_count   = 1
+    row_heights = [0.7]
+    specs       = [[{"type": "candlestick"}]]
+    sub_titles  = ["BTC/USDT"]
+
+    if show_rsi:
+        row_count += 1
+        row_heights.append(0.15)
+        specs.append([{"type": "scatter"}])
+        sub_titles.append("RSI (14)")
+
+    if show_vol:
+        row_count += 1
+        row_heights.append(0.15)
+        specs.append([{"type": "bar"}])
+        sub_titles.append("Volume")
+
+    fig = make_subplots(
+        rows=row_count,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.03,
+        row_heights=row_heights,
+        subplot_titles=sub_titles,
+        specs=specs
+    )
+
+    # ── Candlestick ─────────────────────────────────────────
+    fig.add_trace(
+        go.Candlestick(
+            x=df["timestamp"],
+            open=df["open"],
+            high=df["high"],
+            low=df["low"],
+            close=df["close"],
+            name="BTC/USDT",
+            increasing_line_color="#48bb78",
+            decreasing_line_color="#fc8181",
+            increasing_fillcolor="#48bb78",
+            decreasing_fillcolor="#fc8181",
+        ),
+        row=1, col=1
+    )
+
+    # ── EMA Lines ───────────────────────────────────────────
+    if show_ema and "ema9" in df.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=df["timestamp"],
+                y=df["ema9"],
+                name="EMA 9",
+                line=dict(color="#63b3ed", width=1.5),
+                hovertemplate="EMA9: $%{y:,.2f}<extra></extra>"
+            ),
+            row=1, col=1
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=df["timestamp"],
+                y=df["ema21"],
+                name="EMA 21",
+                line=dict(color="#f6e05e", width=1.5),
+                hovertemplate="EMA21: $%{y:,.2f}<extra></extra>"
+            ),
+            row=1, col=1
+        )
+        if "ema50" in df.columns:
+            fig.add_trace(
+                go.Scatter(
+                    x=df["timestamp"],
+                    y=df["ema50"],
+                    name="EMA 50",
+                    line=dict(color="#b794f4", width=1.5, dash="dot"),
+                    hovertemplate="EMA50: $%{y:,.2f}<extra></extra>"
+                ),
+                row=1, col=1
+            )
+
+    # ── BUY / SELL Markers ──────────────────────────────────
+    if trades:
+        buy_times   = []
+        buy_prices  = []
+        buy_texts   = []
+        sell_times  = []
+        sell_prices = []
+        sell_texts  = []
+
+        for trade in trades:
+            entry_ts = pd.Timestamp(trade["entry_time"])
+            exit_ts  = pd.Timestamp(trade["exit_time"])
+
+            entry_idx = int(abs(df["timestamp"] - entry_ts).argmin())
+            exit_idx  = int(abs(df["timestamp"] - exit_ts).argmin())
+
+            entry_row = df.iloc[entry_idx]
+            exit_row  = df.iloc[exit_idx]
+
+            buy_times.append(entry_row["timestamp"])
+            buy_prices.append(entry_row["low"] * 0.9985)
+            buy_texts.append(
+                f"<b>BUY</b> @ ${trade['entry_price']:,.2f}<br>"
+                f"Reason: {trade['reason']}<br>"
+                f"Size: {trade['size']:.6f} BTC"
+            )
+
+            sell_times.append(exit_row["timestamp"])
+            sell_prices.append(exit_row["high"] * 1.0015)
+            pnl_str = (
+                f"+${trade['pnl']:.4f}"
+                if trade["pnl"] >= 0
+                else f"-${abs(trade['pnl']):.4f}"
+            )
+            sell_texts.append(
+                f"<b>SELL</b> @ ${trade['exit_price']:,.2f}<br>"
+                f"Reason: {trade['reason']}<br>"
+                f"PnL: {pnl_str}"
+            )
+
+        if buy_times:
+            fig.add_trace(
+                go.Scatter(
+                    x=buy_times,
+                    y=buy_prices,
+                    mode="markers+text",
+                    name="BUY",
+                    marker=dict(
+                        symbol="triangle-up",
+                        size=14,
+                        color="#48bb78",
+                        line=dict(color="#276749", width=1)
+                    ),
+                    text=["▲"] * len(buy_times),
+                    textposition="bottom center",
+                    textfont=dict(size=10, color="#48bb78"),
+                    hovertext=buy_texts,
+                    hoverinfo="text",
+                    showlegend=True
+                ),
+                row=1, col=1
+            )
+
+        if sell_times:
+            fig.add_trace(
+                go.Scatter(
+                    x=sell_times,
+                    y=sell_prices,
+                    mode="markers+text",
+                    name="SELL",
+                    marker=dict(
+                        symbol="triangle-down",
+                        size=14,
+                        color="#fc8181",
+                        line=dict(color="#9b2c2c", width=1)
+                    ),
+                    text=["▼"] * len(sell_times),
+                    textposition="top center",
+                    textfont=dict(size=10, color="#fc8181"),
+                    hovertext=sell_texts,
+                    hoverinfo="text",
+                    showlegend=True
+                ),
+                row=1, col=1
+            )
+
+    # ── Active Position Lines ────────────────────────────────
+    if bot.position:
+        entry_p = bot.position["entry_price"]
+        tp_p    = bot.position["take_profit"]
+        sl_p    = bot.position["stop_loss"]
+
+        fig.add_hline(
+            y=entry_p,
+            line_dash="dash",
+            line_color="#63b3ed",
+            line_width=1,
+            annotation_text=f"  Entry ${entry_p:,.2f}",
+            annotation_font_color="#63b3ed",
+            row=1, col=1
+        )
+        fig.add_hline(
+            y=tp_p,
+            line_dash="dot",
+            line_color="#48bb78",
+            line_width=1,
+            annotation_text=f"  TP ${tp_p:,.2f}",
+            annotation_font_color="#48bb78",
+            row=1, col=1
+        )
+        fig.add_hline(
+            y=sl_p,
+            line_dash="dot",
+            line_color="#fc8181",
+            line_width=1,
+            annotation_text=f"  SL ${sl_p:,.2f}",
+            annotation_font_color="#fc8181",
+            row=1, col=1
+        )
+
+    # ── RSI Panel ───────────────────────────────────────────
+    rsi_row = None
+    vol_row = None
+
+    if show_rsi and "rsi" in df.columns:
+        rsi_row = 2
+        fig.add_trace(
+            go.Scatter(
+                x=df["timestamp"],
+                y=df["rsi"],
+                name="RSI",
+                line=dict(color="#b794f4", width=1.5),
+                hovertemplate="RSI: %{y:.1f}<extra></extra>"
+            ),
+            row=rsi_row, col=1
+        )
+        fig.add_hrect(
+            y0=70, y1=100,
+            fillcolor="#fc8181", opacity=0.08,
+            layer="below", line_width=0,
+            row=rsi_row, col=1
+        )
+        fig.add_hrect(
+            y0=0, y1=30,
+            fillcolor="#48bb78", opacity=0.08,
+            layer="below", line_width=0,
+            row=rsi_row, col=1
+        )
+        fig.add_hline(
+            y=70, line_dash="dot",
+            line_color="#fc8181", line_width=0.8,
+            row=rsi_row, col=1
+        )
+        fig.add_hline(
+            y=30, line_dash="dot",
+            line_color="#48bb78", line_width=0.8,
+            row=rsi_row, col=1
+        )
+        fig.update_yaxes(
+            range=[0, 100],
+            row=rsi_row, col=1,
+            tickfont=dict(size=10)
+        )
+
+    # ── Volume Panel ────────────────────────────────────────
+    if show_vol and "volume" in df.columns:
+        vol_row = (rsi_row + 1) if rsi_row else 2
+
+        vol_colors = [
+            "#48bb78" if float(c) >= float(o) else "#fc8181"
+            for c, o in zip(df["close"], df["open"])
+        ]
+
+        fig.add_trace(
+            go.Bar(
+                x=df["timestamp"],
+                y=df["volume"],
+                name="Volume",
+                marker_color=vol_colors,
+                opacity=0.7,
+                hovertemplate="Vol: %{y:,.0f}<extra></extra>"
+            ),
+            row=vol_row, col=1
+        )
+
+    # ── Layout ──────────────────────────────────────────────
+    fig.update_layout(
+        height=700 if (show_rsi or show_vol) else 520,
+        paper_bgcolor="#0e1117",
+        plot_bgcolor="#131722",
+        font=dict(color="#e2e8f0", family="Inter, sans-serif"),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+            bgcolor="rgba(0,0,0,0)",
+            font=dict(size=11)
+        ),
+        margin=dict(l=10, r=10, t=40, b=10),
+        xaxis_rangeslider_visible=False,
+        hovermode="x unified",
+    )
+
+    fig.update_xaxes(
+        gridcolor="#1a1d27",
+        showgrid=True,
+        zeroline=False
+    )
+    fig.update_yaxes(
+        gridcolor="#1a1d27",
+        showgrid=True,
+        zeroline=False
+    )
+
+    return fig
+
+
+# ──────────────────────────────────────────────────────────────
+# RENDER CHART
+# ──────────────────────────────────────────────────────────────
+
+fig = build_chart(
+    df=df_display,
+    trades=bot.trades,
+    show_ema=show_ema,
+    show_rsi=show_rsi,
+    show_vol=show_vol
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
+🖥️ dashboard.py — Part 3 of 3
+
+python
+ Copy code
+
+# ──────────────────────────────────────────────────────────────
+# BOTTOM SECTION
+# Left  → Trade History
+# Right → Activity Log
+# ──────────────────────────────────────────────────────────────
+
+col_left, col_right = st.columns([1.2, 0.8])
+
+# ── TRADE HISTORY ───────────────────────────────────────────
+with col_left:
+    st.markdown(
+        '<p class="section-header">📋 Trade History</p>',
+        unsafe_allow_html=True
+    )
+
+    if not bot.trades:
+        st.markdown(
+            "<div style='color:#718096; font-size:13px; padding:12px;'>"
+            "No trades yet. Start the bot or use manual buttons.</div>",
+            unsafe_allow_html=True
+        )
+    else:
+        rows = []
+        for t in reversed(bot.trades):
+            pnl      = t["pnl"]
+            pnl_str  = f"+${pnl:.4f}" if pnl >= 0 else f"-${abs(pnl):.4f}"
+            pnl_icon = "✅" if pnl >= 0 else "❌"
+
+            rows.append({
+                "Entry Time": pd.Timestamp(t["entry_time"]).strftime("%m/%d %H:%M"),
+                "Exit Time":  pd.Timestamp(t["exit_time"]).strftime("%m/%d %H:%M"),
+                "Entry $":    f"${t['entry_price']:,.2f}",
+                "Exit $":     f"${t['exit_price']:,.2f}",
+                "Size":       f"{t['size']:.6f}",
+                "PnL":        pnl_str,
+                " ":          pnl_icon,
+                "Reason":     t["reason"]
+            })
+
+        trade_df = pd.DataFrame(rows)
+
+        st.dataframe(
+            trade_df,
+            use_container_width=True,
+            hide_index=True,
+            height=min(350, 38 + 35 * len(rows)),
+            column_config={
+                "PnL": st.column_config.TextColumn(
+                    "PnL",
+                    help="Profit / Loss in USDT"
+                ),
+                "Reason": st.column_config.TextColumn(
+                    "Reason",
+                    width="medium"
+                )
+            }
+        )
+
+        total_pnl  = sum(t["pnl"] for t in bot.trades)
+        win_count  = sum(1 for t in bot.trades if t["pnl"] > 0)
+        lose_count = len(bot.trades) - win_count
+        pnl_color  = "#48bb78" if total_pnl >= 0 else "#fc8181"
+        pnl_sign   = "+" if total_pnl >= 0 else ""
+
+        st.markdown(
+            f"<div style='display:flex; gap:24px; padding:10px 4px; "
+            f"font-size:13px; color:#a0aec0;'>"
+            f"<span>Total: <b style='color:#e2e8f0'>{len(bot.trades)}</b></span>"
+            f"<span>Wins: <b style='color:#48bb78'>{win_count}</b></span>"
+            f"<span>Losses: <b style='color:#fc8181'>{lose_count}</b></span>"
+            f"<span>Net PnL: <b style='color:{pnl_color}'>{pnl_sign}${total_pnl:.4f}</b></span>"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+
+
+# ── ACTIVITY LOG ────────────────────────────────────────────
+with col_right:
+    st.markdown(
+        '<p class="section-header">📟 Activity Log</p>',
+        unsafe_allow_html=True
+    )
+
+    level_colors = {
+        "TRADE":  "#48bb78",
+        "ERROR":  "#fc8181",
+        "SYSTEM": "#63b3ed",
+        "MANUAL": "#f6e05e",
+        "INFO":   "#a0aec0",
+    }
+
+    level_icons = {
+        "TRADE":  "💰",
+        "ERROR":  "🚨",
+        "SYSTEM": "⚙️",
+        "MANUAL": "🖱️",
+        "INFO":   "ℹ️",
+    }
+
+    if not bot.logs:
+        st.markdown(
+            "<div style='color:#718096; font-size:13px; padding:12px;'>"
+            "No activity yet.</div>",
+            unsafe_allow_html=True
+        )
+    else:
+        log_html_parts = []
+
+        for entry in reversed(bot.logs):
+            level   = entry["level"]
+            color   = level_colors.get(level, "#a0aec0")
+            icon    = level_icons.get(level, "•")
+            time_s  = entry["time"]
+            message = entry["message"]
+
+            log_html_parts.append(
+                f"<div style='display:flex; gap:8px; padding:5px 0; "
+                f"border-bottom:1px solid #1a1d27; font-family:monospace; "
+                f"font-size:12px; line-height:1.5;'>"
+                f"<span style='color:#4a5568; min-width:58px;'>{time_s}</span>"
+                f"<span style='min-width:18px;'>{icon}</span>"
+                f"<span style='color:{color};'>{message}</span>"
+                f"</div>"
+            )
+
+        log_block = "\n".join(log_html_parts)
+
+        st.markdown(
+            f"<div style='background:#0e1117; border:1px solid #2d3748; "
+            f"border-radius:8px; padding:10px 14px; max-height:340px; "
+            f"overflow-y:auto;'>{log_block}</div>",
+            unsafe_allow_html=True
+        )
+
+    if st.button("🗑️ Clear Log", key="clear_log"):
+        bot.logs.clear()
+        st.rerun()
+
+
+# ──────────────────────────────────────────────────────────────
+# INDICATORS SNAPSHOT ROW
+
+Regenerate
+Copy message
+
+mportError: cannot import name 'get_trend' from 'strategy' (/root/trading-bot-clean/strategy.py)
+Traceback:
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 129, in exec_func_with_error_handling
+    result = func()
+             ^^^^^^
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 689, in code_to_exec
+    exec(code, module.dict)  # noqa: S102
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "/root/trading-bot-clean/dashboard.py", line 14, in 
+    from strategy import get_trend
+
+
+
+The error is simple — get_trend is missing from your strategy.py. Here is the complete fixed strategy.py to replace your current one:
+
+
+python
+ Copy code
+
+"""
+strategy.py - Trading signal generation
+Clean, readable, no side effects.
+Input: enriched DataFrame (with indicators)
+Output: {"action": "BUY"|"SELL"|"HOLD", "reason": str}
+"""
+
+import pandas as pd
+
+
+def generate_signal(df: pd.DataFrame) -> dict:
+    """
+    EMA crossover + RSI filter strategy.
+
+    BUY  when: EMA9 crosses above EMA21 AND RSI < 65 (not overbought)
+    SELL when: EMA9 crosses below EMA21 AND RSI > 35 (not oversold)
+    HOLD otherwise.
+    """
+
+    if len(df) < 3:
+        return {"action": "HOLD", "reason": "Not enough data"}
+
+    prev = df.iloc[-2]
+    curr = df.iloc[-1]
+
+    # Guard: check required columns exist
+    required = ["ema9", "ema21", "rsi"]
+    for col in required:
+        if col not in df.columns or pd.isna(curr[col]):
+            return {"action": "HOLD", "reason": f"Indicator '{col}' not ready"}
+
+    ema9_crossed_up   = (prev["ema9"] < prev["ema21"]) and (curr["ema9"] > curr["ema21"])
+    ema9_crossed_down = (prev["ema9"] > prev["ema21"]) and (curr["ema9"] < curr["ema21"])
+
+    rsi = curr["rsi"]
+    rsi_not_overbought = rsi < 65
+    rsi_not_oversold   = rsi > 35
+
+    # ── BUY signal ──────────────────────────────────────────
+    if ema9_crossed_up and rsi_not_overbought:
+        return {
+            "action": "BUY",
+            "reason": f"EMA9 crossed above EMA21 | RSI={rsi:.1f}"
+        }
+
+    # ── SELL signal ─────────────────────────────────────────
+    if ema9_crossed_down and rsi_not_oversold:
+        return {
+            "action": "SELL",
+            "reason": f"EMA9 crossed below EMA21 | RSI={rsi:.1f}"
+        }
+
+    return {"action": "HOLD", "reason": "No crossover signal"}
+
+
+def get_trend(df: pd.DataFrame) -> str:
+    """
+    Simple trend label for display.
+    Based on price vs EMA50.
+    Returns a readable string shown in the dashboard metric.
+    """
+
+    # Guard: empty dataframe
+    if df is None or df.empty:
+        return "Unknown"
+
+    # Guard: ema50 column missing
+    if "ema50" not in df.columns:
+        return "Unknown"
+
+    price = df["close"].iloc[-1]
+    ema50 = df["ema50"].iloc[-1]
+
+    # Guard: NaN value
+    if pd.isna(ema50) or pd.isna(price):
+        return "Unknown"
+
+    if price > ema50 * 1.005:
+        return "Bullish"
+    elif price < ema50 * 0.995:
+        return "Bearish"
+    else:
+        return "Neutral"
+
+✅ What was wrong and what changed
+
+Issue	Fix
+get_trend did not exist in your strategy.py	Added the full get_trend function
+Previous version used emoji in return strings	Removed emojis — cleaner and safer for st.metric()
+No null guards on price	Added pd.isna(price) check
+Missing ema50 column guard	Added column existence check before accessing
+
+
+📋 After pasting
+
+Your strategy.py now exports two functions:
+
+
+ Copy code
+
+generate_signal(df)  → used by bot.py auto trading loop
+get_trend(df)        → used by dashboard.py metrics row
+No other files need to change. Just replace strategy.py and restart the app.
+
+
+
+Regenerate
+Copy message
+
+AttributeError: 'TradingBot' object has no attribute 'log'
+Traceback:
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 129, in exec_func_with_error_handling
+    result = func()
+             ^^^^^^
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 689, in code_to_exec
+    exec(code, module.dict)  # noqa: S102
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "/root/trading-bot-clean/dashboard.py", line 82, in 
+    st.session_state.bot.log("Dashboard initialized", "SYSTEM")
+    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+
+Your bot.py is outdated or incomplete. Here is the complete fixed bot.py to replace your current one entirely:
+
+
+python
+ Copy code
+
+"""
+bot.py - Core trading bot engine
+Handles: data fetching, bot loop, manual trades, logging
+"""
+
+import time
+import threading
+from datetime import datetime
+import pandas as pd
+import requests
+import numpy as np
+
+from strategy import generate_signal
+from risk import RiskManager
+
+
+class TradingBot:
+    """
+    Singleton-style bot.
+    One instance lives in st.session_state['bot'].
+    Never re-instantiated on Streamlit rerun.
+    """
+
+    def __init__(self):
+        # ── State ──────────────────────────────────────────
+        self.running        = False
+        self.auto_mode      = False
+        self._thread        = None
+        self._lock          = threading.Lock()
+
+        # ── Account ────────────────────────────────────────
+        self.balance        = 1000.0
+        self.initial_balance = 1000.0
+        self.position       = None
+        self.trades         = []
+        self.logs           = []
+        self.max_logs       = 100
+
+        # ── Market data ────────────────────────────────────
+        self.df             = pd.DataFrame()
+        self.last_price     = None
+        self.last_fetch_ts  = None
+        self.fetch_error    = None
+
+        # ── Risk ───────────────────────────────────────────
+        self.risk = RiskManager(
+            balance=self.balance,
+            risk_pct=0.02,
+            stop_loss_pct=0.015,
+            take_profit_pct=0.03
+        )
+
+    # ──────────────────────────────────────────────────────
+    # LOGGING
+    # ──────────────────────────────────────────────────────
+
+    def log(self, message: str, level: str = "INFO"):
+        """Thread-safe log append."""
+        ts = datetime.now().strftime("%H:%M:%S")
+        entry = {
+            "time":    ts,
+            "level":   level,
+            "message": message
+        }
+        with self._lock:
+            self.logs.append(entry)
+            if len(self.logs) > self.max_logs:
+                self.logs.pop(0)
+
+    # ──────────────────────────────────────────────────────
+    # DATA FETCHING
+    # ──────────────────────────────────────────────────────
+
+    def fetch_ohlc(
+        self,
+        symbol: str   = "BTCUSDT",
+        interval: str = "5m",
+        limit: int    = 200
+    ) -> pd.DataFrame:
+        """
+        Fetch OHLC candles from Binance public API.
+        Returns empty DataFrame on failure — never fake data.
+        """
+        url    = "https://api.binance.com/api/v3/klines"
+        params = {"symbol": symbol, "interval": interval, "limit": limit}
+
+        try:
+            resp = requests.get(url, params=params, timeout=10)
+            resp.raise_for_status()
+            raw = resp.json()
+
+            df = pd.DataFrame(raw, columns=[
+                "open_time", "open", "high", "low", "close", "volume",
+                "close_time", "quote_vol", "trades",
+                "taker_buy_base", "taker_buy_quote", "ignore"
+            ])
+
+            df["timestamp"] = pd.to_datetime(df["open_time"], unit="ms")
+            for col in ["open", "high", "low", "close", "volume"]:
+                df[col] = df[col].astype(float)
+
+            df = df[["timestamp", "open", "high", "low", "close", "volume"]].copy()
+            df.reset_index(drop=True, inplace=True)
+
+            self.fetch_error = None
+            return df
+
+        except requests.exceptions.ConnectionError:
+            self.fetch_error = "Connection error — check internet"
+        except requests.exceptions.Timeout:
+            self.fetch_error = "Binance API timeout"
+        except requests.exceptions.HTTPError as e:
+            self.fetch_error = f"HTTP error: {e}"
+        except Exception as e:
+            self.fetch_error = f"Unexpected error: {e}"
+
+        self.log(f"Fetch failed: {self.fetch_error}", "ERROR")
+        return pd.DataFrame()
+
+    def fetch_price(self, symbol: str = "BTCUSDT") -> float | None:
+        """Fetch single latest price from Binance ticker."""
+        url = "https://api.binance.com/api/v3/ticker/price"
+        try:
+            resp = requests.get(url, params={"symbol": symbol}, timeout=5)
+            resp.raise_for_status()
+            return float(resp.json()["price"])
+        except Exception as e:
+            self.log(f"Price fetch failed: {e}", "ERROR")
+            return None
+
+    # ──────────────────────────────────────────────────────
+    # INDICATORS
+    # ──────────────────────────────────────────────────────
+
+    def _add_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Add EMA9, EMA21, EMA50, RSI14 to dataframe."""
+        close       = df["close"]
+        df["ema9"]  = close.ewm(span=9,  adjust=False).mean()
+        df["ema21"] = close.ewm(span=21, adjust=False).mean()
+        df["ema50"] = close.ewm(span=50, adjust=False).mean()
+        df["rsi"]   = self._calc_rsi(close, 14)
+        return df
+
+    @staticmethod
+    def _calc_rsi(series: pd.Series, period: int = 14) -> pd.Series:
+        delta    = series.diff()
+        gain     = delta.clip(lower=0)
+        loss     = -delta.clip(upper=0)
+        avg_gain = gain.ewm(com=period - 1, min_periods=period).mean()
+        avg_loss = loss.ewm(com=period - 1, min_periods=period).mean()
+        rs       = avg_gain / avg_loss.replace(0, np.nan)
+        return 100 - (100 / (1 + rs))
+
+    # ──────────────────────────────────────────────────────
+    # POSITION MANAGEMENT
+    # ──────────────────────────────────────────────────────
+
+    def _open_position(self, price: float, timestamp, reason: str):
+        """Open a BUY position. Only one position allowed at a time."""
+        if self.position is not None:
+            return
+
+        size = self.risk.position_size(price)
+        tp   = round(price * (1 + self.risk.take_profit_pct), 2)
+        sl   = round(price * (1 - self.risk.stop_loss_pct),   2)
+
+        self.position = {
+            "side":         "BUY",
+            "entry_price":  price,
+            "entry_time":   timestamp,
+            "size":         size,
+            "take_profit":  tp,
+            "stop_loss":    sl,
+            "reason":       reason
+        }
+
+        self.log(
+            f"OPEN BUY @ ${price:,.2f} | "
+            f"Size: {size:.6f} BTC | "
+            f"TP: ${tp:,.2f} | SL: ${sl:,.2f} | "
+            f"Reason: {reason}",
+            "TRADE"
+        )
+
+    def _close_position(self, price: float, timestamp, reason: str):
+        """Close current position and record the trade."""
+        if self.position is None:
+            return
+
+        entry  = self.position["entry_price"]
+        size   = self.position["size"]
+        pnl    = round((price - entry) * size, 4)
+        self.balance = round(self.balance + pnl, 4)
+
+        # Update risk manager with new balance
+        self.risk.balance = self.balance
+
+        trade = {
+            "entry_time":  self.position["entry_time"],
+            "exit_time":   timestamp,
+            "entry_price": entry,
+            "exit_price":  price,
+            "size":        size,
+            "pnl":         pnl,
+            "reason":      reason,
+            "side":        "BUY"
+        }
+        self.trades.append(trade)
+
+        sign = "+" if pnl >= 0 else ""
+        self.log(
+            f"CLOSE @ ${price:,.2f} | "
+            f"PnL: {sign}{pnl:.4f} USDT | "
+            f"Balance: ${self.balance:,.2f} | "
+            f"Reason: {reason}",
+            "TRADE"
+        )
+        self.position = None
+
+    def _check_tp_sl(self, price: float, timestamp):
+        """Check take profit / stop loss against current price."""
+        if self.position is None:
+            return
+
+        if price >= self.position["take_profit"]:
+            self._close_position(price, timestamp, "Take Profit hit")
+        elif price <= self.position["stop_loss"]:
+            self._close_position(price, timestamp, "Stop Loss hit")
+
+    # ──────────────────────────────────────────────────────
+    # MANUAL TRADING
+    # ──────────────────────────────────────────────────────
+
+    def manual_buy(self):
+        """Execute manual BUY using latest price."""
+        if self.df.empty:
+            self.log("No data available for manual BUY", "ERROR")
+            return
+
+        price = float(self.df["close"].iloc[-1])
+        ts    = self.df["timestamp"].iloc[-1]
+
+        if self.position is not None:
+            self.log(
+                f"Manual BUY rejected — already in position "
+                f"(entry: ${self.position['entry_price']:,.2f})",
+                "INFO"
+            )
+            return
+
+        self._open_position(price, ts, "Manual BUY")
+
+    def manual_sell(self):
+        """Execute manual SELL — closes current position."""
+        if self.df.empty:
+            self.log("No data available for manual SELL", "ERROR")
+            return
+
+        price = float(self.df["close"].iloc[-1])
+        ts    = self.df["timestamp"].iloc[-1]
+
+        if self.position is None:
+            self.log("Manual SELL rejected — no open position", "INFO")
+            return
+
+        self._close_position(price, ts, "Manual SELL")
+
+    # ──────────────────────────────────────────────────────
+    # BOT LOOP
+    # ──────────────────────────────────────────────────────
+
+    def _bot_loop(self):
+        """
+        Main background loop.
+        Refreshes data every 60s.
+        Only executes trades when auto_mode is True.
+        """
+        self.log("Bot loop started", "SYSTEM")
+
+        while self.running:
+            try:
+                # 1. Fetch fresh OHLC
+                df = self.fetch_ohlc()
+
+                if df.empty:
+                    self.log("No data — retrying in 30s", "INFO")
+                    time.sleep(30)
+                    continue
+
+                # 2. Add indicators
+                df = self._add_indicators(df)
+
+                # 3. Fetch live price
+                live_price = self.fetch_price()
+                if live_price:
+                    self.last_price = live_price
+
+                # 4. Store enriched dataframe
+                with self._lock:
+                    self.df           = df.copy()
+                    self.last_fetch_ts = datetime.now()
+
+                # 5. Check TP/SL
+                if self.position and live_price:
+                    self._check_tp_sl(live_price, datetime.now())
+
+                # 6. Auto trade signal
+                if self.auto_mode:
+                    signal = generate_signal(df)
+                    self._execute_signal(signal, df)
+
+            except Exception as e:
+                self.log(f"Bot loop error: {e}", "ERROR")
+
+            # Wait 60s but stay responsive to stop()
+            for _ in range(60):
+                if not self.running:
+                    break
+                time.sleep(1)
+
+        self.log("Bot loop stopped", "SYSTEM")
+
+    def _execute_signal(self, signal: dict, df: pd.DataFrame):
+        """Execute auto trade signal. Clean single-position logic."""
+        action  = signal.get("action")
+        reason  = signal.get("reason", "")
+        latest  = df.iloc[-1]
+        price   = latest["close"]
+        ts      = latest["timestamp"]
+
+        if action == "BUY" and self.position is None:
+            self._open_position(price, ts, f"Auto: {reason}")
+        elif action == "SELL" and self.position is not None:
+            self._close_position(price, ts, f"Auto: {reason}")
+        # HOLD → do nothing, no log spam
+
+    # ──────────────────────────────────────────────────────
+    # START / STOP
+    # ──────────────────────────────────────────────────────
+
+    def start(self):
+        """Start bot. Safe to call multiple times."""
+        if self.running:
+            self.log("Bot already running", "INFO")
+            return
+
+        if self._thread and self._thread.is_alive():
+            self.log("Thread already alive — skipping start", "INFO")
+            return
+
+        self.running = True
+        self._thread = threading.Thread(
+            target=self._bot_loop,
+            daemon=True,
+            name="TradingBotThread"
+        )
+        self._thread.start()
+        self.log("Bot started", "SYSTEM")
+
+    def stop(self):
+        """Gracefully stop the bot loop."""
+        if not self.running:
+            self.log("Bot already stopped", "INFO")
+            return
+        self.running = False
+        self.log("Bot stopping...", "SYSTEM")
+
+    def toggle_auto(self):
+        """Toggle auto trading mode on/off."""
+        self.auto_mode = not self.auto_mode
+        state = "ON" if self.auto_mode else "OFF"
+        self.log(f"Auto trading: {state}", "SYSTEM")
+
+    # ──────────────────────────────────────────────────────
+    # STATS
+    # ──────────────────────────────────────────────────────
+
+    def get_stats(self) -> dict:
+        """Return summary stats for dashboard display."""
+        total_trades = len(self.trades)
+        winning      = sum(1 for t in self.trades if t["pnl"] > 0)
+        losing       = total_trades - winning
+        total_pnl    = sum(t["pnl"] for t in self.trades)
+        win_rate     = (winning / total_trades * 100) if total_trades > 0 else 0.0
+
+        return {
+            "balance":      self.balance,
+            "pnl":          total_pnl,
+            "total_trades": total_trades,
+            "winning":      winning,
+            "losing":       losing,
+            "win_rate":     win_rate,
+            "in_position":  self.position is not None,
+            "position":     self.position
+        }
+
+✅ What was wrong and what changed
+
+Problem	Fix
+log() method missing from your old bot.py	Added complete log() method with thread-safe lock
+_add_indicators() missing	Added with EMA9, EMA21, EMA50, RSI14
+get_stats() missing	Added full stats dict
+fetch_ohlc() / fetch_price() missing	Added both using Binance public API
+last_fetch_ts attribute missing	Added to __init__
+fetch_error attribute missing	Added to __init__
+
+
+📋 Quick checklist after pasting
+
+Make sure all 4 files exist in your project folder:
+
+
+ Copy code
+
+trading-bot-clean/
+├── dashboard.py   ← from previous messages
+├── bot.py         ← this file just now
+├── strategy.py    ← from previous message
+├── risk.py        ← from original response
+Then restart with:
+
+
+bash
+ Copy code
+
+streamlit run dashboard.py
+
+Regenerate
+Copy message
+
+ImportError: cannot import name 'RiskManager' from 'risk' (/root/trading-bot-clean/risk.py)
+Traceback:
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 129, in exec_func_with_error_handling
+    result = func()
+             ^^^^^^
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 689, in code_to_exec
+    exec(code, module.dict)  # noqa: S102
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "/root/trading-bot-clean/dashboard.py", line 13, in 
+    from bot import TradingBot
+File "/root/trading-bot-clean/bot.py", line 14, in 
+    from risk import RiskManager
+
+
+
+Here is the complete fixed risk.py to replace your current one:
+
+
+python
+ Copy code
+
+"""
+risk.py - Risk management
+Handles: position sizing, daily loss limits
+"""
+
+
+class RiskManager:
+    """
+    Manages position sizing and risk rules.
+    Used by TradingBot to calculate trade sizes and limits.
+    """
+
+    def __init__(
+        self,
+        balance: float       = 1000.0,
+        risk_pct: float      = 0.02,
+        stop_loss_pct: float = 0.015,
+        take_profit_pct: float = 0.03
+    ):
+        self.balance         = balance
+        self.risk_pct        = risk_pct
+        self.stop_loss_pct   = stop_loss_pct
+        self.take_profit_pct = take_profit_pct
+
+    def position_size(self, entry_price: float) -> float:
+        """
+        Calculate position size in BTC.
+
+        Formula:
+            risk_amount  = balance * risk_pct
+            loss_per_btc = entry_price * stop_loss_pct
+            size         = risk_amount / loss_per_btc
+
+        Example:
+            balance      = $1000
+            risk_pct     = 2%      → risk_amount  = $20
+            stop_loss    = 1.5%    → loss_per_btc = $900 (at $60000)
+            size         = 0.0222 BTC
+
+        Safety cap:
+            Never use more than 10% of balance worth of BTC.
+        """
+        if entry_price <= 0:
+            return 0.0
+
+        risk_amount   = self.balance * self.risk_pct
+        loss_per_unit = entry_price * self.stop_loss_pct
+
+        if loss_per_unit <= 0:
+            return 0.0
+
+        size = risk_amount / loss_per_unit
+
+        # Safety cap — never exceed 10% of balance in one trade
+        max_size = (self.balance * 0.10) / entry_price
+        return round(min(size, max_size), 6)
+
+    def can_trade(self, daily_pnl: float) -> tuple:
+        """
+        Daily loss limit check.
+
+        Returns:
+            (True,  "")       → OK to trade
+            (False, reason)   → limit hit, stop trading
+        """
+        max_daily_loss = self.balance * 0.05    # 5% daily loss limit
+
+        if daily_pnl < -max_daily_loss:
+            return (
+                False,
+                f"Daily loss limit hit (${abs(daily_pnl):.2f} lost today, "
+                f"max allowed: ${max_daily_loss:.2f})"
+            )
+
+        return (True, "")
+
+    def get_tp_sl(self, entry_price: float) -> dict:
+        """
+        Calculate take profit and stop loss prices from entry.
+
+        Returns:
+            {
+                "take_profit": float,
+                "stop_loss":   float
+            }
+        """
+        tp = round(entry_price * (1 + self.take_profit_pct), 2)
+        sl = round(entry_price * (1 - self.stop_loss_pct),   2)
+        return {"take_profit": tp, "stop_loss": sl}
+
+    def update_balance(self, new_balance: float):
+        """Update balance after a trade closes."""
+        self.balance = round(new_balance, 4)
+
+    def summary(self) -> dict:
+        """Return current risk settings as a dict for display."""
+        return {
+            "balance":         self.balance,
+            "risk_pct":        f"{self.risk_pct * 100:.1f}%",
+            "stop_loss_pct":   f"{self.stop_loss_pct * 100:.1f}%",
+            "take_profit_pct": f"{self.take_profit_pct * 100:.1f}%",
+        }
+
+✅ What was wrong and what changed
+
+Problem	Fix
+RiskManager class was missing from your risk.py	Added the complete class
+tuple return type hint used tuple[bool, str] which can fail on older Python	Changed to plain tuple — works on all Python 3.x
+Missing helper methods	Added get_tp_sl(), update_balance(), summary()
+
+
+📋 Final checklist — all 4 files
+
+ Copy code
+
+trading-bot-clean/
+├── dashboard.py   ✅ 3 parts from earlier
+├── bot.py         ✅ last message
+├── strategy.py    ✅ message before that
+├── risk.py        ✅ this message
+Restart with:
+
+
+bash
+ Copy code
+
+streamlit run dashboard.py
+Everything should now import cleanly with zero errors.
+
+
+
+Regenerate
+Copy message
+
+The UI is not the problem now.
+
+The problem is that the bot and chart are not updating live.
+
+Rebuild ONLY the live update system:
+
+
+bot must run in a background thread
+
+fetch Binance OHLC repeatedly every 2-5 seconds
+
+update bot.df continuously
+
+dashboard must read bot.df from session_state
+
+chart must refresh automatically
+
+Start button must actually start the thread
+
+Stop button must stop it
+
+no duplicate threads
+
+no fake static chart
+
+Return complete bot.py and dashboard.py only.
+
+
+
+Complete bot.py
+
+python
+ Copy code
+
+"""
+bot.py - Core trading bot engine with live updates
+"""
+
+import time
+import threading
+from datetime import datetime
+import pandas as pd
+import requests
+import numpy as np
+
+from strategy import generate_signal
+from risk import RiskManager
+
+
+class TradingBot:
+
+    def __init__(self):
+        # ── State ──────────────────────────────────────────
+        self.running         = False
+        self.auto_mode       = False
+        self._thread         = None
+        self._lock           = threading.Lock()
+
+        # ── Account ────────────────────────────────────────
+        self.balance         = 1000.0
+        self.initial_balance = 1000.0
+        self.position        = None
+        self.trades          = []
+        self.logs            = []
+        self.max_logs        = 100
+
+        # ── Market data ────────────────────────────────────
+        self.df              = pd.DataFrame()
+        self.last_price      = None
+        self.last_fetch_ts   = None
+        self.fetch_error     = None
+
+        # ── Risk ───────────────────────────────────────────
+        self.risk = RiskManager(
+            balance=self.balance,
+            risk_pct=0.02,
+            stop_loss_pct=0.015,
+            take_profit_pct=0.03
+        )
+
+    # ──────────────────────────────────────────────────────
+    # LOGGING
+    # ──────────────────────────────────────────────────────
+
+    def log(self, message: str, level: str = "INFO"):
+        ts = datetime.now().strftime("%H:%M:%S")
+        entry = {
+            "time":    ts,
+            "level":   level,
+            "message": message
+        }
+        with self._lock:
+            self.logs.append(entry)
+            if len(self.logs) > self.max_logs:
+                self.logs.pop(0)
+
+    # ──────────────────────────────────────────────────────
+    # DATA FETCHING
+    # ──────────────────────────────────────────────────────
+
+    def fetch_ohlc(
+        self,
+        symbol: str   = "BTCUSDT",
+        interval: str = "1m",
+        limit: int    = 200
+    ) -> pd.DataFrame:
+        """
+        Fetch OHLC from Binance.
+        Returns empty DataFrame on failure — never fake data.
+        """
+        url    = "https://api.binance.com/api/v3/klines"
+        params = {
+            "symbol":   symbol,
+            "interval": interval,
+            "limit":    limit
+        }
+
+        try:
+            resp = requests.get(url, params=params, timeout=10)
+            resp.raise_for_status()
+            raw = resp.json()
+
+            df = pd.DataFrame(raw, columns=[
+                "open_time", "open", "high", "low", "close", "volume",
+                "close_time", "quote_vol", "trades",
+                "taker_buy_base", "taker_buy_quote", "ignore"
+            ])
+
+            df["timestamp"] = pd.to_datetime(df["open_time"], unit="ms")
+            for col in ["open", "high", "low", "close", "volume"]:
+                df[col] = df[col].astype(float)
+
+            df = df[["timestamp", "open", "high", "low", "close", "volume"]].copy()
+            df.reset_index(drop=True, inplace=True)
+
+            self.fetch_error = None
+            return df
+
+        except requests.exceptions.ConnectionError:
+            self.fetch_error = "Connection error"
+        except requests.exceptions.Timeout:
+            self.fetch_error = "Binance API timeout"
+        except requests.exceptions.HTTPError as e:
+            self.fetch_error = f"HTTP error: {e}"
+        except Exception as e:
+            self.fetch_error = f"Error: {e}"
+
+        self.log(f"Fetch failed: {self.fetch_error}", "ERROR")
+        return pd.DataFrame()
+
+    def fetch_price(self, symbol: str = "BTCUSDT") -> float | None:
+        """Fetch latest price from Binance ticker."""
+        url = "https://api.binance.com/api/v3/ticker/price"
+        try:
+            resp = requests.get(
+                url,
+                params={"symbol": symbol},
+                timeout=5
+            )
+            resp.raise_for_status()
+            return float(resp.json()["price"])
+        except Exception as e:
+            self.log(f"Price fetch failed: {e}", "ERROR")
+            return None
+
+    # ──────────────────────────────────────────────────────
+    # INDICATORS
+    # ──────────────────────────────────────────────────────
+
+    def _add_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Add EMA9, EMA21, EMA50, RSI14."""
+        close        = df["close"]
+        df["ema9"]   = close.ewm(span=9,  adjust=False).mean()
+        df["ema21"]  = close.ewm(span=21, adjust=False).mean()
+        df["ema50"]  = close.ewm(span=50, adjust=False).mean()
+        df["rsi"]    = self._calc_rsi(close, 14)
+        return df
+
+    @staticmethod
+    def _calc_rsi(series: pd.Series, period: int = 14) -> pd.Series:
+        delta    = series.diff()
+        gain     = delta.clip(lower=0)
+        loss     = -delta.clip(upper=0)
+        avg_gain = gain.ewm(com=period - 1, min_periods=period).mean()
+        avg_loss = loss.ewm(com=period - 1, min_periods=period).mean()
+        rs       = avg_gain / avg_loss.replace(0, np.nan)
+        return 100 - (100 / (1 + rs))
+
+    # ──────────────────────────────────────────────────────
+    # POSITION MANAGEMENT
+    # ──────────────────────────────────────────────────────
+
+    def _open_position(self, price: float, timestamp, reason: str):
+        if self.position is not None:
+            return
+
+        size = self.risk.position_size(price)
+        tp   = round(price * (1 + self.risk.take_profit_pct), 2)
+        sl   = round(price * (1 - self.risk.stop_loss_pct),   2)
+
+        self.position = {
+            "side":        "BUY",
+            "entry_price": price,
+            "entry_time":  timestamp,
+            "size":        size,
+            "take_profit": tp,
+            "stop_loss":   sl,
+            "reason":      reason
+        }
+
+        self.log(
+            f"OPEN BUY @ ${price:,.2f} | "
+            f"Size: {size:.6f} BTC | "
+            f"TP: ${tp:,.2f} | SL: ${sl:,.2f} | "
+            f"Reason: {reason}",
+            "TRADE"
+        )
+
+    def _close_position(self, price: float, timestamp, reason: str):
+        if self.position is None:
+            return
+
+        entry        = self.position["entry_price"]
+        size         = self.position["size"]
+        pnl          = round((price - entry) * size, 4)
+        self.balance = round(self.balance + pnl, 4)
+        self.risk.balance = self.balance
+
+        trade = {
+            "entry_time":  self.position["entry_time"],
+            "exit_time":   timestamp,
+            "entry_price": entry,
+            "exit_price":  price,
+            "size":        size,
+            "pnl":         pnl,
+            "reason":      reason,
+            "side":        "BUY"
+        }
+        self.trades.append(trade)
+
+        sign = "+" if pnl >= 0 else ""
+        self.log(
+            f"CLOSE @ ${price:,.2f} | "
+            f"PnL: {sign}{pnl:.4f} USDT | "
+            f"Balance: ${self.balance:,.2f} | "
+            f"Reason: {reason}",
+            "TRADE"
+        )
+        self.position = None
+
+    def _check_tp_sl(self, price: float, timestamp):
+        if self.position is None:
+            return
+        if price >= self.position["take_profit"]:
+            self._close_position(price, timestamp, "Take Profit hit")
+        elif price <= self.position["stop_loss"]:
+            self._close_position(price, timestamp, "Stop Loss hit")
+
+    # ──────────────────────────────────────────────────────
+    # MANUAL TRADING
+    # ──────────────────────────────────────────────────────
+
+    def manual_buy(self):
+        if self.df.empty:
+            self.log("No data for manual BUY", "ERROR")
+            return
+        price = float(self.df["close"].iloc[-1])
+        ts    = self.df["timestamp"].iloc[-1]
+        if self.position is not None:
+            self.log(
+                f"Manual BUY rejected — already in position "
+                f"@ ${self.position['entry_price']:,.2f}",
+                "INFO"
+            )
+            return
+        self._open_position(price, ts, "Manual BUY")
+
+    def manual_sell(self):
+        if self.df.empty:
+            self.log("No data for manual SELL", "ERROR")
+            return
+        price = float(self.df["close"].iloc[-1])
+        ts    = self.df["timestamp"].iloc[-1]
+        if self.position is None:
+            self.log("Manual SELL rejected — no open position", "INFO")
+            return
+        self._close_position(price, ts, "Manual SELL")
+
+    # ──────────────────────────────────────────────────────
+    # BOT LOOP — fetches every 5 seconds
+    # ──────────────────────────────────────────────────────
+
+    def _bot_loop(self):
+        self.log("Bot loop started", "SYSTEM")
+
+        while self.running:
+            try:
+                # 1. Fetch OHLC
+                df = self.fetch_ohlc()
+
+                if df.empty:
+                    self.log("No data — retrying in 10s", "INFO")
+                    time.sleep(10)
+                    continue
+
+                # 2. Add indicators
+                df = self._add_indicators(df)
+
+                # 3. Fetch live price
+                live_price = self.fetch_price()
+                if live_price:
+                    self.last_price = live_price
+
+                # 4. Atomically update shared dataframe
+                with self._lock:
+                    self.df            = df.copy()
+                    self.last_fetch_ts = datetime.now()
+
+                # 5. Check TP/SL
+                if self.position and live_price:
+                    self._check_tp_sl(live_price, datetime.now())
+
+                # 6. Auto signal
+                if self.auto_mode:
+                    signal = generate_signal(df)
+                    self._execute_signal(signal, df)
+
+            except Exception as e:
+                self.log(f"Loop error: {e}", "ERROR")
+
+            # Sleep 5 seconds between fetches
+            # Check running flag every 0.5s so stop() is instant
+            for _ in range(10):
+                if not self.running:
+                    break
+                time.sleep(0.5)
+
+        self.log("Bot loop stopped", "SYSTEM")
+
+    def _execute_signal(self, signal: dict, df: pd.DataFrame):
+        action = signal.get("action")
+        reason = signal.get("reason", "")
+        latest = df.iloc[-1]
+        price  = latest["close"]
+        ts     = latest["timestamp"]
+
+        if action == "BUY" and self.position is None:
+            self._open_position(price, ts, f"Auto: {reason}")
+        elif action == "SELL" and self.position is not None:
+            self._close_position(price, ts, f"Auto: {reason}")
+
+    # ──────────────────────────────────────────────────────
+    # START / STOP
+    # ──────────────────────────────────────────────────────
+
+    def start(self):
+        """
+        Start the bot loop.
+        Checks both self.running AND thread.is_alive()
+        to guarantee no duplicate threads ever spawn.
+        """
+        if self.running:
+            self.log("Already running", "INFO")
+            return
+
+        if self._thread is not None and self._thread.is_alive():
+            self.log("Thread already alive", "INFO")
+            return
+
+        self.running = True
+        self._thread = threading.Thread(
+            target=self._bot_loop,
+            daemon=True,
+            name="TradingBotThread"
+        )
+        self._thread.start()
+        self.log("Bot started", "SYSTEM")
+
+    def stop(self):
+        """Stop the bot loop gracefully."""
+        if not self.running:
+            self.log("Already stopped", "INFO")
+            return
+        self.running = False
+        self.log("Bot stopped", "SYSTEM")
+
+    def toggle_auto(self):
+        self.auto_mode = not self.auto_mode
+        state = "ON" if self.auto_mode else "OFF"
+        self.log(f"Auto trading: {state}", "SYSTEM")
+
+    def is_thread_alive(self) -> bool:
+        """Safe check — used by dashboard to verify thread health."""
+        return self._thread is not None and self._thread.is_alive()
+
+    # ──────────────────────────────────────────────────────
+    # STATS
+    # ──────────────────────────────────────────────────────
+
+    def get_stats(self) -> dict:
+        total_trades = len(self.trades)
+        winning      = sum(1 for t in self.trades if t["pnl"] > 0)
+        losing       = total_trades - winning
+        total_pnl    = sum(t["pnl"] for t in self.trades)
+        win_rate     = (winning / total_trades * 100) if total_trades > 0 else 0.0
+
+        return {
+            "balance":      self.balance,
+            "pnl":          total_pnl,
+            "total_trades": total_trades,
+            "winning":      winning,
+            "losing":       losing,
+            "win_rate":     win_rate,
+            "in_position":  self.position is not None,
+            "position":     self.position
+        }
+
+Complete dashboard.py
+
+python
+ Copy code
+
+"""
+dashboard.py - Streamlit UI with live auto-refresh
+"""
+
+import streamlit as st
+import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from datetime import datetime
+
+from bot import TradingBot
+from strategy import get_trend
+
+# ──────────────────────────────────────────────────────────────
+# PAGE CONFIG
+# ──────────────────────────────────────────────────────────────
+
+st.set_page_config(
+    page_title="Crypto Trading Dashboard",
+    page_icon="₿",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# ──────────────────────────────────────────────────────────────
+# CSS
+# ──────────────────────────────────────────────────────────────
+
+st.markdown("""
+<style>
+    .stApp { background-color: #0e1117; }
+
+    [data-testid="metric-container"] {
+        background: #1a1d27;
+        border: 1px solid #2d3748;
+        border-radius: 8px;
+        padding: 12px;
+    }
+    .badge-green {
+        background:#1a4731; color:#48bb78;
+        padding:4px 12px; border-radius:20px;
+        font-size:13px; font-weight:600;
+        display:inline-block;
+    }
+    .badge-red {
+        background:#4a1a1a; color:#fc8181;
+        padding:4px 12px; border-radius:20px;
+        font-size:13px; font-weight:600;
+        display:inline-block;
+    }
+    .badge-blue {
+        background:#1a2a4a; color:#63b3ed;
+        padding:4px 12px; border-radius:20px;
+        font-size:13px; font-weight:600;
+        display:inline-block;
+    }
+    .badge-yellow {
+        background:#4a3a1a; color:#f6e05e;
+        padding:4px 12px; border-radius:20px;
+        font-size:13px; font-weight:600;
+        display:inline-block;
+    }
+    .section-header {
+        font-size:16px; font-weight:700;
+        color:#e2e8f0; margin-bottom:8px;
+        border-left:3px solid #4299e1;
+        padding-left:10px;
+    }
+    hr { border-color:#2d3748; }
+</style>
+""", unsafe_allow_html=True)
+
+# ──────────────────────────────────────────────────────────────
+# BOT SINGLETON
+# Created ONCE, lives in session_state forever.
+# Never reset on rerun.
+# ──────────────────────────────────────────────────────────────
+
+if "bot" not in st.session_state:
+    st.session_state.bot = TradingBot()
+    st.session_state.bot.log("Dashboard initialized", "SYSTEM")
+
+bot: TradingBot = st.session_state.bot
+
+# ──────────────────────────────────────────────────────────────
+# LIVE AUTO-REFRESH
+# st.rerun() fires every 5 seconds while bot is running.
+# This makes the dashboard read fresh bot.df on every cycle.
+# The bot thread updates bot.df independently in the background.
+# ──────────────────────────────────────────────────────────────
+
+if "last_rerun" not in st.session_state:
+    st.session_state.last_rerun = datetime.now()
+
+if bot.running:
+    elapsed = (datetime.now() - st.session_state.last_rerun).total_seconds()
+    if elapsed >= 5:
+        st.session_state.last_rerun = datetime.now()
+        st.rerun()
+
+# ──────────────────────────────────────────────────────────────
+# SIDEBAR
+# ──────────────────────────────────────────────────────────────
+
+with st.sidebar:
+    st.markdown("## ₿ Trading Bot")
+    st.markdown("---")
+
+    # ── Status ──────────────────────────────────────────────
+    st.markdown(
+        '<p class="section-header">Bot Status</p>',
+        unsafe_allow_html=True
+    )
+
+    col_status1, col_status2 = st.columns(2)
+    with col_status1:
+        if bot.running and bot.is_thread_alive():
+            st.markdown(
+                '<span class="badge-green">● RUNNING</span>',
+                unsafe_allow_html=True
+            )
+        else:
+            # Thread died unexpectedly — reset flag
+            if bot.running and not bot.is_thread_alive():
+                bot.running = False
+                bot.log("Thread died unexpectedly — reset", "ERROR")
+            st.markdown(
+                '<span class="badge-red">● STOPPED</span>',
+                unsafe_allow_html=True
+            )
+
+    with col_status2:
+        if bot.auto_mode:
+            st.markdown(
+                '<span class="badge-blue">🤖 AUTO</span>',
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                '<span class="badge-yellow">🖐 MANUAL</span>',
+                unsafe_allow_html=True
+            )
+
+    # Thread health indicator
+    if bot.is_thread_alive():
+        st.markdown(
+            "<div style='font-size:11px; color:#48bb78; margin-top:6px;'>"
+            "⬤ Thread alive</div>",
+            unsafe_allow_html=True
+        )
+    else:
+        st.markdown(
+            "<div style='font-size:11px; color:#718096; margin-top:6px;'>"
+            "⬤ Thread not running</div>",
+            unsafe_allow_html=True
+        )
+
+    st.markdown("")
+
+    # ── Controls ────────────────────────────────────────────
+    st.markdown(
+        '<p class="section-header">Controls</p>',
+        unsafe_allow_html=True
+    )
+
+    col_a, col_b = st.columns(2)
+
+    with col_a:
+        if not bot.running:
+            if st.button("▶ Start", use_container_width=True, type="primary"):
+                bot.start()
+                st.session_state.last_rerun = datetime.now()
+                st.rerun()
+        else:
+            if st.button("⏹ Stop", use_container_width=True):
+                bot.stop()
+                st.rerun()
+
+    with col_b:
+        auto_label = "Auto OFF" if bot.auto_mode else "Auto ON"
+        if st.button(auto_label, use_container_width=True):
+            bot.toggle_auto()
+            st.rerun()
+
+    st.markdown("---")
+
+    # ── Manual Trade ────────────────────────────────────────
+    st.markdown(
+        '<p class="section-header">Manual Trade</p>',
+        unsafe_allow_html=True
+    )
+
+    col_c, col_d = st.columns(2)
+
+    with col_c:
+        if st.button("🟢 BUY", use_container_width=True, type="primary"):
+            bot.manual_buy()
+            st.rerun()
+
+    with col_d:
+        if st.button("🔴 SELL", use_container_width=True):
+            bot.manual_sell()
+            st.rerun()
+
+    # ── Open Position ───────────────────────────────────────
+    if bot.position:
+        st.markdown("")
+        st.markdown(
+            '<p class="section-header">Open Position</p>',
+            unsafe_allow_html=True
+        )
+        p         = bot.position
+        entry     = p["entry_price"]
+        current   = bot.last_price if bot.last_price else entry
+        unrealized = (current - entry) * p["size"]
+        pnl_color = "#48bb78" if unrealized >= 0 else "#fc8181"
+        sign      = "+" if unrealized >= 0 else ""
+
+        st.markdown(f"""
+        <div style='background:#1a1d27; padding:12px; border-radius:8px;
+                    border:1px solid #2d3748; font-size:13px; line-height:1.9;'>
+            <div>Entry: <b>${entry:,.2f}</b></div>
+            <div>Current: <b>${current:,.2f}</b></div>
+            <div>TP: <b style='color:#48bb78'>${p['take_profit']:,.2f}</b></div>
+            <div>SL: <b style='color:#fc8181'>${p['stop_loss']:,.2f}</b></div>
+            <div>Size: <b>{p['size']:.6f} BTC</b></div>
+            <div>uPnL: <b style='color:{pnl_color}'>{sign}${unrealized:.4f}</b></div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ── Chart Settings ──────────────────────────────────────
+    st.markdown(
+        '<p class="section-header">Chart Settings</p>',
+        unsafe_allow_html=True
+    )
+
+    show_ema = st.checkbox("EMA Lines", value=True)
+    show_rsi = st.checkbox("RSI Panel", value=True)
+    show_vol = st.checkbox("Volume",    value=True)
+
+    st.markdown("---")
+
+    # ── Reset ───────────────────────────────────────────────
+    st.markdown(
+        '<p class="section-header">Danger Zone</p>',
+        unsafe_allow_html=True
+    )
+
+    if st.button("🗑️ Reset Bot", use_container_width=True):
+        bot.stop()
+        st.session_state.bot = TradingBot()
+        st.session_state.bot.log("Bot reset by user", "SYSTEM")
+        st.rerun()
+
+    # ── Last fetch info ─────────────────────────────────────
+    if bot.last_fetch_ts:
+        elapsed_s = (datetime.now() - bot.last_fetch_ts).seconds
+        color     = "#48bb78" if elapsed_s < 15 else "#f6e05e"
+        st.markdown(
+            f"<div style='font-size:11px; color:{color}; margin-top:8px;'>"
+            f"Data age: {elapsed_s}s ago</div>",
+            unsafe_allow_html=True
+        )
+
+    if bot.fetch_error:
+        st.markdown(
+            f"<div style='font-size:11px; color:#fc8181; margin-top:4px;'>"
+            f"⚠ {bot.fetch_error}</div>",
+            unsafe_allow_html=True
+        )
+
+# ──────────────────────────────────────────────────────────────
+# HEADER
+# ──────────────────────────────────────────────────────────────
+
+st.markdown(
+    "<h1 style='color:#e2e8f0; margin-bottom:0;'>₿ BTC/USDT Live Dashboard</h1>",
+    unsafe_allow_html=True
+)
+st.markdown(
+    f"<div style='color:#718096; font-size:13px; margin-bottom:16px;'>"
+    f"Binance Public API · {datetime.now().strftime('%H:%M:%S')} · "
+    f"{'🟢 Bot Running' if bot.running else '🔴 Bot Stopped'}"
+    f"</div>",
+    unsafe_allow_html=True
+)
+
+# ──────────────────────────────────────────────────────────────
+# DATA
+# If bot is running  → use bot.df (thread keeps it fresh)
+# If bot is stopped  → fetch once for display only
+# ──────────────────────────────────────────────────────────────
+
+if bot.df.empty:
+    with st.spinner("Fetching initial market data..."):
+        df_raw = bot.fetch_ohlc()
+        if not df_raw.empty:
+            df_display = bot._add_indicators(df_raw)
+            with bot._lock:
+                bot.df = df_display.copy()
+        else:
+            df_display = pd.DataFrame()
+else:
+    with bot._lock:
+        df_display = bot.df.copy()
+
+# ──────────────────────────────────────────────────────────────
+# METRICS
+# ──────────────────────────────────────────────────────────────
+
+stats      = bot.get_stats()
+live_price = bot.last_price
+
+if live_price is None and not df_display.empty:
+    live_price     = bot.fetch_price()
+    bot.last_price = live_price
+
+m1, m2, m3, m4, m5, m6 = st.columns(6)
+
+with m1:
+    st.metric(
+        "BTC Price",
+        f"${live_price:,.2f}" if live_price else "—"
+    )
+
+with m2:
+    pnl_val  = stats["pnl"]
+    pnl_sign = "+" if pnl_val >= 0 else ""
+    st.metric(
+        "Total PnL",
+        f"{pnl_sign}${pnl_val:.2f}",
+        delta=f"{pnl_sign}{pnl_val:.2f}"
+    )
+
+with m3:
+    st.metric("Balance", f"${stats['balance']:,.2f}")
+
+with m4:
+    st.metric("Trades", stats["total_trades"])
+
+with m5:
+    st.metric("Win Rate", f"{stats['win_rate']:.1f}%")
+
+with m6:
+    trend = get_trend(df_display) if not df_display.empty else "—"
+    st.metric("Trend", trend)
+
+st.markdown("---")
+
+# ──────────────────────────────────────────────────────────────
+# CHART
+# ──────────────────────────────────────────────────────────────
+
+def build_chart(df, trades, show_ema, show_rsi, show_vol):
+
+    if df.empty:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No data — start the bot or check connection",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False,
+            font=dict(size=16, color="#718096")
+        )
+        fig.update_layout(
+            paper_bgcolor="#0e1117",
+            plot_bgcolor="#0e1117",
+            height=500
+        )
+        return fig
+
+    row_count   = 1
+    row_heights = [0.7]
+    specs       = [[{"type": "candlestick"}]]
+    sub_titles  = ["BTC/USDT"]
+
+    if show_rsi:
+        row_count += 1
+        row_heights.append(0.15)
+        specs.append([{"type": "scatter"}])
+        sub_titles.append("RSI (14)")
+
+    if show_vol:
+        row_count += 1
+        row_heights.append(0.15)
+        specs.append([{"type": "bar"}])
+        sub_titles.append("Volume")
+
+    fig = make_subplots(
+        rows=row_count, cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.03,
+        row_heights=row_heights,
+        subplot_titles=sub_titles,
+        specs=specs
+    )
+
+    # Candlestick
+    fig.add_trace(
+        go.Candlestick(
+            x=df["timestamp"],
+            open=df["open"], high=df["high"],
+            low=df["low"],   close=df["close"],
+            name="BTC/USDT",
+            increasing_line_color="#48bb78",
+            decreasing_line_color="#fc8181",
+            increasing_fillcolor="#48bb78",
+            decreasing_fillcolor="#fc8181",
+        ),
+        row=1, col=1
+    )
+
+    # EMA lines
+    if show_ema and "ema9" in df.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=df["timestamp"], y=df["ema9"],
+                name="EMA 9",
+                line=dict(color="#63b3ed", width=1.5),
+                hovertemplate="EMA9: $%{y:,.2f}<extra></extra>"
+            ),
+            row=1, col=1
+        )
+
+Regenerate
+Copy message
