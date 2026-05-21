@@ -8,5 +8,30 @@
     "time": "2026-05-21T15:14:00.772395",
     "level": "INFO",
     "message": "\u2705 Emergency stop cleared \u2014 trading resumed"
+  },
+  {
+    "time": "2026-05-21T17:35:25.750849",
+    "level": "INFO",
+    "message": "\ud83d\udce1 Bot thread alive \u2014 ticking every 30s"
+  },
+  {
+    "time": "2026-05-21T17:35:25.750940",
+    "level": "INFO",
+    "message": "\ud83d\ude80 Bot started | BTCUSDT | EMA Crossover | PAPER | Data: public API (no key) | interval=5m | check=30s | SL=2.0% | TP=4.0%"
+  },
+  {
+    "time": "2026-05-21T17:35:25.822059",
+    "level": "ERROR",
+    "message": "Public price fetch failed: Public price fetch failed: 451 Client Error:  for url: https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
+  },
+  {
+    "time": "2026-05-21T17:35:55.875272",
+    "level": "ERROR",
+    "message": "Public price fetch failed: Public price fetch failed: 451 Client Error:  for url: https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
+  },
+  {
+    "time": "2026-05-21T17:36:25.918687",
+    "level": "ERROR",
+    "message": "Public price fetch failed: Public price fetch failed: 451 Client Error:  for url: https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
   }
 ]
