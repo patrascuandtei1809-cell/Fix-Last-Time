@@ -5,9 +5,12 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import time
 import os
 import sys
+
+_TZ = ZoneInfo("Europe/London")
 
 # ── Path ──────────────────────────────────────────────────────────────────────
 _DIR = os.path.dirname(os.path.abspath(__file__))
@@ -43,13 +46,17 @@ html, body {
     color: #d1d4dc !important;
     font-family: 'Inter', -apple-system, sans-serif !important;
 }
-[data-testid="stAppViewContainer"] { background: #0a0c10 !important; }
+[data-testid="stAppViewContainer"] { background: #0a0c10 !important; overflow-x: hidden; }
 [data-testid="stHeader"]           { display: none !important; }
 [data-testid="stToolbar"]          { display: none !important; }
 [data-testid="stDecoration"]       { display: none !important; }
 footer                             { display: none !important; }
 #MainMenu                          { display: none !important; }
-.block-container { padding: 0 !important; max-width: 100% !important; }
+.block-container {
+    padding: 0 !important; max-width: 100% !important;
+    transform: translateZ(0);
+}
+.element-container { contain: layout style; }
 
 section[data-testid="stSidebar"] {
     background: #0d1117 !important;
@@ -262,8 +269,9 @@ def _init():
         "manual_amount":    100.0,
         "testnet":          True,
         "refresh_secs":     5,
-        "alert_open_ids":   [],   # trade IDs we've already seen as open
-        "alert_closed_ids": [],   # trade IDs we've already seen as closed
+        "alert_open_ids":      [],
+        "alert_closed_ids":    [],
+        "pending_live_trade":  None,   # dict stored between reruns for live confirmation
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -375,7 +383,7 @@ all_trades    = load_trades()
 open_trades   = get_open_trades()
 closed_trades = [t for t in all_trades if t.get("status") == "closed"]
 total_pnl     = sum((t.get("profit_loss") or 0) for t in closed_trades)
-today_str     = datetime.now().strftime("%Y-%m-%d")
+today_str     = datetime.now(_TZ).strftime("%Y-%m-%d")
 daily_pnl     = sum(
     (t.get("profit_loss") or 0) for t in closed_trades
     if (t.get("close_time") or "").startswith(today_str)
@@ -453,8 +461,9 @@ chg_str   = f"{'▲' if change_pct >= 0 else '▼'} {abs(change_pct):.2f}%"
 h_str     = _fmt_p(high_24h, 2) if high_24h else "—"
 l_str     = _fmt_p(low_24h, 2)  if low_24h  else "—"
 
-_upd_at = get_shared_updated_at() if bot_running else None
-_upd_str = _upd_at.strftime("%H:%M:%S") if _upd_at else datetime.now().strftime("%H:%M:%S")
+_upd_at  = get_shared_updated_at() if bot_running else None
+_now_tz  = datetime.now(_TZ)
+_upd_str = _upd_at.strftime("%H:%M:%S") if _upd_at else _now_tz.strftime("%H:%M:%S")
 _src_label = {"bot-live": "bot-live", "auth": "auth-live", "public": "public"}.get(chart_source, "—")
 
 conn_pill = ('<span class="pill p-green"><span class="dot dot-g"></span>CONNECTED</span>'
@@ -470,7 +479,7 @@ net_pill  = ('<span class="pill p-blue">TESTNET</span>'
              if testnet
              else '<span class="pill p-red">MAINNET</span>')
 _ref_secs = st.session_state.get("refresh_secs", 5)
-live_pill = f'<span class="pill p-gold"><span class="dot dot-y"></span>LIVE {_ref_secs}s · {_upd_str}</span>'
+live_pill = f'<span class="pill p-gold"><span class="dot dot-y"></span>LIVE {_ref_secs}s · {_upd_str} <span style="font-size:9px;opacity:.6;">LON</span></span>'
 
 st.markdown(f"""
 <div class="at-header">
@@ -598,9 +607,9 @@ _cur_sym = st.session_state.symbol
 _tiles_html = ""
 for _s in SYMBOLS:
     _d = _mkt.get(_s, {})
-    _mp   = float(_d.get("lastPrice", 0))    if _d else 0
-    _mc   = float(_d.get("priceChangePercent", 0)) if _d else 0
-    _mv   = float(_d.get("volume", 0))       if _d else 0
+    _mp   = float(_d.get("price",      0)) if _d else 0
+    _mc   = float(_d.get("change_pct", 0)) if _d else 0
+    _mv   = float(_d.get("volume",     0)) if _d else 0
     _active_cls = " mkt-active" if _s == _cur_sym else ""
     _chg_cls    = "mt-up" if _mc >= 0 else "mt-dn"
     _chg_sign   = "+" if _mc >= 0 else ""
@@ -624,38 +633,54 @@ with st.sidebar:
 
     # Connection
     st.markdown('<div class="sec-lbl">API Connection</div>', unsafe_allow_html=True)
-    testnet_tog = st.toggle("Binance Testnet", value=st.session_state.testnet,
+    testnet_tog = st.toggle("🧪 Use Binance Testnet", value=st.session_state.testnet,
                              help="Use testnet.binance.vision for safe testing")
     st.session_state.testnet = testnet_tog
     if not testnet_tog:
-        st.warning("⚠️ LIVE — real money at risk!")
+        st.warning("⚠️ MAINNET — real money at risk! Double-check before trading.")
     else:
-        st.info("🧪 Testnet — get keys at testnet.binance.vision")
+        st.info("Testnet mode — get keys at testnet.binance.vision")
 
-    api_key    = st.text_input("API Key",    type="password",
-                                placeholder="Optional — needed for trading only")
-    api_secret = st.text_input("API Secret", type="password",
-                                placeholder="Optional — needed for trading only")
-
-    if st.button("🔌 Connect", use_container_width=True, type="primary"):
-        if api_key and api_secret:
-            with st.spinner("Connecting…"):
-                try:
-                    from binance_client import BinanceClient
-                    c   = BinanceClient(api_key, api_secret, testnet=testnet_tog)
-                    ok, msg = c.test_connection()
-                    if ok:
-                        st.session_state.client    = c
-                        st.session_state.connected = True
-                        log_activity("INFO", f"🔌 Connected {'Testnet' if testnet_tog else 'LIVE'} — {msg}")
-                        st.success("✅ Connected!")
-                        st.rerun()
-                    else:
-                        st.error(f"❌ {msg}")
-                except Exception as e:
-                    st.error(f"Error: {e}")
-        else:
-            st.info("API keys are only needed for live trading & balance.\nChart works without them.")
+    if st.session_state.connected and _cl():
+        _conn_c = _cl()
+        try:
+            _live_usdt = _conn_c.get_account_balance("USDT")
+            _net_label = "Testnet" if st.session_state.testnet else "🔴 LIVE"
+            st.markdown(f"""
+<div style="background:#0d2a1a;border:1px solid #26a69a44;border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+  <div style="font-size:9px;color:#26a69a;font-weight:700;letter-spacing:.1em;margin-bottom:4px;">CONNECTED · {_net_label}</div>
+  <div style="font-size:18px;font-weight:700;color:#f0f6fc;font-family:'JetBrains Mono',monospace;">${_live_usdt:,.2f} <span style="font-size:11px;color:#6e7681;">USDT</span></div>
+</div>""", unsafe_allow_html=True)
+        except Exception:
+            st.success("✅ Connected to Binance")
+        if st.button("🔌 Disconnect", use_container_width=True):
+            st.session_state.client    = None
+            st.session_state.connected = False
+            st.rerun()
+    else:
+        api_key    = st.text_input("API Key",    type="password",
+                                    placeholder="Paste your Binance API key")
+        api_secret = st.text_input("API Secret", type="password",
+                                    placeholder="Paste your Binance API secret")
+        if st.button("🔌 Connect to Binance", use_container_width=True, type="primary"):
+            if api_key and api_secret:
+                with st.spinner("Connecting…"):
+                    try:
+                        from binance_client import BinanceClient
+                        c   = BinanceClient(api_key, api_secret, testnet=testnet_tog)
+                        ok, msg = c.test_connection()
+                        if ok:
+                            st.session_state.client    = c
+                            st.session_state.connected = True
+                            log_activity("INFO", f"🔌 Connected {'Testnet' if testnet_tog else 'LIVE'} — {msg}")
+                            st.success("✅ Connected!")
+                            st.rerun()
+                        else:
+                            st.error(f"❌ {msg}")
+                    except Exception as e:
+                        st.error(f"Connection error: {e}")
+            else:
+                st.info("API keys needed for real balance & live trading.\nChart + paper mode work without keys.")
 
     st.markdown('<hr class="s-div"/>', unsafe_allow_html=True)
 
@@ -849,10 +874,10 @@ with st.container():
     <div class="c-val">${equity:,.2f}</div>
     <div class="c-sub">Initial ${st.session_state.initial_balance:,.0f}</div>
   </div>
-  <div class="card">
-    <div class="c-lbl">Balance</div>
+  <div class="card" style="{'border-color:#26a69a55;' if (not st.session_state.paper_mode and st.session_state.connected) else ''}">
+    <div class="c-lbl">{'🔴 Live' if (not st.session_state.paper_mode and st.session_state.connected) else '📋 Paper'} Balance</div>
     <div class="c-val">${balance:,.2f}</div>
-    <div class="c-sub">{'Simulated' if st.session_state.paper_mode else 'Live USDT'}</div>
+    <div class="c-sub">{'USDT · Binance' if (not st.session_state.paper_mode and st.session_state.connected) else 'USDT · Simulated'}</div>
   </div>
   <div class="card">
     <div class="c-lbl">ROI</div>
@@ -948,6 +973,25 @@ with st.container():
                         config={"displayModeBar": False, "staticPlot": False})
 
         # ── Chart toolbar ─────────────────────────────────────────────────────
+        # Amount row (compact, above BUY/SELL)
+        _amt_col1, _amt_col2 = st.columns([5, 2])
+        with _amt_col1:
+            st.markdown(
+                '<div style="height:6px;"></div>',
+                unsafe_allow_html=True,
+            )
+        with _amt_col2:
+            _new_amt = st.number_input(
+                "Amount (USDT)",
+                min_value=1.0, max_value=1_000_000.0,
+                value=float(st.session_state.manual_amount),
+                step=10.0,
+                label_visibility="collapsed",
+                help="Trade size in USDT for manual BUY/SELL",
+                key="toolbar_amount",
+            )
+            st.session_state.manual_amount = _new_amt
+
         tb1, tb2, tb3, tb4, tb5, tb6 = st.columns([4, 1, 1, 1, 1, 1])
         with tb1:
             mode_badge = ('<span class="cbadge green">📋 PAPER</span>'
@@ -1000,10 +1044,71 @@ with st.container():
             if st.button("↺", use_container_width=True, help="Refresh"):
                 st.rerun()
 
+        # ── Live-trade confirmation dialog ────────────────────────────────────
+        _plt = st.session_state.pending_live_trade
+        if _plt:
+            _plt_side = _plt["side"]
+            _plt_inv  = _plt["invested"]
+            _plt_pr   = _plt["price"]
+            _plt_qty  = _plt["qty"]
+            _side_color = "#26a69a" if _plt_side == "BUY" else "#ef5350"
+            st.markdown(f"""
+<div style="background:#1a0a0a;border:1px solid #ef5350;border-radius:8px;padding:12px 16px;margin:8px 0;">
+  <div style="font-size:11px;color:#ef5350;font-weight:700;margin-bottom:6px;">⚡ LIVE ORDER CONFIRMATION — REAL MONEY</div>
+  <div style="font-size:13px;color:#f0f6fc;font-family:'JetBrains Mono',monospace;">
+    <span style="color:{_side_color};font-weight:700;">{_plt_side}</span>&nbsp;
+    {_plt_qty:.6f} {st.session_state.symbol} &nbsp;·&nbsp;
+    ${_plt_pr:,.4f} &nbsp;·&nbsp; ${_plt_inv:.2f} USDT
+  </div>
+</div>""", unsafe_allow_html=True)
+            _cf1, _cf2 = st.columns(2)
+            with _cf1:
+                if st.button("✅ Confirm LIVE trade", use_container_width=True, type="primary"):
+                    _do_live = True
+                    c = _cl()
+                    try:
+                        order = c.place_market_order(st.session_state.symbol, _plt_side, _plt_qty)
+                        _exec_price = float(order.get("fills", [{}])[0].get("price", _plt_pr))
+                    except Exception as _e:
+                        st.error(f"Order failed: {_e}")
+                        _do_live = False
+                        _exec_price = _plt_pr
+                    if _do_live:
+                        rm = st.session_state.risk_manager
+                        _t = {
+                            "coin":            st.session_state.symbol,
+                            "exchange":        "Binance Testnet" if st.session_state.testnet else "Binance LIVE",
+                            "type":            "manual",
+                            "strategy":        "Manual",
+                            "side":            _plt_side,
+                            "entry_price":     _exec_price,
+                            "exit_price":      None,
+                            "quantity":        _plt_qty,
+                            "invested":        _plt_inv,
+                            "profit_loss":     None,
+                            "profit_loss_pct": None,
+                            "open_time":       datetime.now(_TZ).isoformat(),
+                            "close_time":      None,
+                            "reason":          f"Manual {_plt_side} LIVE — ${_plt_inv:.2f} USDT @ ${_exec_price:.4f}",
+                            "close_reason":    None,
+                            "stop_loss":       rm.stop_loss_price(_exec_price, _plt_side),
+                            "take_profit":     rm.take_profit_price(_exec_price, _plt_side),
+                            "status":          "open",
+                            "paper":           False,
+                        }
+                        add_trade(_t)
+                        log_activity("ORDER",
+                            f"⚡ LIVE {_plt_side} | {_plt_qty:.6f} {st.session_state.symbol} @ ${_exec_price:.4f}")
+                    st.session_state.pending_live_trade = None
+                    st.rerun()
+            with _cf2:
+                if st.button("✕ Cancel", use_container_width=True):
+                    st.session_state.pending_live_trade = None
+                    st.rerun()
+
         # Manual trade execution
         if buy_btn or sell_btn:
             side = "BUY" if buy_btn else "SELL"
-            # Use live price from public API if not authenticated
             price = live_price
             if price is None:
                 st.error("No price available — chart not loaded yet.")
@@ -1017,17 +1122,19 @@ with st.container():
                         qty = c.round_quantity(st.session_state.symbol, qty)
                     except Exception:
                         qty = round(qty, 6)
-                    if not st.session_state.paper_mode:
-                        try:
-                            order = c.place_market_order(st.session_state.symbol, side, qty)
-                            price = float(order.get("fills", [{}])[0].get("price", price))
-                        except Exception as e:
-                            st.error(f"Order failed: {e}")
-                            price = None
+
+                    # LIVE mode → stage confirmation; paper/testnet → execute immediately
+                    if not st.session_state.paper_mode and not st.session_state.testnet:
+                        st.session_state.pending_live_trade = {
+                            "side": side, "invested": invested,
+                            "price": price, "qty": qty,
+                        }
+                        st.rerun()
                 else:
                     qty = round(qty, 6)
 
-                if price is not None:
+                # Paper mode (or testnet with auth): execute without confirmation
+                if not st.session_state.pending_live_trade:
                     rm = st.session_state.risk_manager
                     trade = {
                         "coin":            st.session_state.symbol,
@@ -1041,9 +1148,9 @@ with st.container():
                         "invested":        invested,
                         "profit_loss":     None,
                         "profit_loss_pct": None,
-                        "open_time":       datetime.now().isoformat(),
+                        "open_time":       datetime.now(_TZ).isoformat(),
                         "close_time":      None,
-                        "reason":          f"Manual {side} — ${invested:.2f} USDT @ ${price:.4f}",
+                        "reason":          f"Manual {side} ({'Paper' if st.session_state.paper_mode else 'Testnet'}) — ${invested:.2f} USDT @ ${price:.4f}",
                         "close_reason":    None,
                         "stop_loss":       rm.stop_loss_price(price, side),
                         "take_profit":     rm.take_profit_price(price, side),
