@@ -208,8 +208,9 @@ class TradingBot:
         if self.client is None:
             self.paper = True
 
-        self._thread:  Optional[threading.Thread] = None
-        self._running: bool = False
+        self._thread:         Optional[threading.Thread] = None
+        self._running:        bool = False
+        self._session_trades: int  = 0   # trades opened this session
 
     # ── Control ───────────────────────────────────────────────────────────────
 
@@ -226,12 +227,16 @@ class TradingBot:
         self._thread.start()
         auth_label = "auth client" if self.client else "public API (no key)"
         mode_label = "PAPER" if self.paper else "LIVE"
+        _invest = self.risk.get_invest_amount()
+        _cap    = self.risk.settings.max_trade_usdt
+        _msess  = self.risk.settings.max_trades_per_session
+        _sess_label = f"max {_msess}/session" if _msess > 0 else "unlimited/session"
         log_activity(
             "INFO",
             f"🚀 Bot started | {self.symbol} | {self.strategy} | {mode_label} | "
-            f"Data: {auth_label} | interval={self.interval} | "
-            f"check={self.check_every}s | SL={self.risk.settings.stop_loss_pct}% | "
-            f"TP={self.risk.settings.take_profit_pct}%",
+            f"Data: {auth_label} | interval={self.interval} | check={self.check_every}s | "
+            f"Invest ${_invest:.2f} USDT/trade (cap ${_cap:.2f}) | {_sess_label} | "
+            f"SL={self.risk.settings.stop_loss_pct}% | TP={self.risk.settings.take_profit_pct}%",
         )
         return True
 
@@ -310,7 +315,7 @@ class TradingBot:
                 return
 
         # ── 3. Can we open a new trade? ───────────────────────────────────────
-        can_trade, block_reason = self.risk.can_open_trade(len(open_trades))
+        can_trade, block_reason = self.risk.can_open_trade(len(open_trades), self._session_trades)
         if not can_trade:
             log_activity("INFO", f"⏸️ {block_reason}")
             return
@@ -334,20 +339,17 @@ class TradingBot:
             log_activity("INFO", "⏭️ HOLD — no trade opened")
             return
 
-        # ── 5. Size the position ──────────────────────────────────────────────
-        balance  = self._get_balance()
-        invested = self.risk.calculate_invested(balance)
-
+        # ── 5. Size the position (FIXED USDT — never uses full balance) ─────────
+        invested = self.risk.get_invest_amount()
         if invested < 10:
             log_activity(
                 "WARNING",
-                f"⚠️ Skipping — invested amount ${invested:.2f} < $10 minimum "
-                f"(balance=${balance:.2f}, risk={self.risk.settings.risk_per_trade_pct}%)"
+                f"⚠️ Skipping — invest_per_trade ${invested:.2f} < $10 minimum. "
+                f"Raise it in Risk → Invest per trade."
             )
             return
 
-        qty     = self.risk.calculate_quantity(balance, price)
-        qty     = self._round_qty(qty)
+        qty = self._round_qty(invested / price)
         sl_p    = self.risk.stop_loss_price(price, signal)
         tp_p    = self.risk.take_profit_price(price, signal)
 
@@ -393,9 +395,13 @@ class TradingBot:
             "paper":           self.paper,
         }
         added = add_trade(trade)
+        self._session_trades += 1
+        _max_sess = self.risk.settings.max_trades_per_session
+        _sess_str = f"{self._session_trades}/{_max_sess}" if _max_sess > 0 else f"{self._session_trades}/∞"
         log_activity("INFO",
             f"📝 Trade recorded | ID:{added['id']} | {signal} {self.symbol} | "
-            f"SL ${sl_p:.4f} | TP ${tp_p:.4f}")
+            f"${invested:.2f} USDT | SL ${sl_p:.4f} | TP ${tp_p:.4f} | "
+            f"Session trades: {_sess_str}")
 
     # ── Close helper ──────────────────────────────────────────────────────────
 
@@ -477,6 +483,10 @@ class TradingBot:
 
 def get_bot() -> Optional[TradingBot]:
     return _bot
+
+def get_bot_session_trades() -> int:
+    """Trades opened in the current bot session."""
+    return _bot._session_trades if _bot else 0
 
 
 def create_bot(

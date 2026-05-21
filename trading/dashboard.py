@@ -22,6 +22,7 @@ from bot import (
     load_trades, load_activity, get_open_trades,
     add_trade, close_trade, reset_all_data, clear_activity, log_activity,
     get_shared_df, get_shared_price, get_shared_updated_at, get_shared_last_tick,
+    get_bot_session_trades,
 )
 from strategy import get_indicators
 from risk import RiskManager, RiskSettings
@@ -276,6 +277,13 @@ def _init():
     for k, v in defaults.items():
         if k not in st.session_state:
             st.session_state[k] = v
+
+    # ── Migrate: ensure new RiskSettings fields exist on old sessions ─────────
+    _r = st.session_state.get("risk")
+    if _r is not None:
+        if not hasattr(_r, "invest_per_trade"):      _r.invest_per_trade      = 50.0
+        if not hasattr(_r, "max_trade_usdt"):        _r.max_trade_usdt        = 100.0
+        if not hasattr(_r, "max_trades_per_session"):_r.max_trades_per_session= 0
 
 _init()
 
@@ -769,13 +777,18 @@ with st.sidebar:
     _pnl_sign = "+" if _bt_pnl >= 0 else ""
     _avg_sign = "+" if _bt_avg >= 0 else ""
 
+    _sess_trades = get_bot_session_trades()
+    _max_sess    = st.session_state.risk.max_trades_per_session
+    _sess_str    = f"{_sess_trades}/{_max_sess}" if _max_sess > 0 else f"{_sess_trades}/∞"
+    _inv_disp    = st.session_state.risk_manager.get_invest_amount()
+
     st.markdown(f"""
 <div style="margin-top:4px;">
 <div class="bsc-lbl" style="margin-bottom:4px;">BOT PERFORMANCE</div>
 <div class="bot-stat-grid">
   <div class="bot-stat-cell">
-    <div class="bsc-lbl">Signals</div>
-    <div class="bsc-val">{len(_bt)}</div>
+    <div class="bsc-lbl">Session</div>
+    <div class="bsc-val">{_sess_str}</div>
   </div>
   <div class="bot-stat-cell">
     <div class="bsc-lbl">Win Rate</div>
@@ -786,8 +799,8 @@ with st.sidebar:
     <div class="bsc-val {_pnl_cls}">{_pnl_sign}${abs(_bt_pnl):.2f}</div>
   </div>
   <div class="bot-stat-cell">
-    <div class="bsc-lbl">Avg / Trade</div>
-    <div class="bsc-val {_avg_cls}">{_avg_sign}${abs(_bt_avg):.2f}</div>
+    <div class="bsc-lbl">Per Trade</div>
+    <div class="bsc-val">${_inv_disp:.0f}</div>
   </div>
 </div>
 </div>""", unsafe_allow_html=True)
@@ -828,11 +841,39 @@ with st.sidebar:
     # Risk
     st.markdown('<div class="sec-lbl">Risk Management</div>', unsafe_allow_html=True)
     r = st.session_state.risk
-    r.risk_per_trade_pct = st.slider("Risk/trade %",    0.5, 20.0, r.risk_per_trade_pct, 0.5)
-    r.stop_loss_pct      = st.slider("Stop loss %",     0.5, 20.0, r.stop_loss_pct,      0.5)
-    r.take_profit_pct    = st.slider("Take profit %",   0.5, 50.0, r.take_profit_pct,    0.5)
-    r.max_daily_loss_pct = st.slider("Max daily loss %",1.0, 30.0, r.max_daily_loss_pct, 0.5)
-    r.max_open_trades    = st.slider("Max open trades", 1,   20,   r.max_open_trades,    1)
+
+    # ── Trade sizing (the single most important safety control) ────────────
+    _inv_cap = min(float(r.invest_per_trade), float(r.max_trade_usdt)) if r.max_trade_usdt > 0 else float(r.invest_per_trade)
+    st.markdown(f"""
+<div style="background:#0d1a2a;border:1px solid #2962ff44;border-radius:7px;padding:8px 11px;margin-bottom:8px;">
+  <div style="font-size:9px;color:#6e7681;text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px;">Per-trade size (active)</div>
+  <div style="font-size:18px;font-weight:700;color:#f0f6fc;font-family:'JetBrains Mono',monospace;">${_inv_cap:.2f} <span style="font-size:11px;color:#6e7681;">USDT</span></div>
+</div>""", unsafe_allow_html=True)
+
+    r.invest_per_trade = st.number_input(
+        "Invest per trade (USDT)",
+        min_value=1.0, max_value=100_000.0,
+        value=float(r.invest_per_trade), step=5.0,
+        help="Fixed USDT used for every trade — bot AND manual",
+    )
+    r.max_trade_usdt = st.number_input(
+        "Hard cap per trade (USDT)",
+        min_value=0.0, max_value=100_000.0,
+        value=float(r.max_trade_usdt), step=10.0,
+        help="Absolute maximum — trade is rejected if invest > cap. 0 = no cap.",
+    )
+    r.max_trades_per_session = st.number_input(
+        "Max bot trades / session",
+        min_value=0, max_value=500,
+        value=int(r.max_trades_per_session), step=1,
+        help="Bot stops opening new trades after this count. 0 = unlimited.",
+    )
+
+    st.markdown('<div style="height:4px;"></div>', unsafe_allow_html=True)
+    r.stop_loss_pct      = st.slider("Stop loss %",     0.5, 20.0, float(r.stop_loss_pct),      0.5)
+    r.take_profit_pct    = st.slider("Take profit %",   0.5, 50.0, float(r.take_profit_pct),    0.5)
+    r.max_daily_loss_pct = st.slider("Max daily loss %",1.0, 30.0, float(r.max_daily_loss_pct), 0.5)
+    r.max_open_trades    = st.slider("Max open trades", 1,   20,   int(r.max_open_trades),      1)
     st.session_state.risk_manager.settings = r
 
     st.markdown('<hr class="s-div"/>', unsafe_allow_html=True)
@@ -1115,6 +1156,11 @@ with st.container():
             else:
                 c = _cl()
                 invested = st.session_state.manual_amount
+                # Enforce hard cap
+                _cap = st.session_state.risk.max_trade_usdt
+                if _cap > 0 and invested > _cap:
+                    st.warning(f"⚠️ Amount ${invested:.2f} exceeds hard cap ${_cap:.2f} — capped automatically.")
+                    invested = _cap
                 qty = invested / price
 
                 if c is not None:
