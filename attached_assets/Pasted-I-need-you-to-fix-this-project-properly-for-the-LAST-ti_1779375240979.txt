@@ -1,0 +1,124 @@
+I need you to fix this project properly, for the LAST time.
+
+Do NOT give me a toy demo.
+Do NOT rewrite randomly.
+Do NOT simplify.
+Do NOT remove features.
+Do NOT give broken code.
+Do NOT give HTML/citation garbage inside Python code.
+
+I already have a project with these files:
+- dashboard.py
+- bot.py
+- strategy.py
+- risk.py
+- binance_client.py
+- requirements.txt
+
+Current problems:
+1. UI now looks bad compared to my old professional dashboard.
+2. Current error: KeyError: 'type' in dashboard.py because trades do not have the correct field.
+3. Manual/BOT trade markers are broken.
+4. Trade history and activity log are not detailed enough.
+5. I need real Binance connection, not fake simulation.
+6. I need the bot to run 24/7 and not reset on Streamlit refresh.
+7. I need mobile + PC usable UI.
+8. I need full control over amount invested.
+
+FINAL REQUIREMENTS:
+
+Build/fix the project as a REAL crypto trading platform with:
+
+1. Professional UI
+- dark dashboard
+- fund overview cards
+- live chart section
+- trade history section
+- activity log section
+- clean spacing
+- mobile-friendly layout
+- chart style similar to my old screenshots
+
+2. Binance integration
+- Binance Testnet first
+- Binance Live ready
+- secure API key input
+- user can choose real investment amount
+- no fake trading unless explicitly in paper mode
+
+3. Trading modes
+- Manual BUY/SELL
+- Auto bot trading
+- clear separation between MANUAL and BOT trades
+
+4. Chart
+- candlestick chart
+- EMA 9 / EMA 21
+- BUY/SELL markers
+- manual trades and bot trades different colors/icons
+- exact entry/exit points
+- local correct time
+
+5. Strategies
+User can choose between:
+- EMA crossover
+- +/- 0.03% price movement rule
+- momentum strategy
+
+Every trade must store:
+- coin
+- exchange
+- manual or bot
+- strategy used
+- side BUY/SELL
+- entry price
+- exit price
+- invested amount
+- profit/loss
+- open time
+- close time
+- reason
+
+6. Risk management
+- stop loss
+- take profit
+- risk per trade %
+- max open trades
+- emergency stop
+
+7. Activity log
+Must clearly show:
+- what bot is checking
+- current price
+- signal detected
+- why it buys
+- why it sells
+- why it skips
+- active strategy
+- position status
+
+8. Stability
+- bot must not create duplicate threads
+- bot must survive UI refresh
+- no Streamlit reset bugs
+- no broken keys like t['type'] if the field does not exist
+- no missing imports
+- no syntax errors
+- no HTML/citation artifacts in code
+
+9. Files required
+Give COMPLETE corrected files:
+- dashboard.py
+- bot.py
+- strategy.py
+- risk.py
+- binance_client.py
+- requirements.txt
+
+10. Very important
+First explain what was broken.
+Then give the full corrected files.
+Then explain exactly how to run it on DigitalOcean.
+Then explain how to switch from Testnet to Live safely.
+
+This must be a clean final foundation, not another broken demo.
