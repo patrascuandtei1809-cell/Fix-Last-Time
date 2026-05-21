@@ -22,7 +22,7 @@ from bot import (
     load_trades, load_activity, get_open_trades,
     add_trade, close_trade, reset_all_data, clear_activity, log_activity,
     get_shared_df, get_shared_price, get_shared_updated_at, get_shared_last_tick,
-    get_bot_session_trades,
+    get_bot_session_trades, get_bot_last_signal, force_paper_trade,
 )
 from strategy import get_indicators
 from risk import RiskManager, RiskSettings
@@ -34,7 +34,7 @@ st.set_page_config(
     page_title="AlphaTrade",
     page_icon="📈",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="auto",
 )
 
 # ── Premium CSS ───────────────────────────────────────────────────────────────
@@ -56,9 +56,11 @@ footer                             { display: none !important; }
 #MainMenu                          { display: none !important; }
 .block-container {
     padding: 0 !important; max-width: 100% !important;
-    transform: translateZ(0);
 }
-.element-container { contain: layout style; }
+/* Prevent ghost/duplicate elements during Streamlit rerenders on mobile */
+body { overscroll-behavior-y: none; }
+[data-testid="stAppViewContainer"] > .main > .block-container { min-height: 0 !important; }
+iframe[height="0"] { display: none !important; }
 
 section[data-testid="stSidebar"] {
     background: #0d1117 !important;
@@ -644,6 +646,62 @@ for _s in SYMBOLS:
   </div>"""
 st.markdown(f'<div class="mkt-strip">{_tiles_html}</div>', unsafe_allow_html=True)
 
+# ── Connection + Bot status banner (always visible in main area) ──────────────
+_conn_banner_parts = []
+# Left: connection status
+if st.session_state.connected and _cl():
+    _net_lbl  = "TESTNET" if st.session_state.testnet else "🔴 LIVE MAINNET"
+    _net_col  = "#26a69a" if st.session_state.testnet else "#ef5350"
+    try:
+        _b_usdt = _cl().get_account_balance("USDT")
+        _bal_str = f"${_b_usdt:,.2f} USDT"
+    except Exception:
+        _bal_str = "Balance unavailable"
+    _conn_banner_parts.append(
+        f'<div style="display:flex;align-items:center;gap:8px;">'
+        f'<span class="dot dot-g"></span>'
+        f'<span style="font-size:11px;font-weight:700;color:{_net_col};">{_net_lbl}</span>'
+        f'<span style="font-size:11px;color:#6e7681;">·</span>'
+        f'<span style="font-size:12px;font-weight:600;color:#f0f6fc;font-family:\'JetBrains Mono\',monospace;">{_bal_str}</span>'
+        f'</div>'
+    )
+else:
+    _conn_banner_parts.append(
+        f'<div style="display:flex;align-items:center;gap:8px;">'
+        f'<span class="dot dot-x"></span>'
+        f'<span style="font-size:11px;color:#6e7681;">Not connected · Paper mode · open sidebar to connect</span>'
+        f'</div>'
+    )
+
+# Right: bot status + last signal
+_sig_entry = get_bot_last_signal()
+_sig_txt   = (_sig_entry.get("message","") or "")[:80] if _sig_entry else ""
+_sig_time  = (_sig_entry.get("time","") or "")[:19].replace("T"," ") if _sig_entry else ""
+if bot_running:
+    _bot_status_html = (
+        f'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
+        f'<span class="dot dot-y"></span>'
+        f'<span style="font-size:11px;font-weight:700;color:#e3b341;">BOT RUNNING</span>'
+        + (f'<span style="font-size:10px;color:#484f58;max-width:320px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">{_sig_txt}</span>' if _sig_txt else "")
+        + f'</div>'
+    )
+else:
+    _bot_status_html = (
+        f'<div style="display:flex;align-items:center;gap:6px;">'
+        f'<span class="dot dot-x"></span>'
+        f'<span style="font-size:11px;color:#484f58;">Bot stopped</span>'
+        f'</div>'
+    )
+
+st.markdown(
+    f'<div style="display:flex;align-items:center;justify-content:space-between;'
+    f'flex-wrap:wrap;gap:8px;padding:7px 20px;background:#0d1117;border-bottom:1px solid #1e2736;">'
+    f'{"".join(_conn_banner_parts)}'
+    f'{_bot_status_html}'
+    f'</div>',
+    unsafe_allow_html=True,
+)
+
 # ─────────────────────────────────────────────────────────────────────────────
 # SIDEBAR
 # ─────────────────────────────────────────────────────────────────────────────
@@ -760,6 +818,26 @@ with st.sidebar:
         if st.button("⏹ Stop", use_container_width=True, disabled=not bot_running):
             bot_module.stop_bot()
             st.rerun()
+
+    # Force test trade (bypasses signal — paper only)
+    if live_price:
+        _ft1, _ft2 = st.columns(2)
+        with _ft1:
+            if st.button("🧪 Force BUY", use_container_width=True,
+                          help="Open a paper BUY trade right now — no signal needed"):
+                _inv_ft = st.session_state.risk_manager.get_invest_amount()
+                force_paper_trade(st.session_state.symbol, "BUY", live_price, _inv_ft)
+                st.success(f"✅ Force BUY @ ${live_price:.4f}")
+                st.rerun()
+        with _ft2:
+            if st.button("🧪 Force SELL", use_container_width=True,
+                          help="Open a paper SELL trade right now — no signal needed"):
+                _inv_ft = st.session_state.risk_manager.get_invest_amount()
+                force_paper_trade(st.session_state.symbol, "SELL", live_price, _inv_ft)
+                st.success(f"✅ Force SELL @ ${live_price:.4f}")
+                st.rerun()
+    else:
+        st.caption("Waiting for live price before force trade is available…")
 
     if st.button("🚨 Emergency Stop", use_container_width=True, type="secondary"):
         st.session_state.risk.emergency_stop = True
@@ -1103,6 +1181,22 @@ with st.container():
                           if st.session_state.paper_mode
                           else '<span class="cbadge red">⚡ LIVE</span>')
             src_note = "live • public API" if chart_source == "public" else "live • auth"
+            # Last signal summary for chart bar
+            _ls = get_bot_last_signal()
+            _ls_msg = (_ls.get("message","") or "")
+            if "BUY" in _ls_msg:
+                _sig_badge = '<span class="cbadge green">▲ BUY SIGNAL</span>'
+            elif "SELL" in _ls_msg:
+                _sig_badge = '<span class="cbadge red">▼ SELL SIGNAL</span>'
+            elif _ls_msg:
+                _sig_badge = f'<span class="cbadge" style="color:#6e7681;">HOLD</span>'
+            else:
+                _sig_badge = ""
+            _bot_run_badge = (
+                '<span class="cbadge" style="color:#e3b341;background:#1e1a0a;">⚡ BOT ON</span>'
+                if bot_running else
+                '<span class="cbadge" style="color:#484f58;">BOT OFF</span>'
+            )
             st.markdown(f"""
 <div class="chart-bar">
   <div class="chart-title">
@@ -1110,6 +1204,8 @@ with st.container():
     <span class="cbadge blue">{st.session_state.interval}</span>
     <span class="cbadge gold">{st.session_state.strategy}</span>
     {mode_badge}
+    {_bot_run_badge}
+    {_sig_badge}
     <span style="font-size:10px;color:#484f58;font-weight:400;">{src_note}</span>
   </div>
 </div>
@@ -1395,6 +1491,32 @@ with st.container():
                         name=blbl,
                         hovertemplate=f"{blbl}<br>%{{x}}<br>%{{y:.4f}}<extra></extra>",
                     ), row=1, col=1)
+
+            # ── SL / TP lines for every open position ─────────────────────────
+            for _op in open_trades:
+                _ep  = _op.get("entry_price")
+                _sl  = _op.get("stop_loss")
+                _tp  = _op.get("take_profit")
+                _sid = _op.get("side","BUY")
+                _tid = _op.get("id","?")
+                if _sl:
+                    fig.add_hline(
+                        y=_sl, row=1, col=1,
+                        line=dict(color="rgba(239,83,80,0.55)", width=1, dash="dash"),
+                        annotation_text=f"  SL {_tid}",
+                        annotation_position="right",
+                        annotation_font_color="#ef5350",
+                        annotation_font_size=9,
+                    )
+                if _tp:
+                    fig.add_hline(
+                        y=_tp, row=1, col=1,
+                        line=dict(color="rgba(38,166,154,0.55)", width=1, dash="dash"),
+                        annotation_text=f"  TP {_tid}",
+                        annotation_position="right",
+                        annotation_font_color="#26a69a",
+                        annotation_font_size=9,
+                    )
 
             # ── Stochastic (row 2) ─────────────────────────────────────────────
             if "stoch_k" in df_chart.columns:

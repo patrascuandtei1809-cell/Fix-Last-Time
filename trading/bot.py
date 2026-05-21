@@ -511,6 +511,52 @@ def get_bot_session_trades() -> int:
     return _bot._session_trades if _bot else 0
 
 
+def get_bot_last_signal() -> dict:
+    """Most recent SIGNAL entry from the activity log."""
+    for entry in reversed(load_activity()):
+        if entry.get("level") == "SIGNAL":
+            return entry
+    return {}
+
+
+def force_paper_trade(symbol: str, side: str, price: float, invested: float) -> dict:
+    """Execute a paper test trade immediately — bypasses signal check. For testing."""
+    from risk import RiskManager as _RM
+    _rm = _bot.risk if _bot else _RM()
+    qty  = round(invested / price, 6)
+    sl_p = _rm.stop_loss_price(price, side)
+    tp_p = _rm.take_profit_price(price, side)
+    trade = {
+        "coin":            symbol,
+        "exchange":        "Paper (force test)",
+        "type":            "bot",
+        "strategy":        "Force Test",
+        "side":            side,
+        "entry_price":     price,
+        "exit_price":      None,
+        "quantity":        qty,
+        "invested":        invested,
+        "profit_loss":     None,
+        "profit_loss_pct": None,
+        "open_time":       datetime.now().isoformat(),
+        "close_time":      None,
+        "reason":          f"🧪 Force test {side} @ ${price:.4f}",
+        "close_reason":    None,
+        "stop_loss":       sl_p,
+        "take_profit":     tp_p,
+        "status":          "open",
+        "paper":           True,
+    }
+    added = add_trade(trade)
+    log_activity(
+        "ORDER",
+        f"🧪 FORCE TEST {side} | {qty:.6f} {symbol} @ ${price:.4f} | "
+        f"${invested:.2f} USDT | SL ${sl_p:.4f} | TP ${tp_p:.4f}",
+    )
+    tg.trade_open(symbol, side, price, invested, "Force test trade", mode="PAPER-FORCE")
+    return added
+
+
 def create_bot(
     client,
     symbol:       str,
