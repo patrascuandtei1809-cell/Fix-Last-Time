@@ -1,0 +1,53 @@
+ValueError: Invalid value of type 'builtins.str' received for the 'color' property of layout.shape.line Received value: '#48505830' The 'color' property is a color and may be specified as: - A hex string (e.g. '#ff0000') - An rgb/rgba string (e.g. 'rgb(255,0,0)') - An hsl/hsla string (e.g. 'hsl(0,100%,50%)') - An hsv/hsva string (e.g. 'hsv(0,100%,100%)') - A named CSS color: see https://plotly.com/python/css-colors/ for a list
+Traceback:
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 129, in exec_func_with_error_handling
+    result = func()
+             ^^^^^^
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 689, in code_to_exec
+    exec(code, module.__dict__)  # noqa: S102
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "/root/trading-bot-clean/dashboard.py", line 1046, in <module>
+    fig.add_hline(y=50, line=dict(color="#48505830", width=1, dash="dot"), row=3, col=1)
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/plotly/graph_objs/_figure.py", line 525, in add_hline
+    return super().add_hline(
+           ^^^^^^^^^^^^^^^^^^
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/plotly/basedatatypes.py", line 4174, in add_hline
+    self._process_multiple_axis_spanning_shapes(
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/plotly/basedatatypes.py", line 4096, in _process_multiple_axis_spanning_shapes
+    self.add_shape(
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/plotly/graph_objs/_figure.py", line 25348, in add_shape
+    new_obj = _layout.Shape(
+              ^^^^^^^^^^^^^^
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/plotly/graph_objs/layout/_shape.py", line 1356, in __init__
+    self._set_property("line", arg, line)
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/plotly/basedatatypes.py", line 4403, in _set_property
+    _set_property_provided_value(self, name, arg, provided)
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/plotly/basedatatypes.py", line 398, in _set_property_provided_value
+    obj[name] = val
+    ~~~^^^^^^
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/plotly/basedatatypes.py", line 4924, in __setitem__
+    self._set_compound_prop(prop, value)
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/plotly/basedatatypes.py", line 5335, in _set_compound_prop
+    val = validator.validate_coerce(val, skip_invalid=self._skip_invalid)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/_plotly_utils/basevalidators.py", line 2468, in validate_coerce
+    v = self.data_class(v, skip_invalid=skip_invalid, _validate=_validate)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/plotly/graph_objs/layout/shape/_line.py", line 135, in __init__
+    self._set_property("color", arg, color)
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/plotly/basedatatypes.py", line 4403, in _set_property
+    _set_property_provided_value(self, name, arg, provided)
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/plotly/basedatatypes.py", line 398, in _set_property_provided_value
+    obj[name] = val
+    ~~~^^^^^^
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/plotly/basedatatypes.py", line 4932, in __setitem__
+    self._set_prop(prop, value)
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/plotly/basedatatypes.py", line 5276, in _set_prop
+    raise err
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/plotly/basedatatypes.py", line 5271, in _set_prop
+    val = validator.validate_coerce(val)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/_plotly_utils/basevalidators.py", line 1399, in validate_coerce
+    self.raise_invalid_val(v)
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/_plotly_utils/basevalidators.py", line 312, in raise_invalid_val
+    raise ValueError(

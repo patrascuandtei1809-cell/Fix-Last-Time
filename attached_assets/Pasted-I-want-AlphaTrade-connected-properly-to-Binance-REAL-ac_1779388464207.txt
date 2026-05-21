@@ -1,0 +1,114 @@
+I want AlphaTrade connected properly to Binance REAL account, but safely.
+
+Fix and upgrade the project completely:
+
+1. Binance connection
+- Add secure Binance API key + secret inputs
+- Support TESTNET and LIVE switch
+- Show REAL Binance balance when connected
+- Show paper balance separately
+- Never expose API keys in logs/UI
+- Use environment variables if possible
+
+2. Bot must run NON STOP on DigitalOcean
+- It must keep running even if my PC/phone is closed
+- Use Streamlit only as dashboard UI
+- Bot logic must keep running on the server
+- Add clear status: BOT ON / OFF / running / stopped / last update
+
+3. Live dashboard
+- Update everything every 3–5 seconds
+- BTC price live
+- Binance balance live
+- open positions live
+- PnL live
+- trade history live
+- activity log live
+- current time live
+
+4. Fix screen duplication / ghost UI
+- Remove duplicate rendering
+- Do not render chart/cards twice
+- Use placeholders correctly
+- No blurred repeated dashboard when scrolling
+
+5. Chart improvements
+- TradingView-style chart
+- EMA 9 / EMA 21
+- live price line
+- update last candle with current ticker price
+- show bot trades on chart
+- show manual trades on chart
+- labels on chart:
+  “BOT BUY”
+  “BOT SELL”
+  “MANUAL BUY”
+  “MANUAL SELL”
+- show why bot entered/exited trade
+
+6. Manual trading
+- Real manual BUY / SELL
+- User can choose amount
+- Amount in USDT
+- Confirm before LIVE trade
+- Paper mode trades must not affect real Binance
+- Live mode trades must go to Binance
+
+7. Bot trading
+- Bot ON/OFF must be realistic
+- Strategy selector
+- risk settings
+- stop loss
+- take profit
+- investment amount
+- max trade amount
+- emergency stop
+- activity log explaining every decision
+
+8. Trade history
+- show manual and bot trades
+- entry price
+- exit price
+- amount
+- PnL
+- fees if available
+- opened time
+- closed time
+- reason
+- status open/closed
+
+9. Activity log
+- every refresh
+- every price update
+- every bot decision
+- every buy/sell
+- Binance connection status
+- errors clearly shown
+
+10. UI
+- Keep it professional and realistic
+- AlphaTrade branding
+- dark premium crypto platform style
+- mobile + desktop usable
+- no demo/fake UI
+- no duplicated dashboard sections
+
+VERY IMPORTANT:
+- Do not simplify the dashboard
+- Do not remove features
+- Do not give partial code
+- Give me ALL final files:
+  dashboard.py
+  bot.py
+  strategy.py
+  risk.py
+  binance_client.py
+  requirements.txt
+  .env.example
+- The app must run on DigitalOcean with:
+  streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0
+
+Before enabling LIVE trading:
+- keep PAPER mode default ON
+- require confirmation for LIVE mode
+- show warning that real money is used

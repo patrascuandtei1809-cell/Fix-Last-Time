@@ -18,7 +18,7 @@ import bot as bot_module
 from bot import (
     load_trades, load_activity, get_open_trades,
     add_trade, close_trade, reset_all_data, clear_activity, log_activity,
-    get_shared_df, get_shared_price, get_shared_updated_at,
+    get_shared_df, get_shared_price, get_shared_updated_at, get_shared_last_tick,
 )
 from strategy import get_indicators
 from risk import RiskManager, RiskSettings
@@ -201,6 +201,46 @@ section[data-testid="stSidebar"] * { color: #c9d1d9 !important; }
 ::-webkit-scrollbar { width:4px; height:4px; }
 ::-webkit-scrollbar-track { background:transparent; }
 ::-webkit-scrollbar-thumb { background:#30363d; border-radius:2px; }
+
+/* ── Market overview strip ── */
+.mkt-strip {
+    display:flex; gap:6px; overflow-x:auto; padding:8px 16px;
+    background:#0d1117; border-bottom:1px solid #1e2736;
+    scrollbar-width:none;
+}
+.mkt-strip::-webkit-scrollbar { display:none; }
+.mkt-tile {
+    display:flex; flex-direction:column; gap:2px;
+    background:#161b22; border:1px solid #1e2736;
+    border-radius:6px; padding:7px 12px; min-width:108px; flex-shrink:0;
+    transition:border-color .15s, background .15s;
+}
+.mkt-tile:hover { background:#1c2128; border-color:#2962ff55; }
+.mkt-tile.mkt-active { border-color:#2962ff99; background:#16203a; }
+.mt-sym   { font-size:9px; color:#6e7681; font-weight:700; letter-spacing:.12em; }
+.mt-price { font-size:13px; font-weight:700; color:#f0f6fc; font-family:'JetBrains Mono',monospace; line-height:1.2; }
+.mt-chg   { font-size:11px; font-weight:600; }
+.mt-up    { color:#26a69a; }
+.mt-dn    { color:#ef5350; }
+.mt-vol   { font-size:9px; color:#3d444d; margin-top:1px; }
+
+/* ── Bot performance stat grid (sidebar) ── */
+.bot-stat-grid {
+    display:grid; grid-template-columns:1fr 1fr; gap:5px; margin-top:6px;
+}
+.bot-stat-cell {
+    background:#161b22; border:1px solid #1e2736;
+    border-radius:6px; padding:7px 9px;
+}
+.bsc-lbl { font-size:9px; color:#484f58; text-transform:uppercase; letter-spacing:.1em; margin-bottom:3px; }
+.bsc-val { font-size:14px; font-weight:700; color:#f0f6fc; font-family:'JetBrains Mono',monospace; }
+.bsc-val.up { color:#26a69a; }
+.bsc-val.dn { color:#ef5350; }
+
+/* ── Next-check countdown ── */
+.cd-row { display:flex; justify-content:space-between; font-size:9px; color:#484f58; margin:8px 0 3px; }
+.cd-bar  { height:3px; background:#1e2736; border-radius:2px; overflow:hidden; }
+.cd-fill { height:100%; background:#2962ff; border-radius:2px; transition:width .8s linear; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -241,6 +281,26 @@ def _cl():
     return st.session_state.get("client")
 
 def _fmt_p(v, d=4): return f"${v:,.{d}f}" if v is not None else "—"
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _market_overview():
+    """Fetch 24h stats for all symbols — cached 30s to avoid hammering on every 5s rerun."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed as _asc
+    out = {}
+    def _fetch(s):
+        try: return s, public_24h(s, testnet=False)
+        except: return s, None
+    try:
+        with ThreadPoolExecutor(max_workers=10) as ex:
+            for f in _asc({ex.submit(_fetch, s): s for s in SYMBOLS}, timeout=7):
+                try:
+                    s, d = f.result()
+                    if d: out[s] = d
+                except: pass
+    except: pass
+    return out
+
+
 def _fmt_pnl(v):
     if v is None: return "—"
     return f"+${v:.4f}" if v >= 0 else f"-${abs(v):.4f}"

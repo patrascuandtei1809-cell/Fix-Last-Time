@@ -45,11 +45,16 @@ def get_shared_updated_at():
     with _state_lock:
         return _shared.get("updated_at")
 
-def _set_shared(df=None, price=None):
+def _set_shared(df=None, price=None, tick=False):
     with _state_lock:
         if df    is not None: _shared["df"]    = df
         if price is not None: _shared["price"] = price
         _shared["updated_at"] = datetime.now()
+        if tick: _shared["last_tick_at"] = datetime.now()
+
+def get_shared_last_tick():
+    with _state_lock:
+        return _shared.get("last_tick_at")
 
 # ── Data paths ────────────────────────────────────────────────────────────────
 _DIR      = os.path.dirname(os.path.abspath(__file__))
@@ -270,7 +275,7 @@ class TradingBot:
         price = self._get_price()
         if price is None:
             return
-        _set_shared(price=price)
+        _set_shared(price=price, tick=True)
         log_activity("INFO", f"💰 {self.symbol} = ${price:,.4f}")
 
         # ── 2. Manage open positions (SL / TP) ───────────────────────────────
