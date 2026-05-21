@@ -1,0 +1,56 @@
+
+*** System restart required ***
+Last login: Thu May 21 20:44:53 2026 from 162.243.190.66
+root@AlphaTrade-bot:~# ls
+# look for your AlphaTrade repo folder — likely something like 'AlphaTrade', 'trading-bot', or whatever you cloned it as
+cd <your-repo-folder>
+git pull
+
+Then restart Streaml
+bot  trading-bot-clean
+-bash: syntax error near unexpected token `newline'
+fatal: not a git repository (or any of the parent directories): .git
+Command 'Then' not found, did you mean:
+  command 'when' from deb when (1.1.45-1)
+Try: apt install <deb name>
+root@AlphaTrade-bot:~# screen -ls
+tmux ls
+No Sockets found in /run/screen/S-root.
+
+error connecting to /tmp/tmux-0/default (No such file or directory)
+root@AlphaTrade-bot:~# ps aux | grep streamlit
+ls ~
+root       35806  6.7 20.9 2013164 206020 pts/0  Sl   21:09   3:29 /root/trading-bot-clean/venv/bin/python3 /root/trading-bot-clean/venv/bin/streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0
+root       36947  0.0  0.2   7080  2048 pts/1    S+   22:01   0:00 grep --color=auto streamlit
+bot  trading-bot-clean
+root@AlphaTrade-bot:~# cd /root/trading-bot-clean
+git pull
+kill 35806
+ls dashboard.py trading/dashboard.py 2>/dev/null
+fatal: not a git repository (or any of the parent directories): .git
+dashboard.py
+root@AlphaTrade-bot:~/trading-bot-clean# cp -r /root/trading-bot-clean /root/trading-backup
+root@AlphaTrade-bot:~/trading-bot-clean# cd /root
+rm -rf trading-bot-clean
+git clone LINKUL_TAU_GITHUB trading-bot-clean
+cd trading-bot-clean
+fatal: repository 'LINKUL_TAU_GITHUB' does not exist
+-bash: cd: trading-bot-clean: No such file or directory
+root@AlphaTrade-bot:~# source venv/bin/activate
+nohup streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0 > app.log 2>&1 &
+-bash: venv/bin/activate: No such file or directory
+[1] 36975
+root@AlphaTrade-bot:~# rm -rf trading-bot-clean
+[1]+  Exit 127                nohup streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0 > app.log 2>&1
+root@AlphaTrade-bot:~# unzip fisier.zip
+mv nume-folder trading-bot-clean
+cd trading-bot-clean
+Command 'unzip' not found, but can be installed with:
+apt install unzip
+mv: cannot stat 'nume-folder': No such file or directory
+-bash: cd: trading-bot-clean: No such file or directory
+root@AlphaTrade-bot:~# source venv/bin/activate
+nohup streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0 > app.log 2>&1 &
+-bash: venv/bin/activate: No such file or directory
+[1] 36990
+root@AlphaTrade-bot:~# 
