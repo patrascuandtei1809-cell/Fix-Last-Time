@@ -335,7 +335,7 @@ def _init():
         "risk_manager":     RiskManager(),
         "initial_balance":  1000.0,
         "manual_amount":    100.0,
-        "testnet":          True,
+        "testnet":          False,   # default to LIVE Mainnet; user can opt into Testnet via radio
         "refresh_secs":     5,
         "alert_open_ids":      [],
         "alert_closed_ids":    [],
@@ -928,19 +928,28 @@ with st.sidebar:
 
     # Connection
     st.markdown('<div class="sec-lbl">API Connection</div>', unsafe_allow_html=True)
-    testnet_tog = st.toggle("🧪 Use Binance Testnet", value=st.session_state.testnet,
-                             help="Use testnet.binance.vision for safe testing")
-    # Detect testnet flip → force client rebuild (handled by _cl drift check)
+    # Unambiguous radio — no more confusing "Use Testnet" boolean.
+    # LIVE  = api.binance.com    (real money, real binance.com keys)
+    # TEST  = testnet.binance.vision (sandbox, testnet.binance.vision keys)
+    _env_choice = st.radio(
+        "Binance environment",
+        options=["🔴 LIVE Mainnet (api.binance.com)", "🧪 Testnet (testnet.binance.vision)"],
+        index=1 if st.session_state.testnet else 0,
+        horizontal=False,
+        help="MUST match the source of your API key. Mainnet keys do NOT work on Testnet and vice-versa.",
+    )
+    testnet_tog = _env_choice.startswith("🧪")
+    # Drift detection — force client rebuild on environment switch
     if testnet_tog != st.session_state.testnet:
-        print(f"[BINANCE] Testnet toggle changed {st.session_state.testnet} → {testnet_tog} "
-              f"— client will rebuild on next API call", flush=True)
+        print(f"[BINANCE] Environment changed: testnet {st.session_state.testnet} → {testnet_tog} "
+              f"— dropping cached client", flush=True)
         st.session_state.testnet = testnet_tog
-        st.session_state.client  = None   # force fresh build with new endpoint
+        st.session_state.client  = None
     st.session_state.testnet = testnet_tog
     if not testnet_tog:
-        st.warning("⚠️ MAINNET — real money at risk! Double-check before trading.")
+        st.warning("⚠️ MAINNET selected — uses **real money**. Use a key from **binance.com**.")
     else:
-        st.info("Testnet mode — get keys at testnet.binance.vision")
+        st.info("Testnet selected — uses **fake money**. Use a key from **testnet.binance.vision**.")
 
     if st.session_state.connected and _cl():
         _conn_c = _cl()
