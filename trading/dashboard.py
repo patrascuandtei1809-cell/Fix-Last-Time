@@ -1566,7 +1566,6 @@ with st.container():
         tb1, tb2, tb3, tb4, tb5, tb6 = st.columns([4, 1, 1, 1, 1, 1])
         with tb1:
             mode_badge = '<span class="cbadge red">⚡ LIVE</span>'
-            src_note = "live • public API" if chart_source == "public" else "live • auth"
             # Last signal summary for chart bar
             _ls = get_bot_last_signal()
             _ls_msg = (_ls.get("message","") or "")
@@ -1592,7 +1591,6 @@ with st.container():
     {mode_badge}
     {_bot_run_badge}
     {_sig_badge}
-    <span style="font-size:10px;color:#484f58;font-weight:400;">{src_note}</span>
   </div>
 </div>
 """, unsafe_allow_html=True)
