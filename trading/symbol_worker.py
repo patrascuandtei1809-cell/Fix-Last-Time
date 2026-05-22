@@ -95,9 +95,13 @@ class SymbolWorker:
 
         signal, reason, confidence = get_signal(df, self.strategy, threshold=self.threshold)
         self._on_state(self.symbol, signal=signal, reason=reason, confidence=confidence)
+        # Concise per-symbol decision line (matches user-requested format)
+        print(f"[BOT] {self.symbol} signal={signal} reason={reason}", flush=True)
         self._log("SIGNAL", f"{tag} 📊 [{self.strategy}] → {signal} | conf={confidence} | {reason}")
 
         if signal == "HOLD":
+            # Clear block_reason — HOLD is a strategy decision, not a risk gate.
+            # The per-symbol overview card surfaces the HOLD reason via `last_reason`.
             self._on_state(self.symbol, block_reason="")
             return
 
@@ -111,7 +115,7 @@ class SymbolWorker:
             session_count          = self._session_trades,
         )
         if not ok:
-            print(f"[WORKER {self.symbol}] BLOCKED (per-symbol) {block}", flush=True)
+            print(f"[BOT] {self.symbol} blocked reason={block} (per-symbol gate)", flush=True)
             self._log("INFO", f"{tag} ⏸️ {block}")
             self._on_state(self.symbol, block_reason=block)
             self._last_block_reason = block
@@ -129,7 +133,7 @@ class SymbolWorker:
         # 6. Global gate
         ok_g, block_g = global_gate_fn(invested, self.symbol)
         if not ok_g:
-            print(f"[WORKER {self.symbol}] BLOCKED (global) {block_g}", flush=True)
+            print(f"[BOT] {self.symbol} blocked reason={block_g} (global gate)", flush=True)
             self._log("INFO", f"{tag} ⏸️ {block_g}")
             self._on_state(self.symbol, block_reason=block_g)
             return
@@ -144,9 +148,9 @@ class SymbolWorker:
             self._on_state(self.symbol, block_reason=msg)
             return
         if invested > free_usdt:
-            msg = (f"{tag} ⚠️ invest ${invested:.2f} > free USDT ${free_usdt:.2f}")
-            print(f"[WORKER {self.symbol}] BLOCKED (balance) {msg}", flush=True)
-            self._log("WARNING", msg)
+            msg = f"invest ${invested:.2f} > free USDT ${free_usdt:.2f} in Binance Spot wallet"
+            print(f"[BOT] {self.symbol} blocked reason={msg} (balance gate)", flush=True)
+            self._log("WARNING", f"{tag} ⚠️ {msg}")
             self._on_state(self.symbol, block_reason=msg)
             return
 

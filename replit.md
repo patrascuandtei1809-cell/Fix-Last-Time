@@ -64,6 +64,15 @@ LIVE-only Binance Mainnet trading dashboard. **Every BUY/SELL is a real order on
 5. Start small — set Risk per trade % to 0.5–1% and place one manual trade first to verify.
 6. Keep emergency stop ready — one click halts all bot activity.
 
+## Multi-symbol bot UX (May 2026)
+
+- Default `active_symbols` = **BTC + ETH + SOL** — the orchestrator scans all three each tick.
+- Per worker tick we print one structured line: `[BOT] <SYM> signal=<X> reason=<…>` and, when a gate blocks, `[BOT] <SYM> blocked reason=<…> (per-symbol|global|balance gate)`.
+- Dashboard renders a **per-symbol overview** strip under the main bot status bar: signal · last check · last order · block reason. Always visible while bot is ON.
+- When bot is ON but no successful order in the last 5 min, a yellow **"⏳ BOT ACTIVE BUT WAITING › …"** banner explains *why* (top 3 block reasons across active symbols).
+- `EMA Crossover` is strict (4 filters must align) — sidebar warns the user and points them to `Price Movement` as **scalping mode** (lower threshold = more trades). Threshold slider already exposed.
+- Balance/PnL are LIVE Binance Spot wallet only. After BUY: USDT free decreases, base asset free increases. After SELL: USDT free increases (or decreases at a loss). Bot never holds funds.
+
 ## User preferences
 
 - Dark professional UI (GitHub dark color scheme)

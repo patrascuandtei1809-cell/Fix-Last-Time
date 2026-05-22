@@ -23,7 +23,7 @@ from bot import (
     add_trade, close_trade, reset_all_data, clear_activity, log_activity,
     get_shared_df, get_shared_price, get_shared_updated_at, get_shared_last_tick,
     get_bot_session_trades, get_bot_last_signal, get_bot_signal_meta,
-    get_bot_diagnostics, save_settings,
+    get_bot_diagnostics, save_settings, get_all_symbol_state,
 )
 from strategy import get_indicators
 from risk import RiskManager, RiskSettings, GlobalRiskSettings, GlobalRiskManager
@@ -325,7 +325,7 @@ def _init():
         "api_key":          "",
         "api_secret":       "",
         "symbol":           "BTCUSDT",   # currently-viewed symbol (chart, manual trade)
-        "active_symbols":   ["BTCUSDT"], # symbols the bot trades on (max 3)
+        "active_symbols":   ["BTCUSDT", "ETHUSDT", "SOLUSDT"], # symbols the bot trades on (max 3)
         "per_symbol_risk":  {},          # {symbol: RiskSettings} — overrides global risk
         "global_risk":      None,        # GlobalRiskSettings (built lazily below)
         "strategy":         "EMA Crossover",
@@ -1012,6 +1012,111 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# ── Multi-symbol bot overview + "BOT ACTIVE BUT WAITING" banner ──────────────
+# Shows per-symbol signal / last check / last order / block reason so the user
+# can see at a glance WHY each enabled symbol isn't trading. Always rendered
+# (with placeholders) when bot is ON, so an idle bot is never silently idle.
+if bot_running:
+    _all_state = get_all_symbol_state() or {}
+    _active    = list(st.session_state.active_symbols or [])
+    # Ensure every active symbol has a row, even before its first tick
+    for _s in _active:
+        _all_state.setdefault(_s, {})
+
+    # Compute "WAITING" banner: bot is ON but no successful order recently.
+    # Threshold scales with check_every so a slow tick (e.g. 300s) doesn't
+    # falsely trigger the banner; minimum 5 min, otherwise 2× the tick.
+    _now = datetime.now()
+    _wait_thresh = max(300, int(st.session_state.check_every) * 2)
+    _recent_order = False
+    _waiting_reasons: list[str] = []
+    for _s in _active:
+        _d   = get_bot_diagnostics(symbol=_s) or {}
+        _stx = _all_state.get(_s, {})
+        _lo_at = _d.get("last_order_at")
+        if _lo_at and (_now - _lo_at).total_seconds() < _wait_thresh:
+            _lo = _d.get("last_order") or {}
+            if _lo.get("ok"):
+                _recent_order = True
+        _br  = (_d.get("block_reason") or "").strip()
+        _sig = (_stx.get("signal") or "").upper()
+        if _br:
+            _waiting_reasons.append(f"{_s}: {_br}")
+        elif _sig == "HOLD":
+            _waiting_reasons.append(f"{_s}: HOLD — {_stx.get('last_reason','no signal yet')}")
+
+    if not _recent_order:
+        _msg = " · ".join(_waiting_reasons[:3]) if _waiting_reasons \
+               else "waiting for first signal across all enabled symbols"
+        st.markdown(
+            f'<div style="padding:8px 20px;background:#1e1a0a;border-bottom:1px solid #e3b34166;'
+            f'font-size:12px;color:#e3b341;font-family:\'JetBrains Mono\',monospace;font-weight:700;">'
+            f'⏳ BOT ACTIVE BUT WAITING › <span style="color:#f0d169;font-weight:600;">{_msg}</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    # Per-symbol cards: signal · last check · last order · block reason
+    _cards = ""
+    for _s in _active:
+        _st   = _all_state.get(_s, {})
+        _d    = get_bot_diagnostics(symbol=_s) or {}
+        _sig  = (_st.get("signal") or "—").upper()
+        _sc   = {"BUY": "#26a69a", "SELL": "#ef5350", "HOLD": "#e3b341"}.get(_sig, "#6e7681")
+        _upd  = _st.get("updated_at")
+        _lo_at = _d.get("last_order_at")
+        _lo    = _d.get("last_order") or {}
+        _br    = (_d.get("block_reason") or "").strip()
+
+        def _ago(dt):
+            if not dt:
+                return "never"
+            sec = int((_now - dt).total_seconds())
+            if sec < 60:  return f"{sec}s ago"
+            if sec < 3600: return f"{sec//60}m ago"
+            return f"{sec//3600}h ago"
+
+        _last_check_s = _ago(_upd)
+        if _lo_at and _lo.get("ok"):
+            _last_order_s = f'{_lo.get("side","?")} @ ${(_lo.get("price") or 0):.4f} · {_ago(_lo_at)}'
+            _lo_col = "#7ce0c2"
+        elif _lo_at:
+            _last_order_s = f'FAILED · {_ago(_lo_at)}'
+            _lo_col = "#ffb4b0"
+        else:
+            _last_order_s = "no orders yet"
+            _lo_col = "#6e7681"
+        # When there's no hard block, surface the HOLD reason so the user
+        # always sees WHY the symbol isn't trading.
+        if _br:
+            _block_s, _block_col = _br, "#ffb4b0"
+        elif _sig == "HOLD":
+            _block_s = _st.get("last_reason") or "waiting for signal"
+            _block_col = "#e3b341"
+        else:
+            _block_s, _block_col = "—", "#6e7681"
+
+        _cards += (
+            f'<div style="flex:1 1 0;min-width:220px;background:#0d1117;border:1px solid #1e2736;'
+            f'border-radius:8px;padding:10px 12px;">'
+            f'  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+            f'    <span style="font-size:12px;font-weight:800;color:#f0f6fc;font-family:\'JetBrains Mono\',monospace;">{_s.replace("USDT","")}</span>'
+            f'    <span style="font-size:11px;font-weight:800;color:{_sc};font-family:\'JetBrains Mono\',monospace;">{_sig}</span>'
+            f'  </div>'
+            f'  <div style="font-size:10px;color:#8b949e;line-height:1.55;">'
+            f'    <div><span style="color:#484f58;">LAST CHECK</span> <span style="color:#c9d1d9;font-family:\'JetBrains Mono\',monospace;">{_last_check_s}</span></div>'
+            f'    <div><span style="color:#484f58;">LAST ORDER</span> <span style="color:{_lo_col};font-family:\'JetBrains Mono\',monospace;">{_last_order_s}</span></div>'
+            f'    <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{_block_s}"><span style="color:#484f58;">BLOCK</span> <span style="color:{_block_col};font-family:\'JetBrains Mono\',monospace;">{_block_s}</span></div>'
+            f'  </div>'
+            f'</div>'
+        )
+    if _cards:
+        st.markdown(
+            f'<div style="display:flex;gap:10px;flex-wrap:wrap;padding:10px 20px;background:#0a0d12;border-bottom:1px solid #1e2736;">'
+            f'{_cards}</div>',
+            unsafe_allow_html=True,
+        )
+
 # ─────────────────────────────────────────────────────────────────────────────
 # SIDEBAR
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1142,7 +1247,8 @@ with st.sidebar:
 
     # Active symbols — the bot trades all of these (max 3)
     _act_default = [s for s in st.session_state.active_symbols if s in SYMBOLS] \
-                   or ["BTCUSDT"]
+                   or ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+    _act_default = _act_default[:3]
     act_sel = st.multiselect(
         "Active symbols (bot)", SYMBOLS,
         default=_act_default,
@@ -1172,6 +1278,12 @@ with st.sidebar:
                               index=STRATEGIES.index(st.session_state.strategy)
                               if st.session_state.strategy in STRATEGIES else 0)
     st.session_state.strategy = strat_sel
+    if strat_sel == "EMA Crossover":
+        st.caption("⚠️ EMA Crossover is strict — requires a fresh cross + RSI + trend + volatility all to align. "
+                   "Switch to **Price Movement** below for active scalping.")
+    elif strat_sel == "Price Movement":
+        st.caption("⚡ Scalping mode — triggers on every price move ≥ threshold % below. "
+                   "Lower threshold = more trades.")
 
     st.markdown('<hr class="s-div"/>', unsafe_allow_html=True)
 
