@@ -1,0 +1,120 @@
+PROMPT:
+
+I want you to upgrade this trading bot to production-ready level. Fix ALL logic, risk management, and UI issues. Do NOT change structure randomly — improve intelligently.
+
+🔴 CRITICAL FIXES
+FIX duplicate UI rendering (dashboard appears twice when scrolling)
+
+Ensure Streamlit layout is rendered once
+
+Check for repeated function calls or multiple st.container() loops
+
+🟠 RISK MANAGEMENT (MANDATORY)
+Implement strict controls:
+
+Max 2 open trades at the same time
+
+Max 1 trade per symbol
+
+Max daily loss = 5% → STOP BOT if hit
+
+Per trade risk = 1–2% of balance
+
+Prevent opening new trades if already at max
+
+🟡 STRATEGY UPGRADE (VERY IMPORTANT)
+Current EMA crossover is too weak → upgrade it:
+
+Entry BUY only if:
+
+EMA fast crosses above EMA slow
+
+RSI > 50
+
+Price above EMA trend (higher timeframe confirmation)
+
+Volatility > minimum threshold
+
+Entry SELL only if:
+
+EMA fast crosses below EMA slow
+
+RSI < 50
+
+Price below trend
+
+Volatility confirmed
+
+Add:
+
+Cooldown between trades (e.g. 2–3 candles)
+
+Avoid multiple entries in same direction
+
+🟢 TRADE CONTROL
+Prevent stacking trades (no 10 BUY in a row)
+
+Add last_trade_direction
+
+Add cooldown_timer
+
+🔵 EQUITY + PNL (VERIFY + IMPROVE)
+Keep current realized + unrealized logic
+
+Ensure updates every refresh
+
+Add:
+
+floating pnl per symbol
+
+total exposure %
+
+🟣 BOT INTELLIGENCE PANEL
+Add visible info:
+
+WHY signal triggered:
+Example:
+"BUY because EMA cross + RSI 56 + trend up"
+
+Confidence score (0–100)
+
+🟤 UI FIXES
+Remove duplicate screen rendering
+
+Keep glass/neon style
+
+Improve readability:
+
+clearer profit/loss colors
+
+highlight active trades
+
+reduce clutter
+
+⚫ SAFETY BEFORE LIVE
+Keep LIVE LOCK until:
+
+at least 3 paper trades CLOSED
+
+Add warning before enabling real trading
+
+⚙️ CLEAN CODE
+No duplicated logic
+
+No unnecessary loops
+
+Optimize performance for refresh
+
+FINAL GOAL
+Make this bot:
+
+SAFE
+
+CONTROLLED
+
+UNDERSTANDABLE
+
+READY for real Binance trading
+
+Do not break existing functionality — only improve.
+

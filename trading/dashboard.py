@@ -22,7 +22,7 @@ from bot import (
     load_trades, load_activity, get_open_trades,
     add_trade, close_trade, reset_all_data, clear_activity, log_activity,
     get_shared_df, get_shared_price, get_shared_updated_at, get_shared_last_tick,
-    get_bot_session_trades, get_bot_last_signal, force_paper_trade,
+    get_bot_session_trades, get_bot_last_signal, get_bot_signal_meta, force_paper_trade,
 )
 from strategy import get_indicators
 from risk import RiskManager, RiskSettings
@@ -735,14 +735,14 @@ for _s in SYMBOLS:
 st.markdown(f'<div class="mkt-strip">{_tiles_html}</div>', unsafe_allow_html=True)
 
 # ── Paper-verification gate ───────────────────────────────────────────────────
-# LIVE trading is locked until ≥1 paper trade has been opened AND closed.
+# LIVE trading is locked until ≥3 paper trades have been opened AND closed.
 def paper_verified() -> tuple[bool, int, int]:
     """Returns (verified, paper_open_count, paper_closed_count)."""
     _trs = load_trades()
     _p   = [t for t in _trs if t.get("paper") is True]
     _po  = sum(1 for t in _p if t.get("status") == "open")
     _pc  = sum(1 for t in _p if t.get("status") == "closed")
-    return (_pc >= 1, _po, _pc)
+    return (_pc >= 3, _po, _pc)   # require 3 closed paper trades before LIVE unlock
 
 
 # ── Verification Panel (always visible in main area) ──────────────────────────
@@ -772,19 +772,28 @@ else:
         f'</div>'
     )
 
-# Right: bot status + last signal + last check
-_sig_entry = get_bot_last_signal()
-_sig_msg   = (_sig_entry.get("message","") or "") if _sig_entry else ""
-# Parse signal direction from message ("→ BUY", "→ SELL", "→ HOLD")
-_sig_dir = "—"
-for _d in ("BUY", "SELL", "HOLD"):
-    if f"→ {_d}" in _sig_msg:
-        _sig_dir = _d
-        break
+# Right: bot status + last signal + confidence + last check
+# Prefer the structured meta from shared state (set by every bot tick);
+# fall back to log-message parsing if the bot hasn't ticked yet this process.
+_sig_meta = get_bot_signal_meta()
+_sig_dir  = _sig_meta.get("signal") or "—"
+_sig_conf = int(_sig_meta.get("confidence") or 0)
+_sig_reason = (_sig_meta.get("reason") or "")[:110]
+if _sig_dir == "—":
+    _sig_entry = get_bot_last_signal()
+    _sig_msg   = (_sig_entry.get("message","") or "") if _sig_entry else ""
+    for _d in ("BUY", "SELL", "HOLD"):
+        if f"→ {_d}" in _sig_msg:
+            _sig_dir = _d
+            break
+    if not _sig_reason and "|" in _sig_msg:
+        _sig_reason = _sig_msg.split("|", 1)[1].strip()[:110]
 _sig_col_map = {"BUY":"#26a69a","SELL":"#ef5350","HOLD":"#6e7681","—":"#484f58"}
-_sig_col = _sig_col_map[_sig_dir]
-_sig_reason = _sig_msg.split("|", 1)[1].strip() if "|" in _sig_msg else _sig_msg
-_sig_reason = _sig_reason[:90]
+_sig_col = _sig_col_map.get(_sig_dir, "#484f58")
+# Confidence bar colour: green >=70, amber 40-69, gray <40
+if _sig_conf >= 70:   _conf_col = "#26a69a"
+elif _sig_conf >= 40: _conf_col = "#e3b341"
+else:                 _conf_col = "#6e7681"
 
 # Last bot check time (London) + seconds elapsed
 _last_tick = get_shared_last_tick()
@@ -822,6 +831,13 @@ _bot_status_html = (
     f'<div style="display:flex;align-items:center;gap:6px;">'
     f'<span style="font-size:10px;color:#484f58;">SIGNAL</span>'
     f'<span style="font-size:11px;font-weight:800;color:{_sig_col};font-family:\'JetBrains Mono\',monospace;">{_sig_dir}</span>'
+    f'</div>'
+    f'<div style="display:flex;align-items:center;gap:6px;">'
+    f'<span style="font-size:10px;color:#484f58;">CONFIDENCE</span>'
+    f'<span style="display:inline-block;width:60px;height:6px;background:#1e2736;border-radius:3px;overflow:hidden;vertical-align:middle;">'
+    f'<span style="display:block;width:{max(0,min(100,_sig_conf))}%;height:100%;background:{_conf_col};"></span>'
+    f'</span>'
+    f'<span style="font-size:11px;font-weight:700;color:{_conf_col};font-family:\'JetBrains Mono\',monospace;">{_sig_conf}</span>'
     f'</div>'
     f'<div style="display:flex;align-items:center;gap:6px;">'
     f'<span style="font-size:10px;color:#484f58;">LAST CHECK</span>'
@@ -933,9 +949,9 @@ with st.sidebar:
     if not _pv_ok_sb:
         st.session_state.paper_mode = True
         paper_tog = st.toggle(
-            "Paper mode (LIVE locked until 1 paper trade closes)",
+            "Paper mode (LIVE locked until 3 paper trades close)",
             value=True, disabled=True,
-            help=f"Close ≥1 paper trade to unlock LIVE. Open: {_pv_open_sb} · Closed: {_pv_closed_sb}",
+            help=f"Close ≥3 paper trades to unlock LIVE. Open: {_pv_open_sb} · Closed: {_pv_closed_sb}",
         )
     else:
         paper_tog = st.toggle("Paper mode (no real orders)", value=st.session_state.paper_mode)
@@ -956,7 +972,7 @@ with st.sidebar:
             if c is None and not paper_tog:
                 st.error("Connect to Binance first — live trading requires API keys.")
             elif not _eff_paper and not paper_verified()[0]:
-                st.error("🔒 LIVE trading locked — close ≥1 paper trade first to unlock LIVE.")
+                st.error("🔒 LIVE trading locked — close ≥3 paper trades first to unlock LIVE.")
                 st.session_state.paper_mode = True
                 st.rerun()
             else:
@@ -971,6 +987,7 @@ with st.sidebar:
                     paper_mode=_eff_paper,
                     threshold=thr_val / 100,
                 )
+                b._initial_balance = st.session_state.initial_balance
                 b.start()
                 if c is None:
                     st.info("🔓 Running in paper mode with public Binance data — no API key needed.")
@@ -1231,7 +1248,7 @@ with st.container():
   <div class="card">
     <div class="c-lbl">Open Positions</div>
     <div class="c-val">{len(open_trades)}</div>
-    <div class="c-sub">Unrealized {_fmt_pnl(unrealized_pnl)} · Win {win_rate:.1f}%</div>
+    <div class="c-sub">Exposure {(sum((t.get('invested') or 0) for t in open_trades)/equity*100 if equity else 0):.1f}% · U {_fmt_pnl(unrealized_pnl)} · Win {win_rate:.1f}%</div>
   </div>
   <div class="card">
     <div class="c-lbl">Daily P&L</div>
@@ -1400,6 +1417,7 @@ with st.container():
                             paper_mode=True if c is None else st.session_state.paper_mode,
                             threshold=st.session_state.threshold / 100,
                         )
+                        b._initial_balance = st.session_state.initial_balance
                         b.start()
                 st.rerun()
         with tb6:
@@ -1499,7 +1517,7 @@ with st.container():
                     # LIVE mode → stage confirmation; paper/testnet → execute immediately
                     if not st.session_state.paper_mode and not st.session_state.testnet:
                         if not paper_verified()[0]:
-                            st.error("🔒 LIVE trading locked — close ≥1 paper trade first.")
+                            st.error("🔒 LIVE trading locked — close ≥3 paper trades first.")
                             st.session_state.paper_mode = True
                             st.rerun()
                         st.session_state.pending_live_trade = {

@@ -29,9 +29,12 @@ _bot_lock = threading.Lock()
 # ── Shared live state (bot writes → dashboard reads every rerun) ───────────────
 _state_lock = threading.Lock()
 _shared: Dict = {
-    "df":         None,   # pd.DataFrame with indicators
-    "price":      None,   # float
-    "updated_at": None,   # datetime
+    "df":           None,   # pd.DataFrame with indicators
+    "price":        None,   # float
+    "updated_at":   None,   # datetime
+    "last_signal":  None,   # str  "BUY"/"SELL"/"HOLD"
+    "last_reason":  None,   # str
+    "last_confidence": 0,   # int  0..100
 }
 
 def get_shared_df():
@@ -46,12 +49,25 @@ def get_shared_updated_at():
     with _state_lock:
         return _shared.get("updated_at")
 
-def _set_shared(df=None, price=None, tick=False):
+def _set_shared(df=None, price=None, tick=False, signal=None, reason=None, confidence=None):
     with _state_lock:
-        if df    is not None: _shared["df"]    = df
-        if price is not None: _shared["price"] = price
+        if df         is not None: _shared["df"]    = df
+        if price      is not None: _shared["price"] = price
+        if signal     is not None: _shared["last_signal"]     = signal
+        if reason     is not None: _shared["last_reason"]     = reason
+        if confidence is not None: _shared["last_confidence"] = int(confidence)
         _shared["updated_at"] = datetime.now()
         if tick: _shared["last_tick_at"] = datetime.now()
+
+
+def get_bot_signal_meta() -> dict:
+    """Latest structured signal info from the bot (signal/reason/confidence)."""
+    with _state_lock:
+        return {
+            "signal":     _shared.get("last_signal"),
+            "reason":     _shared.get("last_reason"),
+            "confidence": int(_shared.get("last_confidence") or 0),
+        }
 
 def get_shared_last_tick():
     with _state_lock:
@@ -212,6 +228,9 @@ class TradingBot:
         self._thread:         Optional[threading.Thread] = None
         self._running:        bool = False
         self._session_trades: int  = 0   # trades opened this session
+        self._last_trade_at:  Optional[datetime] = None
+        self._last_trade_dir: Optional[str] = None
+        self._initial_balance: float = 1000.0   # used for daily-loss % calc; updated externally
 
     # ── Control ───────────────────────────────────────────────────────────────
 
@@ -322,13 +341,7 @@ class TradingBot:
                 self._close(trade, price, tp_msg)
                 return
 
-        # ── 3. Can we open a new trade? ───────────────────────────────────────
-        can_trade, block_reason = self.risk.can_open_trade(len(open_trades), self._session_trades)
-        if not can_trade:
-            log_activity("INFO", f"⏸️ {block_reason}")
-            return
-
-        # ── 4. Compute signal from klines ─────────────────────────────────────
+        # ── 3. Compute signal from klines (BEFORE gating, so we can show it) ──
         df = self._get_klines()
         if df is None:
             return
@@ -340,11 +353,42 @@ class TradingBot:
         except Exception:
             _set_shared(df=df)
 
-        signal, reason = get_signal(df, self.strategy, threshold=self.threshold)
-        log_activity("SIGNAL", f"📊 [{self.strategy}] → {signal} | {reason}")
+        signal, reason, confidence = get_signal(df, self.strategy, threshold=self.threshold)
+        _set_shared(signal=signal, reason=reason, confidence=confidence)
+        log_activity("SIGNAL", f"📊 [{self.strategy}] → {signal} | conf={confidence} | {reason}")
 
         if signal == "HOLD":
             log_activity("INFO", "⏭️ HOLD — no trade opened")
+            return
+
+        # ── 4. Daily loss circuit breaker + gate ──────────────────────────────
+        # Compute today's realized PnL % from closed bot trades
+        _today = datetime.now().strftime("%Y-%m-%d")
+        _today_pnl = sum(
+            (t.get("profit_loss") or 0)
+            for t in load_trades()
+            if t.get("type") == "bot" and t.get("status") == "closed"
+            and (t.get("close_time") or "").startswith(_today)
+        )
+        _daily_pct = (_today_pnl / self._initial_balance * 100) if self._initial_balance else 0.0
+
+        can_trade, block_reason = self.risk.can_open_trade(
+            open_trades    = open_trades,
+            symbol         = self.symbol,
+            new_signal     = signal,
+            last_trade_at  = self._last_trade_at,
+            last_trade_dir = self._last_trade_dir,
+            daily_loss_pct = _daily_pct,
+            session_count  = self._session_trades,
+        )
+        if not can_trade:
+            log_activity("INFO", f"⏸️ {block_reason}")
+            # Auto-stop on daily-loss breaker
+            if "Daily loss limit" in block_reason:
+                log_activity("WARNING", "🛑 Auto-stopping bot — daily loss limit hit")
+                tg.bot_event("auto-stopped", f"Daily loss {_daily_pct:+.2f}% ≥ "
+                                             f"{self.risk.settings.max_daily_loss_pct}%")
+                self._running = False
             return
 
         # ── 5. Size the position (FIXED USDT — never uses full balance) ─────────
@@ -381,6 +425,9 @@ class TradingBot:
                 f"${invested:.2f} invested | SL ${sl_p:.4f} | TP ${tp_p:.4f}",
             )
         tg.trade_open(self.symbol, signal, price, invested, reason, mode=_mode_tag)
+        # Update trade-control state (session_trades is incremented after add_trade below)
+        self._last_trade_at  = datetime.now()
+        self._last_trade_dir = signal
 
         # ── 7. Record trade ───────────────────────────────────────────────────
         trade = {
