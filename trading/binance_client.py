@@ -29,8 +29,10 @@ def public_klines(symbol: str, interval: str = "5m", limit: int = 200,
         "close_time", "quote_volume", "trades",
         "taker_buy_base", "taker_buy_quote", "ignore",
     ])
-    df["open_time"]  = pd.to_datetime(df["open_time"],  unit="ms")
-    df["close_time"] = pd.to_datetime(df["close_time"], unit="ms")
+    df["open_time"]  = (pd.to_datetime(df["open_time"],  unit="ms", utc=True)
+                          .dt.tz_convert("Europe/London").dt.tz_localize(None))
+    df["close_time"] = (pd.to_datetime(df["close_time"], unit="ms", utc=True)
+                          .dt.tz_convert("Europe/London").dt.tz_localize(None))
     for col in ["open", "high", "low", "close", "volume"]:
         df[col] = df[col].astype(float)
     return df
@@ -100,8 +102,10 @@ class BinanceClient:
             "close_time", "quote_volume", "trades",
             "taker_buy_base", "taker_buy_quote", "ignore",
         ])
-        df["open_time"]  = pd.to_datetime(df["open_time"],  unit="ms")
-        df["close_time"] = pd.to_datetime(df["close_time"], unit="ms")
+        df["open_time"]  = (pd.to_datetime(df["open_time"],  unit="ms", utc=True)
+                              .dt.tz_convert("Europe/London").dt.tz_localize(None))
+        df["close_time"] = (pd.to_datetime(df["close_time"], unit="ms", utc=True)
+                              .dt.tz_convert("Europe/London").dt.tz_localize(None))
         for col in ["open", "high", "low", "close", "volume"]:
             df[col] = df[col].astype(float)
         return df

@@ -213,6 +213,56 @@ section[data-testid="stSidebar"] * { color: #c9d1d9 !important; }
 ::-webkit-scrollbar-track { background:transparent; }
 ::-webkit-scrollbar-thumb { background:#30363d; border-radius:2px; }
 
+/* ── Modern crypto/trading polish (neon + glass) ── */
+.at-logo {
+    font-size: 19px; font-weight: 800; letter-spacing: -0.4px;
+    background: linear-gradient(135deg, #f0f6fc 0%, #79b0ff 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+.at-logo span.acc {
+    background: linear-gradient(135deg, #2962ff 0%, #79b0ff 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    color: transparent;
+}
+.card {
+    background: linear-gradient(180deg, rgba(22,27,34,0.85) 0%, rgba(13,17,23,0.95) 100%);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.02) inset;
+}
+.card:hover {
+    border-color: #2962ff66;
+    box-shadow: 0 0 0 1px rgba(41,98,255,0.18), 0 4px 18px -8px rgba(41,98,255,0.35);
+}
+.c-val.up { text-shadow: 0 0 14px rgba(38,166,154,0.45); }
+.c-val.dn { text-shadow: 0 0 14px rgba(239,83,80,0.45); }
+.pill { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.p-green { box-shadow: 0 0 12px -2px rgba(38,166,154,0.30); }
+.p-red   { box-shadow: 0 0 12px -2px rgba(239,83,80,0.30); }
+.p-gold  { box-shadow: 0 0 12px -2px rgba(227,179,65,0.25); }
+.cbadge.green { box-shadow: 0 0 10px -3px rgba(63,185,80,0.45); }
+.cbadge.red   { box-shadow: 0 0 10px -3px rgba(239,83,80,0.45); }
+.stButton>button {
+    transition: transform .08s ease, box-shadow .15s ease, border-color .15s ease !important;
+}
+.stButton>button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px -6px rgba(41,98,255,0.55) !important;
+    border-color: #2962ff88 !important;
+}
+.stButton>button:active { transform: translateY(0); }
+.mkt-tile.mkt-active {
+    box-shadow: 0 0 0 1px #2962ff88, 0 0 18px -6px rgba(41,98,255,0.5);
+}
+.chart-title span:first-child {
+    font-size: 14px; letter-spacing: -0.2px;
+}
+.sec-lbl {
+    background: linear-gradient(90deg, #6e7681 0%, #484f58 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
 /* ── Market overview strip ── */
 .mkt-strip {
     display:flex; gap:6px; overflow-x:auto; padding:8px 16px;
