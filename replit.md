@@ -18,21 +18,39 @@ A professional real-time crypto trading platform with Binance integration, multi
 ## Where things live
 
 - `trading/dashboard.py` — main Streamlit app (UI, controls, chart, trade table, log)
-- `trading/bot.py` — background bot thread singleton + all trade/activity persistence
+- `trading/bot.py` — multi-symbol orchestrator: holds dict of SymbolWorker, one daemon thread, all trade/activity persistence
+- `trading/symbol_worker.py` — per-symbol tick logic (signal → risk gate → exchange order)
+- `trading/exchanges/{base,binance,registry}.py` — Exchange ABC + BinanceExchange + registry stub for future smart routing
 - `trading/strategy.py` — EMA Crossover, Price Movement, Momentum (RSI) strategies
-- `trading/risk.py` — stop loss, take profit, position sizing, emergency stop
-- `trading/binance_client.py` — Binance API wrapper (testnet + live)
-- `trading/data/trades.json` — persisted trade history
-- `trading/data/activity.json` — persisted activity log
+- `trading/risk.py` — `SymbolRiskSettings`/`RiskManager` (per-symbol) + `GlobalRiskSettings`/`GlobalRiskManager` (account-wide caps)
+- `trading/binance_client.py` — Binance API wrapper (testnet + live), wrapped by `BinanceExchange`
+- `trading/data/trades/<exchange>_<symbol>.json` — per-symbol trade history (one file per symbol+exchange)
+- `trading/data/trades.json.bak` — archived legacy single-symbol trade file (auto-renamed on first boot)
+- `trading/data/activity.json` — persisted activity log (shared across symbols)
+- `trading/data/settings.json` — persisted user settings (incl. `active_symbols`, `per_symbol_risk`, `global_risk`)
 - `trading/.streamlit/config.toml` — dark theme + server config
 
 ## Architecture decisions
 
-- Bot runs as a daemon thread using a module-level global (`_bot`) — survives Streamlit script reruns
-- All trade/activity data stored in JSON files so state persists across sessions
-- `type` field is always stored on every trade; dashboard uses `.get("type", "manual")` defensively
-- Manual trades and bot trades have distinct marker colors/icons on the chart
-- Stochastic Oscillator (%K/%D) with overbought/oversold dashed lines below the candlestick chart
+- **Multi-symbol** (max 3 — e.g. BTC + ETH + SOL). Each symbol gets a `SymbolWorker` with its own `RiskManager`, last_trade state, session counter.
+- **Exchange abstraction.** All trading goes through the `Exchange` interface (`get_price`, `place_buy_order`, ...). Today only `BinanceExchange` exists; the `exchanges.registry` has a `best_exchange_for()` stub for future smart routing.
+- **Two-tier risk.** Per-symbol risk (size, SL, TP, max open) AND a `GlobalRiskManager` enforcing total USDT exposure, max % in one symbol, total open trades, and daily-loss auto-stop across all symbols. Global gate runs BEFORE every bot order.
+- **One orchestrator thread** iterates all workers per tick (default 30s) — survives Streamlit reruns via module-level `_bot` singleton.
+- **Per-symbol persistence** at `data/trades/<exchange>_<symbol>.json`. `add_trade()` routes by `trade["coin"]` + `trade["exchange"]`. `close_trade()` scans all files to find the id. `load_trades(symbol=...)` filters across files.
+- **`type` field** is always stored on every trade; dashboard uses `.get("type", "manual")` defensively.
+- **Manual trades and bot trades** have distinct marker colors/icons on the chart.
+- **Stochastic Oscillator** (%K/%D) with overbought/oversold dashed lines below the candlestick chart.
+
+## Adding a new exchange
+
+1. Create `trading/exchanges/<name>.py` subclassing `Exchange` from `base.py`.
+2. Implement: `get_price`, `get_klines`, `get_balance`, `place_buy_order`, `place_sell_order`, `get_positions`, `get_fees`, `round_quantity`.
+3. In the dashboard, instantiate it and pass `exchange=...` to `bot_module.create_bot(...)`.
+4. The registry will hold it automatically; smart routing comes later.
+
+## Data migration (single → multi)
+
+- On first boot of the refactored bot, `data/trades.json` is automatically renamed to `trades.json.bak` (user chose archive-not-migrate). New per-symbol files start fresh under `data/trades/`.
 
 ## How to run on DigitalOcean
 

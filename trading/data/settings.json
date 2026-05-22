@@ -1,6 +1,9 @@
 {
   "paper_mode": true,
   "symbol": "BTCUSDT",
+  "active_symbols": [
+    "BTCUSDT"
+  ],
   "strategy": "EMA Crossover",
   "interval": "5m",
   "check_every": 30,
@@ -12,6 +15,13 @@
   "tg_enabled": false,
   "tg_token": "",
   "tg_chat_id": "",
+  "global_risk": {
+    "max_total_exposure_usdt": 300.0,
+    "max_exposure_per_symbol_pct": 50,
+    "max_open_trades_total": 5,
+    "max_daily_loss_pct": 5.0
+  },
+  "per_symbol_risk": {},
   "risk": {
     "invest_per_trade": 50.0,
     "max_trade_usdt": 100.0,

@@ -1,12 +1,15 @@
 """
-TradingBot — background daemon thread, survives Streamlit reruns.
+TradingBot — multi-symbol, multi-exchange orchestrator.
 
-Key design:
-  - Module-level global `_bot` is the singleton. Streamlit imports this module
-    once per process; the global persists across script reruns.
-  - Supports authenticated BinanceClient OR public-API-only (paper mode, no key).
-  - One thread, no duplicates. start() is a no-op if the thread is alive.
-  - All state (trades, activity) written to JSON on disk so it survives restarts.
+Design:
+  • Module-level `_bot` singleton survives Streamlit reruns.
+  • Holds a dict of SymbolWorker instances keyed by f"{exchange}:{symbol}".
+  • Single daemon thread iterates enabled workers each tick.
+  • Global risk gate (GlobalRiskManager) runs BEFORE each worker tick.
+  • Per-symbol trade persistence under data/trades/<exchange>_<symbol>.json.
+  • All shared dashboard state is per-symbol; getters take an optional
+    `symbol` arg and fall back to the first registered symbol for legacy
+    no-arg calls from the existing dashboard code.
 """
 
 import threading
@@ -14,99 +17,166 @@ import time
 import json
 import os
 import uuid
+import glob
 from datetime import datetime
 from typing import Optional, List, Dict
 
-from strategy import get_signal
-from risk import RiskManager, RiskSettings
-from binance_client import public_klines, public_price
+from risk import RiskManager, RiskSettings, GlobalRiskManager, GlobalRiskSettings
+from exchanges.base import Exchange
+from exchanges.binance import BinanceExchange
+from exchanges import registry as ex_registry
+from symbol_worker import SymbolWorker
 import telegram_notifier as tg
 
-# ── Singleton ─────────────────────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Module-level singleton + locks
+# ─────────────────────────────────────────────────────────────────────────────
 _bot: Optional["TradingBot"] = None
 _bot_lock = threading.Lock()
 
-# ── Shared live state (bot writes → dashboard reads every rerun) ───────────────
+# ── Shared live state: dict keyed by symbol ─────────────────────────────────
 _state_lock = threading.Lock()
-_shared: Dict = {
-    "df":           None,   # pd.DataFrame with indicators
-    "price":        None,   # float
-    "updated_at":   None,   # datetime
-    "last_signal":  None,   # str  "BUY"/"SELL"/"HOLD"
-    "last_reason":  None,   # str
-    "last_confidence": 0,   # int  0..100
-}
+_shared_per_symbol: Dict[str, Dict] = {}   # symbol → {df, price, signal, ...}
+_primary_symbol: Optional[str] = None      # legacy no-arg getters fall back here
 
-def get_shared_df():
-    with _state_lock:
-        return _shared.get("df")
 
-def get_shared_price():
-    with _state_lock:
-        return _shared.get("price")
+def _ensure_sym(sym: str) -> Dict:
+    if sym not in _shared_per_symbol:
+        _shared_per_symbol[sym] = {}
+    return _shared_per_symbol[sym]
 
-def get_shared_updated_at():
-    with _state_lock:
-        return _shared.get("updated_at")
 
-def _set_shared(df=None, price=None, tick=False, signal=None, reason=None,
-                confidence=None, block_reason=None, last_order=None):
+def _resolve_sym(sym: Optional[str]) -> Optional[str]:
+    """If sym is None return primary symbol (or first available)."""
+    if sym:
+        return sym
+    if _primary_symbol and _primary_symbol in _shared_per_symbol:
+        return _primary_symbol
+    if _shared_per_symbol:
+        return next(iter(_shared_per_symbol))
+    return None
+
+
+def _set_shared_for(symbol: str, *, df=None, price=None, tick=False,
+                    signal=None, reason=None, confidence=None,
+                    block_reason=None, last_order=None):
+    """Worker callback target. Writes to _shared_per_symbol[symbol]."""
     with _state_lock:
-        if df         is not None: _shared["df"]    = df
-        if price      is not None: _shared["price"] = price
-        if signal     is not None: _shared["last_signal"]     = signal
-        if reason     is not None: _shared["last_reason"]     = reason
-        if confidence is not None: _shared["last_confidence"] = int(confidence)
+        s = _ensure_sym(symbol)
+        if df         is not None: s["df"]    = df
+        if price      is not None: s["price"] = price
+        if signal     is not None: s["last_signal"]     = signal
+        if reason     is not None: s["last_reason"]     = reason
+        if confidence is not None: s["last_confidence"] = int(confidence)
         if block_reason is not None:
-            _shared["block_reason"]    = block_reason
-            _shared["block_reason_at"] = datetime.now()
+            s["block_reason"]    = block_reason
+            s["block_reason_at"] = datetime.now()
         if last_order is not None:
-            _shared["last_order"]    = last_order
-            _shared["last_order_at"] = datetime.now()
-        _shared["updated_at"] = datetime.now()
-        if tick: _shared["last_tick_at"] = datetime.now()
+            s["last_order"]    = last_order
+            s["last_order_at"] = datetime.now()
+        s["updated_at"] = datetime.now()
+        if tick:
+            s["last_tick_at"] = datetime.now()
 
 
-def get_bot_diagnostics() -> dict:
-    """All bot decision/exec state for the dashboard to display."""
+# ── Back-compat getters (all accept optional `symbol` arg) ──────────────────
+def get_shared_df(symbol: Optional[str] = None):
     with _state_lock:
+        sym = _resolve_sym(symbol)
+        return _shared_per_symbol.get(sym, {}).get("df") if sym else None
+
+
+def get_shared_price(symbol: Optional[str] = None):
+    with _state_lock:
+        sym = _resolve_sym(symbol)
+        return _shared_per_symbol.get(sym, {}).get("price") if sym else None
+
+
+def get_shared_updated_at(symbol: Optional[str] = None):
+    with _state_lock:
+        sym = _resolve_sym(symbol)
+        return _shared_per_symbol.get(sym, {}).get("updated_at") if sym else None
+
+
+def get_shared_last_tick(symbol: Optional[str] = None):
+    with _state_lock:
+        sym = _resolve_sym(symbol)
+        return _shared_per_symbol.get(sym, {}).get("last_tick_at") if sym else None
+
+
+def get_bot_signal_meta(symbol: Optional[str] = None) -> dict:
+    with _state_lock:
+        sym = _resolve_sym(symbol)
+        s   = _shared_per_symbol.get(sym, {}) if sym else {}
         return {
-            "block_reason":    _shared.get("block_reason"),
-            "block_reason_at": _shared.get("block_reason_at"),
-            "last_order":      _shared.get("last_order"),
-            "last_order_at":   _shared.get("last_order_at"),
+            "signal":     s.get("last_signal"),
+            "reason":     s.get("last_reason"),
+            "confidence": int(s.get("last_confidence") or 0),
         }
 
 
-def get_bot_signal_meta() -> dict:
-    """Latest structured signal info from the bot (signal/reason/confidence)."""
+def get_bot_diagnostics(symbol: Optional[str] = None) -> dict:
     with _state_lock:
+        sym = _resolve_sym(symbol)
+        s   = _shared_per_symbol.get(sym, {}) if sym else {}
         return {
-            "signal":     _shared.get("last_signal"),
-            "reason":     _shared.get("last_reason"),
-            "confidence": int(_shared.get("last_confidence") or 0),
+            "block_reason":    s.get("block_reason"),
+            "block_reason_at": s.get("block_reason_at"),
+            "last_order":      s.get("last_order"),
+            "last_order_at":   s.get("last_order_at"),
         }
 
-def get_shared_last_tick():
-    with _state_lock:
-        return _shared.get("last_tick_at")
 
-# ── Data paths ────────────────────────────────────────────────────────────────
+def get_all_symbol_state() -> Dict[str, Dict]:
+    """Snapshot of every tracked symbol — for the dashboard overview strip."""
+    with _state_lock:
+        return {
+            sym: {
+                "price":      s.get("price"),
+                "signal":     s.get("last_signal"),
+                "reason":     s.get("last_reason"),
+                "confidence": s.get("last_confidence", 0),
+                "block":      s.get("block_reason") or "",
+                "updated_at": s.get("updated_at"),
+            }
+            for sym, s in _shared_per_symbol.items()
+        }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Data paths + per-symbol trade persistence
+# ─────────────────────────────────────────────────────────────────────────────
 _DIR      = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR  = os.path.join(_DIR, "data")
-os.makedirs(DATA_DIR, exist_ok=True)
+TRADES_DIR = os.path.join(DATA_DIR, "trades")
+os.makedirs(TRADES_DIR, exist_ok=True)
 
-TRADES_FILE   = os.path.join(DATA_DIR, "trades.json")
 ACTIVITY_FILE = os.path.join(DATA_DIR, "activity.json")
 SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")
+LEGACY_TRADES = os.path.join(DATA_DIR, "trades.json")
 _file_lock    = threading.Lock()
 _settings_lock = threading.Lock()
 MAX_ACTIVITY  = 500
 
 
-# ── Settings persistence (survives restarts) ──────────────────────────────────
+# ── One-time migration: archive old single-file trades.json ─────────────────
+def _archive_legacy_trades_file():
+    """User chose archive-not-migrate. Rename old trades.json → trades.json.bak."""
+    if os.path.exists(LEGACY_TRADES):
+        bak = LEGACY_TRADES + ".bak"
+        try:
+            os.replace(LEGACY_TRADES, bak)
+            print(f"[BOT] archived legacy {LEGACY_TRADES} → {bak}", flush=True)
+        except Exception as e:
+            print(f"[BOT] could not archive legacy trades: {e}", flush=True)
+
+
+_archive_legacy_trades_file()
+
+
+# ── Settings persistence ────────────────────────────────────────────────────
 def load_settings() -> dict:
-    """Load persisted user settings from disk. Returns {} if no file."""
     with _settings_lock:
         if not os.path.exists(SETTINGS_FILE):
             return {}
@@ -119,41 +189,127 @@ def load_settings() -> dict:
 
 
 def save_settings(data: dict) -> bool:
-    """Persist a dict of user settings to disk. Returns True on success."""
     with _settings_lock:
         try:
             tmp = SETTINGS_FILE + ".tmp"
             with open(tmp, "w") as f:
                 json.dump(data, f, indent=2, default=str)
             os.replace(tmp, SETTINGS_FILE)
-            print(f"[SETTINGS] saved {len(data)} keys to {SETTINGS_FILE}", flush=True)
+            print(f"[SETTINGS] saved {len(data)} keys", flush=True)
             return True
         except Exception as e:
             print(f"[SETTINGS] save failed: {e}", flush=True)
             return False
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Persistence helpers
-# ─────────────────────────────────────────────────────────────────────────────
+# ── Per-symbol trade files ──────────────────────────────────────────────────
+def _trade_file_for(exchange: str, symbol: str) -> str:
+    safe_ex = (exchange or "unknown").replace(" ", "_").replace("/", "_")
+    return os.path.join(TRADES_DIR, f"{safe_ex}_{symbol}.json")
 
-def load_trades() -> List[Dict]:
+
+def _load_trade_file(path: str) -> List[Dict]:
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path) as f:
+            return json.load(f) or []
+    except Exception:
+        return []
+
+
+def _save_trade_file(path: str, trades: List[Dict]) -> None:
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(trades, f, indent=2, default=str)
+    os.replace(tmp, path)
+
+
+def _exchange_key(trade: Dict) -> str:
+    """Map a trade dict to its on-disk exchange bucket."""
+    ex = (trade.get("exchange") or "").lower()
+    if "testnet" in ex:
+        return "binance_testnet"
+    if "binance" in ex:
+        return "binance"
+    if "paper" in ex:
+        return "paper"
+    return ex or "unknown"
+
+
+def load_trades(symbol: Optional[str] = None,
+                exchange: Optional[str] = None) -> List[Dict]:
+    """Return all trades, optionally filtered by symbol and/or exchange."""
     with _file_lock:
-        if not os.path.exists(TRADES_FILE):
-            return []
-        try:
-            with open(TRADES_FILE) as f:
-                return json.load(f)
-        except Exception:
-            return []
+        files = sorted(glob.glob(os.path.join(TRADES_DIR, "*.json")))
+        all_trades: List[Dict] = []
+        for fp in files:
+            all_trades.extend(_load_trade_file(fp))
+    if symbol:
+        all_trades = [t for t in all_trades if t.get("coin") == symbol]
+    if exchange:
+        all_trades = [t for t in all_trades if _exchange_key(t) == exchange]
+    return all_trades
 
 
 def save_trades(trades: List[Dict]):
+    """Rewrite all per-symbol files from the given full list.
+
+    Kept for back-compat with callers that load → mutate → save. Groups trades
+    by (exchange_bucket, coin) and writes one file per group.
+    """
+    grouped: Dict[str, List[Dict]] = {}
+    for t in trades:
+        key = _trade_file_for(_exchange_key(t), t.get("coin", "UNKNOWN"))
+        grouped.setdefault(key, []).append(t)
     with _file_lock:
-        with open(TRADES_FILE, "w") as f:
-            json.dump(trades, f, indent=2, default=str)
+        # Truncate any existing files that are no longer represented? Safer to
+        # leave them alone — close_trade always writes the file that owns the id.
+        for fp, items in grouped.items():
+            _save_trade_file(fp, items)
 
 
+def get_open_trades(symbol: Optional[str] = None) -> List[Dict]:
+    return [t for t in load_trades(symbol=symbol) if t.get("status") == "open"]
+
+
+def add_trade(trade: Dict) -> Dict:
+    """Append a trade to its symbol/exchange file."""
+    trade["id"] = str(uuid.uuid4())[:8]
+    path = _trade_file_for(_exchange_key(trade), trade.get("coin", "UNKNOWN"))
+    with _file_lock:
+        existing = _load_trade_file(path)
+        existing.append(trade)
+        _save_trade_file(path, existing)
+    return trade
+
+
+def close_trade(trade_id: str, exit_price: float, reason: str) -> Optional[Dict]:
+    """Find the trade across all per-symbol files and close it."""
+    with _file_lock:
+        for fp in sorted(glob.glob(os.path.join(TRADES_DIR, "*.json"))):
+            trades = _load_trade_file(fp)
+            for t in trades:
+                if t.get("id") == trade_id and t.get("status") == "open":
+                    invested = t.get("invested") or 0
+                    entry    = t["entry_price"]
+                    side     = t["side"]
+                    if side == "BUY":
+                        t["profit_loss"]     = (exit_price - entry) / entry * invested
+                        t["profit_loss_pct"] = (exit_price - entry) / entry * 100
+                    else:
+                        t["profit_loss"]     = (entry - exit_price) / entry * invested
+                        t["profit_loss_pct"] = (entry - exit_price) / entry * 100
+                    t["exit_price"]   = exit_price
+                    t["close_time"]   = datetime.now().isoformat()
+                    t["close_reason"] = reason
+                    t["status"]       = "closed"
+                    _save_trade_file(fp, trades)
+                    return t
+    return None
+
+
+# ── Activity log (global) ───────────────────────────────────────────────────
 def load_activity() -> List[Dict]:
     with _file_lock:
         if not os.path.exists(ACTIVITY_FILE):
@@ -194,95 +350,52 @@ def clear_activity():
             json.dump([], f)
 
 
-def get_open_trades() -> List[Dict]:
-    return [t for t in load_trades() if t.get("status") == "open"]
-
-
-def add_trade(trade: Dict) -> Dict:
-    trades = load_trades()
-    trade["id"] = str(uuid.uuid4())[:8]
-    trades.append(trade)
-    save_trades(trades)
-    return trade
-
-
-def close_trade(trade_id: str, exit_price: float, reason: str) -> Optional[Dict]:
-    trades = load_trades()
-    for t in trades:
-        if t.get("id") == trade_id and t.get("status") == "open":
-            invested = t.get("invested") or 0
-            entry    = t["entry_price"]
-            side     = t["side"]
-            if side == "BUY":
-                t["profit_loss"]     = (exit_price - entry) / entry * invested
-                t["profit_loss_pct"] = (exit_price - entry) / entry * 100
-            else:
-                t["profit_loss"]     = (entry - exit_price) / entry * invested
-                t["profit_loss_pct"] = (entry - exit_price) / entry * 100
-            t["exit_price"]  = exit_price
-            t["close_time"]  = datetime.now().isoformat()
-            t["close_reason"] = reason
-            t["status"]      = "closed"
-            save_trades(trades)
-            return t
-    return None
-
-
 def reset_all_data():
+    """Wipe activity + all per-symbol trade files."""
     with _file_lock:
-        for fpath in [TRADES_FILE, ACTIVITY_FILE]:
-            if os.path.exists(fpath):
-                os.remove(fpath)
+        if os.path.exists(ACTIVITY_FILE):
+            os.remove(ACTIVITY_FILE)
+        for fp in glob.glob(os.path.join(TRADES_DIR, "*.json")):
+            os.remove(fp)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TradingBot
+# Telegram dispatch helper (used by SymbolWorker callback)
 # ─────────────────────────────────────────────────────────────────────────────
+def _tg_dispatch(kind: str, *args, **kwargs):
+    try:
+        if kind == "trade_open":
+            tg.trade_open(*args, **kwargs)
+        elif kind == "trade_close":
+            tg.trade_close(*args, **kwargs)
+        elif kind == "error_alert":
+            tg.error_alert(*args, **kwargs)
+        elif kind == "bot_event":
+            tg.bot_event(*args, **kwargs)
+    except Exception as e:
+        print(f"[TG] dispatch {kind} failed: {e}", flush=True)
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TradingBot — multi-symbol orchestrator
+# ─────────────────────────────────────────────────────────────────────────────
 class TradingBot:
-    """
-    Parameters
-    ----------
-    client : BinanceClient | None
-        Authenticated client. If None the bot runs in paper-only mode using
-        the public Binance REST API for market data. No API key required.
-    symbol, strategy, risk_manager, interval, check_every, paper_mode, threshold
-        Self-explanatory trading parameters.
-    """
-
     def __init__(
         self,
-        client,                          # BinanceClient or None
-        symbol:          str,
-        strategy:        str,
-        risk_manager:    RiskManager,
-        interval:        str   = "5m",
-        check_every:     int   = 30,
-        paper_mode:      bool  = True,
-        price_threshold: float = 0.0003,
+        workers:        Dict[str, SymbolWorker],
+        global_risk:    GlobalRiskManager,
+        check_every:    int = 30,
+        initial_balance: float = 1000.0,
     ):
-        self.client      = client
-        self.symbol      = symbol
-        self.strategy    = strategy
-        self.risk        = risk_manager
-        self.interval    = interval
-        self.check_every = check_every
-        self.paper       = paper_mode
-        self.threshold   = price_threshold
+        self.workers          = workers           # key = f"{exchange}:{symbol}"
+        self.global_risk      = global_risk
+        self.check_every      = check_every
+        self._initial_balance = initial_balance
 
-        # If no authenticated client, force paper mode
-        if self.client is None:
-            self.paper = True
+        self._thread:   Optional[threading.Thread] = None
+        self._running:  bool = False
 
-        self._thread:         Optional[threading.Thread] = None
-        self._running:        bool = False
-        self._session_trades: int  = 0   # trades opened this session
-        self._last_trade_at:  Optional[datetime] = None
-        self._last_trade_dir: Optional[str] = None
-        self._initial_balance: float = 1000.0   # used for daily-loss % calc; updated externally
-
-    # ── Control ───────────────────────────────────────────────────────────────
-
+    # ── Control ──────────────────────────────────────────────────────────────
     def start(self) -> bool:
         if self._thread and self._thread.is_alive():
             log_activity("WARNING", "⚠️ Bot already running — ignoring duplicate start")
@@ -291,375 +404,255 @@ class TradingBot:
         self._thread  = threading.Thread(
             target=self._loop,
             daemon=True,
-            name=f"alphatrade-{self.symbol}",
+            name=f"alphatrade-orchestrator",
         )
         self._thread.start()
-        auth_label = "auth client" if self.client else "public API (no key)"
-        mode_label = "PAPER" if self.paper else "LIVE"
-        _invest = self.risk.get_invest_amount()
-        _cap    = self.risk.settings.max_trade_usdt
-        _msess  = self.risk.settings.max_trades_per_session
-        _sess_label = f"max {_msess}/session" if _msess > 0 else "unlimited/session"
-        log_activity(
-            "INFO",
-            f"🚀 Bot started | {self.symbol} | {self.strategy} | {mode_label} | "
-            f"Data: {auth_label} | interval={self.interval} | check={self.check_every}s | "
-            f"Invest ${_invest:.2f} USDT/trade (cap ${_cap:.2f}) | {_sess_label} | "
-            f"SL={self.risk.settings.stop_loss_pct}% | TP={self.risk.settings.take_profit_pct}%",
-        )
-        tg.bot_event(
-            "started",
-            f"{self.symbol} | {self.strategy} | {mode_label}\n"
-            f"Invest ${_invest:.2f} USDT/trade | {_sess_label}",
-        )
+        syms = ", ".join(sorted({w.symbol for w in self.workers.values()}))
+        exs  = ", ".join(sorted({w.exchange.name for w in self.workers.values()}))
+        log_activity("INFO",
+            f"🚀 Multi-symbol bot started | symbols={syms} | exchanges={exs} | "
+            f"check={self.check_every}s | "
+            f"global exposure cap=${self.global_risk.settings.max_total_exposure_usdt:.0f}")
+        _tg_dispatch("bot_event", "started",
+                     f"Symbols: {syms}\nExchanges: {exs}")
         return True
 
     def stop(self):
         self._running = False
-        log_activity("INFO", f"⛔ Bot stopping for {self.symbol}")
-        tg.bot_event("stopped", self.symbol)
+        log_activity("INFO", "⛔ Orchestrator stopping")
+        _tg_dispatch("bot_event", "stopped", "all symbols")
 
     def is_running(self) -> bool:
         return bool(self._thread and self._thread.is_alive() and self._running)
 
-    def update_settings(self, **kwargs):
-        for k, v in kwargs.items():
-            if hasattr(self, k):
-                setattr(self, k, v)
+    # ── Worker management ────────────────────────────────────────────────────
+    def add_worker(self, worker: SymbolWorker):
+        key = f"{worker.exchange.name}:{worker.symbol}"
+        self.workers[key] = worker
+        log_activity("INFO", f"➕ Worker added: {key}")
 
-    # ── Main loop ─────────────────────────────────────────────────────────────
+    def remove_worker(self, exchange_name: str, symbol: str):
+        key = f"{exchange_name}:{symbol}"
+        if key in self.workers:
+            del self.workers[key]
+            log_activity("INFO", f"➖ Worker removed: {key}")
 
+    # ── Main loop ────────────────────────────────────────────────────────────
     def _loop(self):
-        log_activity("INFO", f"📡 Bot thread alive — ticking every {self.check_every}s")
+        log_activity("INFO",
+            f"📡 Orchestrator alive — {len(self.workers)} workers, "
+            f"tick every {self.check_every}s")
         while self._running:
-            try:
-                self._tick()
-            except Exception as exc:
-                log_activity("ERROR", f"Unhandled bot error: {exc}")
-                tg.error_alert(f"Unhandled bot error on {self.symbol}: {exc}")
-            # Interruptible sleep — checks _running every second
+            # Helper: re-read current open trades + today's PnL fresh.
+            # Called between EACH worker so global caps cannot be overshot by
+            # multiple workers opening within the same orchestrator cycle.
+            def _refresh_global_state():
+                try:
+                    open_now = get_open_trades()
+                except Exception as e:
+                    log_activity("ERROR", f"Failed to load open trades: {e}")
+                    open_now = []
+                today = datetime.now().strftime("%Y-%m-%d")
+                pnl_today = sum(
+                    (t.get("profit_loss") or 0)
+                    for t in load_trades()
+                    if t.get("type") == "bot" and t.get("status") == "closed"
+                    and (t.get("close_time") or "").startswith(today)
+                )
+                pct = (pnl_today / self._initial_balance * 100) if self._initial_balance else 0.0
+                return open_now, pct
+
+            all_open, daily_pct = _refresh_global_state()
+
+            # Iterate workers — refresh state between each so the gate sees
+            # any trades just opened in this same cycle.
+            for key, worker in list(self.workers.items()):
+                if not self._running:
+                    break
+
+                # Re-snapshot before this worker runs (cheap: file read + lock).
+                all_open, daily_pct = _refresh_global_state()
+
+                def global_gate(invest: float, sym: str,
+                                _all=all_open, _dp=daily_pct):
+                    return self.global_risk.check_global(
+                        all_open_trades = _all,
+                        new_invest_usdt = invest,
+                        new_symbol      = sym,
+                        daily_loss_pct  = _dp,
+                    )
+
+                try:
+                    worker.tick(all_open_trades=all_open, global_gate_fn=global_gate)
+                except Exception as exc:
+                    log_activity("ERROR", f"Worker {key} crashed: {exc}")
+                    _tg_dispatch("error_alert", f"Worker {key} crashed: {exc}")
+
+            # Auto-stop on daily-loss breaker (re-read once more after all workers)
+            _, daily_pct = _refresh_global_state()
+            if daily_pct <= -abs(self.global_risk.settings.max_daily_loss_pct):
+                log_activity("WARNING",
+                    f"🛑 Auto-stopping — daily loss {daily_pct:+.2f}% ≤ "
+                    f"−{self.global_risk.settings.max_daily_loss_pct}%")
+                _tg_dispatch("bot_event", "auto-stopped",
+                             f"Daily loss limit hit ({daily_pct:+.2f}%)")
+                self._running = False
+                break
+
+            # Interruptible sleep
             for _ in range(self.check_every):
                 if not self._running:
                     break
                 time.sleep(1)
-        log_activity("INFO", f"🛑 Bot thread exited for {self.symbol}")
 
-    # ── Single tick ───────────────────────────────────────────────────────────
-
-    def _tick(self):
-        # Emergency stop guard
-        if self.risk.settings.emergency_stop:
-            log_activity("WARNING", "🚨 Emergency stop active — tick skipped")
-            return
-
-        # ── 1. Get current price ──────────────────────────────────────────────
-        price = self._get_price()
-        if price is None:
-            return
-        _set_shared(price=price, tick=True)
-        log_activity("INFO", f"💰 {self.symbol} = ${price:,.4f}")
-
-        # ── 2. Manage open positions (SL / TP) ───────────────────────────────
-        open_trades  = get_open_trades()
-        my_open      = [t for t in open_trades
-                        if t.get("type") == "bot" and t.get("coin") == self.symbol]
-
-        for trade in my_open:
-            entry = trade["entry_price"]
-            side  = trade["side"]
-
-            sl_hit, sl_msg = self.risk.check_stop_loss(entry, price, side)
-            tp_hit, tp_msg = self.risk.check_take_profit(entry, price, side)
-
-            pnl_now = (price - entry) / entry * 100 if side == "BUY" else (entry - price) / entry * 100
-
-            log_activity(
-                "INFO",
-                f"📌 Open {trade['id']} | {side} @ ${entry:.4f} | "
-                f"Now ${price:.4f} | Δ {pnl_now:+.2f}% | "
-                f"SL ${self.risk.stop_loss_price(entry, side):.4f} | "
-                f"TP ${self.risk.take_profit_price(entry, side):.4f}",
-            )
-
-            if sl_hit:
-                log_activity("ORDER", f"🔴 STOP LOSS | {trade['id']} | {sl_msg}")
-                self._close(trade, price, sl_msg)
-                return
-            if tp_hit:
-                log_activity("ORDER", f"🟢 TAKE PROFIT | {trade['id']} | {tp_msg}")
-                self._close(trade, price, tp_msg)
-                return
-
-        # ── 3. Compute signal from klines (BEFORE gating, so we can show it) ──
-        df = self._get_klines()
-        if df is None:
-            return
-
-        # Push live klines (with indicators) to shared state for dashboard
-        try:
-            from strategy import get_indicators as _gi
-            _set_shared(df=_gi(df))
-        except Exception:
-            _set_shared(df=df)
-
-        signal, reason, confidence = get_signal(df, self.strategy, threshold=self.threshold)
-        _set_shared(signal=signal, reason=reason, confidence=confidence)
-        log_activity("SIGNAL", f"📊 [{self.strategy}] → {signal} | conf={confidence} | {reason}")
-
-        if signal == "HOLD":
-            log_activity("INFO", "⏭️ HOLD — no trade opened")
-            return
-
-        # ── 4. Daily loss circuit breaker + gate ──────────────────────────────
-        # Compute today's realized PnL % from closed bot trades
-        _today = datetime.now().strftime("%Y-%m-%d")
-        _today_pnl = sum(
-            (t.get("profit_loss") or 0)
-            for t in load_trades()
-            if t.get("type") == "bot" and t.get("status") == "closed"
-            and (t.get("close_time") or "").startswith(_today)
-        )
-        _daily_pct = (_today_pnl / self._initial_balance * 100) if self._initial_balance else 0.0
-
-        can_trade, block_reason = self.risk.can_open_trade(
-            open_trades    = open_trades,
-            symbol         = self.symbol,
-            new_signal     = signal,
-            last_trade_at  = self._last_trade_at,
-            last_trade_dir = self._last_trade_dir,
-            daily_loss_pct = _daily_pct,
-            session_count  = self._session_trades,
-        )
-        if not can_trade:
-            print(f"[BOT] BLOCKED signal={signal} reason={block_reason}", flush=True)
-            log_activity("INFO", f"⏸️ {block_reason}")
-            _set_shared(block_reason=block_reason)
-            # Auto-stop on daily-loss breaker
-            if "Daily loss limit" in block_reason:
-                log_activity("WARNING", "🛑 Auto-stopping bot — daily loss limit hit")
-                tg.bot_event("auto-stopped", f"Daily loss {_daily_pct:+.2f}% ≥ "
-                                             f"{self.risk.settings.max_daily_loss_pct}%")
-                self._running = False
-            return
-        # Clear stale block reason when trade is allowed
-        _set_shared(block_reason="")
-
-        # ── 5. Size the position (FIXED USDT — never uses full balance) ─────────
-        invested = self.risk.get_invest_amount()
-        # For LIVE balance gate we need FREE USDT (locked funds cannot be spent).
-        free_usdt = None
-        if not self.paper and self.client:
-            try:
-                _bd = self.client.get_account_balance("USDT")
-                free_usdt = float(_bd["free"]) if isinstance(_bd, dict) else float(_bd)
-            except Exception as e:
-                print(f"[BOT][ERROR] free balance fetch failed: {e}", flush=True)
-                log_activity("WARNING", f"Balance fetch failed: {e}")
-        bal_display = free_usdt if free_usdt is not None else self._get_balance()
-        print(f"[BOT] SIZING signal={signal} price={price:.6f} invest_per_trade=${invested:.2f} "
-              f"free_usdt={free_usdt} balance=${bal_display:.2f} paper={self.paper}", flush=True)
-
-        if invested < 10:
-            msg = (f"⚠️ Skipping — invest_per_trade ${invested:.2f} < $10 min. "
-                   f"Raise it in Risk → Invest per trade.")
-            print(f"[BOT] BLOCKED reason={msg}", flush=True)
-            log_activity("WARNING", msg)
-            _set_shared(block_reason=msg)
-            return
-        if not self.paper and free_usdt is not None and invested > free_usdt:
-            msg = (f"⚠️ Skipping — invest_per_trade ${invested:.2f} > free USDT "
-                   f"${free_usdt:.2f} (locked funds excluded). Top up or lower invest size.")
-            print(f"[BOT] BLOCKED reason={msg}", flush=True)
-            log_activity("WARNING", msg)
-            _set_shared(block_reason=msg)
-            return
-
-        qty = self._round_qty(invested / price)
-        sl_p    = self.risk.stop_loss_price(price, signal)
-        tp_p    = self.risk.take_profit_price(price, signal)
-
-        # ── 6. Execute ────────────────────────────────────────────────────────
-        _mode_tag = "PAPER" if self.paper else ("TESTNET" if (self.client and self.client.testnet) else "LIVE")
-        if not self.paper and self.client:
-            print(f"[BOT] ORDER REQUEST → Binance {_mode_tag} | "
-                  f"{signal} {qty} {self.symbol} (market)", flush=True)
-            try:
-                order      = self.client.place_market_order(self.symbol, signal, qty)
-                print(f"[BOT] ORDER RESPONSE ← {order}", flush=True)
-                fill_price = float(order.get("fills", [{}])[0].get("price", price))
-                price      = fill_price
-                log_activity("ORDER",
-                    f"✅ LIVE {signal} | {qty} {self.symbol} @ ${price:.4f}")
-                _set_shared(last_order={
-                    "ok": True, "side": signal, "qty": qty,
-                    "symbol": self.symbol, "price": price, "mode": _mode_tag,
-                })
-            except Exception as e:
-                err = f"Order failed: {e}"
-                print(f"[BOT][ERROR] {err}", flush=True)
-                log_activity("ERROR", err)
-                _set_shared(block_reason=err, last_order={
-                    "ok": False, "side": signal, "qty": qty,
-                    "symbol": self.symbol, "error": str(e), "mode": _mode_tag,
-                })
-                tg.error_alert(f"Order FAILED — {signal} {self.symbol}\n{e}")
-                return
-        else:
-            log_activity(
-                "ORDER",
-                f"📋 PAPER {signal} | {qty:.6f} {self.symbol} @ ${price:.4f} | "
-                f"${invested:.2f} invested | SL ${sl_p:.4f} | TP ${tp_p:.4f}",
-            )
-        tg.trade_open(self.symbol, signal, price, invested, reason, mode=_mode_tag)
-        # Update trade-control state (session_trades is incremented after add_trade below)
-        self._last_trade_at  = datetime.now()
-        self._last_trade_dir = signal
-
-        # ── 7. Record trade ───────────────────────────────────────────────────
-        trade = {
-            "coin":            self.symbol,
-            "exchange":        "Binance Testnet" if (self.client and self.client.testnet) else
-                               ("Binance Live"   if self.client else "Paper (public data)"),
-            "type":            "bot",
-            "strategy":        self.strategy,
-            "side":            signal,
-            "entry_price":     price,
-            "exit_price":      None,
-            "quantity":        qty,
-            "invested":        invested,
-            "profit_loss":     None,
-            "profit_loss_pct": None,
-            "open_time":       datetime.now().isoformat(),
-            "close_time":      None,
-            "reason":          reason,
-            "close_reason":    None,
-            "stop_loss":       sl_p,
-            "take_profit":     tp_p,
-            "status":          "open",
-            "paper":           self.paper,
-        }
-        added = add_trade(trade)
-        self._session_trades += 1
-        _max_sess = self.risk.settings.max_trades_per_session
-        _sess_str = f"{self._session_trades}/{_max_sess}" if _max_sess > 0 else f"{self._session_trades}/∞"
-        log_activity("INFO",
-            f"📝 Trade recorded | ID:{added['id']} | {signal} {self.symbol} | "
-            f"${invested:.2f} USDT | SL ${sl_p:.4f} | TP ${tp_p:.4f} | "
-            f"Session trades: {_sess_str}")
-
-    # ── Close helper ──────────────────────────────────────────────────────────
-
-    def _close(self, trade: Dict, price: float, reason: str):
-        if not self.paper and self.client:
-            opposite = "SELL" if trade["side"] == "BUY" else "BUY"
-            try:
-                self.client.place_market_order(self.symbol, opposite, trade["quantity"])
-            except Exception as e:
-                log_activity("ERROR", f"Close order failed: {e}")
-                return
-
-        closed = close_trade(trade["id"], price, reason)
-        if closed:
-            pnl  = closed.get("profit_loss") or 0
-            pct  = closed.get("profit_loss_pct") or 0
-            icon = "🟢" if pnl >= 0 else "🔴"
-            log_activity(
-                "ORDER",
-                f"{icon} Closed {closed['id']} | P&L ${pnl:+.4f} ({pct:+.2f}%) | {reason}",
-            )
-            _cmode = "PAPER" if trade.get("paper") else ("TESTNET" if (self.client and self.client.testnet) else "LIVE")
-            tg.trade_close(
-                symbol     = trade["coin"],
-                side       = trade["side"],
-                entry      = trade["entry_price"],
-                exit_price = price,
-                pnl        = pnl,
-                pct        = pct,
-                reason     = reason,
-                mode       = _cmode,
-            )
-
-    # ── Data helpers ──────────────────────────────────────────────────────────
-
-    def _get_price(self) -> Optional[float]:
-        # Prefer authenticated client (testnet might differ from mainnet)
-        if self.client:
-            try:
-                return self.client.get_symbol_price(self.symbol)
-            except Exception as e:
-                log_activity("WARNING", f"Auth price failed, falling back to public: {e}")
-
-        # Public API — no key needed
-        try:
-            return public_price(self.symbol, testnet=False)
-        except Exception as e:
-            log_activity("ERROR", f"Public price fetch failed: {e}")
-            return None
-
-    def _get_klines(self):
-        if self.client:
-            try:
-                return self.client.get_klines(self.symbol, self.interval, limit=150)
-            except Exception as e:
-                log_activity("WARNING", f"Auth klines failed, falling back to public: {e}")
-
-        try:
-            return public_klines(self.symbol, self.interval, limit=150, testnet=False)
-        except Exception as e:
-            log_activity("ERROR", f"Public klines fetch failed: {e}")
-            return None
-
-    def _get_balance(self) -> float:
-        """Return USDT balance. Uses simulated balance of $1000 when no auth client."""
-        if self.client and not self.paper:
-            try:
-                _b = self.client.get_account_balance("USDT")
-                return float(_b["total"]) if isinstance(_b, dict) else float(_b)
-            except Exception as e:
-                log_activity("WARNING", f"Balance fetch failed: {e}")
-        # Paper or no auth — derive from initial assumption
-        # The actual invested balance is tracked by the risk manager settings
-        # We return a nominal $1000 when no real balance is available
-        all_closed = [t for t in load_trades() if t.get("status") == "closed"]
-        total_pnl  = sum((t.get("profit_loss") or 0) for t in all_closed)
-        return max(100.0, 1000.0 + total_pnl)
-
-    def _round_qty(self, qty: float) -> float:
-        if self.client:
-            try:
-                return self.client.round_quantity(self.symbol, qty)
-            except Exception:
-                pass
-        return round(qty, 6)
+        log_activity("INFO", "🛑 Orchestrator thread exited")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Singleton API
 # ─────────────────────────────────────────────────────────────────────────────
-
 def get_bot() -> Optional[TradingBot]:
     return _bot
 
+
 def get_bot_session_trades() -> int:
-    """Trades opened in the current bot session."""
-    return _bot._session_trades if _bot else 0
+    """Total bot-opened trades across all symbols this session."""
+    if not _bot:
+        return 0
+    return sum(w._session_trades for w in _bot.workers.values())
 
 
 def get_bot_last_signal() -> dict:
-    """Most recent SIGNAL entry from the activity log."""
+    """Most recent SIGNAL entry from the activity log (any symbol)."""
     for entry in reversed(load_activity()):
         if entry.get("level") == "SIGNAL":
             return entry
     return {}
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Builder — accepts BOTH new multi-symbol signature AND legacy single-symbol.
+# ─────────────────────────────────────────────────────────────────────────────
+def create_bot(
+    client=None,                                # legacy: BinanceClient or None
+    symbol:       Optional[str] = None,         # legacy: single-symbol mode
+    strategy:     str = "EMA Crossover",
+    risk_manager: Optional[RiskManager] = None,
+    interval:     str = "5m",
+    check_every:  int = 30,
+    paper_mode:   bool = True,
+    threshold:    float = 0.0003,
+    # New multi-symbol args
+    symbols:               Optional[List[str]] = None,
+    per_symbol_risk:       Optional[Dict[str, RiskManager]] = None,
+    global_risk:           Optional[GlobalRiskManager] = None,
+    exchange:              Optional[Exchange] = None,
+    initial_balance:       float = 1000.0,
+) -> TradingBot:
+    """Build (or rebuild) the singleton bot.
+
+    Two call modes supported:
+      A. Multi-symbol:   create_bot(exchange=ex, symbols=[...], per_symbol_risk={...}, global_risk=...)
+      B. Legacy single:  create_bot(client=binance_client, symbol="BTCUSDT", risk_manager=rm, ...)
+    """
+    global _bot, _primary_symbol
+
+    # Build / register the exchange
+    if exchange is None:
+        # Build a BinanceExchange around the legacy client (or paper-only)
+        exchange = BinanceExchange(client=client, testnet=bool(client and client.testnet))
+        ex_registry.clear()
+        ex_registry.register(exchange)
+    else:
+        ex_registry.register(exchange)
+
+    # Resolve which symbols to run
+    sym_list = symbols if symbols else ([symbol] if symbol else ["BTCUSDT"])
+    if len(sym_list) > 3:
+        print(f"[BOT] capping symbols list to 3 (got {len(sym_list)})", flush=True)
+        sym_list = sym_list[:3]
+
+    # Resolve per-symbol risk managers (fallback to shared one)
+    per_sym = dict(per_symbol_risk or {})
+    for s in sym_list:
+        if s not in per_sym:
+            per_sym[s] = risk_manager or RiskManager(RiskSettings())
+
+    # Global risk fallback (derive from legacy single-risk daily-loss if needed)
+    if global_risk is None:
+        gs = GlobalRiskSettings()
+        if risk_manager:
+            gs.max_daily_loss_pct = risk_manager.settings.max_daily_loss_pct
+            gs.emergency_stop     = risk_manager.settings.emergency_stop
+        global_risk = GlobalRiskManager(gs)
+
+    # Build workers
+    workers: Dict[str, SymbolWorker] = {}
+    with _bot_lock:
+        # Stop previous bot (if any) before swapping singleton
+        if _bot and _bot.is_running():
+            _bot.stop()
+            time.sleep(0.5)
+
+        # Reset shared state for symbols no longer active (keep history for new ones)
+        with _state_lock:
+            for stale in list(_shared_per_symbol.keys()):
+                if stale not in sym_list:
+                    _shared_per_symbol.pop(stale, None)
+
+        for sym in sym_list:
+            rm = per_sym[sym]
+            w = SymbolWorker(
+                exchange        = exchange,
+                symbol          = sym,
+                strategy        = strategy,
+                risk_manager    = rm,
+                interval        = interval,
+                paper_mode      = paper_mode,
+                price_threshold = threshold,
+                on_log          = log_activity,
+                on_state_update = _set_shared_for,
+                on_open_trade   = add_trade,
+                on_close_trade  = close_trade,
+                on_telegram     = _tg_dispatch,
+            )
+            workers[f"{exchange.name}:{sym}"] = w
+
+        _primary_symbol = sym_list[0]
+        _bot = TradingBot(
+            workers         = workers,
+            global_risk     = global_risk,
+            check_every     = check_every,
+            initial_balance = initial_balance,
+        )
+    return _bot
+
+
+def stop_bot():
+    global _bot
+    with _bot_lock:
+        if _bot:
+            _bot.stop()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Force test trade (dashboard button) — back-compat
+# ─────────────────────────────────────────────────────────────────────────────
 def force_paper_trade(symbol: str, side: str, price: float, invested: float) -> dict:
-    """Execute a paper test trade immediately — bypasses signal check. For testing."""
-    from risk import RiskManager as _RM
-    _rm = _bot.risk if _bot else _RM()
+    """Bypasses signal/risk gates. Paper trade only. For dashboard test button."""
+    # Find a RiskManager for SL/TP calc (use worker's if available)
+    rm: Optional[RiskManager] = None
+    if _bot:
+        for w in _bot.workers.values():
+            if w.symbol == symbol:
+                rm = w.risk
+                break
+    if rm is None:
+        rm = RiskManager(RiskSettings())
+
     qty  = round(invested / price, 6)
-    sl_p = _rm.stop_loss_price(price, side)
-    tp_p = _rm.take_profit_price(price, side)
+    sl_p = rm.stop_loss_price(price, side)
+    tp_p = rm.take_profit_price(price, side)
     trade = {
         "coin":            symbol,
         "exchange":        "Paper (force test)",
@@ -682,45 +675,8 @@ def force_paper_trade(symbol: str, side: str, price: float, invested: float) -> 
         "paper":           True,
     }
     added = add_trade(trade)
-    log_activity(
-        "ORDER",
+    log_activity("ORDER",
         f"🧪 FORCE TEST {side} | {qty:.6f} {symbol} @ ${price:.4f} | "
-        f"${invested:.2f} USDT | SL ${sl_p:.4f} | TP ${tp_p:.4f}",
-    )
-    tg.trade_open(symbol, side, price, invested, "Force test trade", mode="PAPER-FORCE")
+        f"${invested:.2f} USDT | SL ${sl_p:.4f} | TP ${tp_p:.4f}")
+    _tg_dispatch("trade_open", symbol, side, price, invested, "Force test", "PAPER-FORCE")
     return added
-
-
-def create_bot(
-    client,
-    symbol:       str,
-    strategy:     str,
-    risk_manager: RiskManager,
-    interval:     str   = "5m",
-    check_every:  int   = 30,
-    paper_mode:   bool  = True,
-    threshold:    float = 0.0003,
-) -> TradingBot:
-    global _bot
-    with _bot_lock:
-        if _bot and _bot.is_running():
-            _bot.stop()
-            time.sleep(0.5)
-        _bot = TradingBot(
-            client          = client,
-            symbol          = symbol,
-            strategy        = strategy,
-            risk_manager    = risk_manager,
-            interval        = interval,
-            check_every     = check_every,
-            paper_mode      = paper_mode,
-            price_threshold = threshold,
-        )
-    return _bot
-
-
-def stop_bot():
-    global _bot
-    with _bot_lock:
-        if _bot:
-            _bot.stop()

@@ -26,7 +26,7 @@ from bot import (
     get_bot_diagnostics, save_settings,
 )
 from strategy import get_indicators
-from risk import RiskManager, RiskSettings
+from risk import RiskManager, RiskSettings, GlobalRiskSettings, GlobalRiskManager
 import telegram_notifier as tg
 from binance_client import public_klines, public_price, public_24h
 
@@ -322,7 +322,10 @@ def _init():
         "client":           None,
         "connected":        False,
         "paper_mode":       True,
-        "symbol":           "BTCUSDT",
+        "symbol":           "BTCUSDT",   # currently-viewed symbol (chart, manual trade)
+        "active_symbols":   ["BTCUSDT"], # symbols the bot trades on (max 3)
+        "per_symbol_risk":  {},          # {symbol: RiskSettings} — overrides global risk
+        "global_risk":      None,        # GlobalRiskSettings (built lazily below)
         "strategy":         "EMA Crossover",
         "interval":         "5m",
         "check_every":      30,
@@ -351,6 +354,10 @@ def _init():
         if not hasattr(_r, "max_trade_usdt"):        _r.max_trade_usdt        = 100.0
         if not hasattr(_r, "max_trades_per_session"):_r.max_trades_per_session= 0
 
+    # ── Lazy-init global risk settings ────────────────────────────────────────
+    if st.session_state.get("global_risk") is None:
+        st.session_state.global_risk = GlobalRiskSettings()
+
     # ── Re-apply Telegram config on every cold-start ─────────────────────────
     tg.configure(
         token   = st.session_state.get("tg_token",   ""),
@@ -369,6 +376,7 @@ if not st.session_state.get("_settings_loaded"):
         "paper_mode", "symbol", "strategy", "interval", "check_every",
         "threshold", "initial_balance", "manual_amount", "testnet",
         "refresh_secs", "tg_enabled", "tg_token", "tg_chat_id",
+        "active_symbols",
     )
     for _k in _PERSIST_KEYS:
         if _k in _persisted:
@@ -377,6 +385,25 @@ if not st.session_state.get("_settings_loaded"):
         for _rk, _rv in _persisted["risk"].items():
             if hasattr(st.session_state.risk, _rk):
                 setattr(st.session_state.risk, _rk, _rv)
+    # Global risk
+    if "global_risk" in _persisted and isinstance(_persisted["global_risk"], dict):
+        _gr = st.session_state.get("global_risk") or GlobalRiskSettings()
+        for _gk, _gv in _persisted["global_risk"].items():
+            if hasattr(_gr, _gk):
+                setattr(_gr, _gk, _gv)
+        st.session_state.global_risk = _gr
+    # Per-symbol overrides
+    if "per_symbol_risk" in _persisted and isinstance(_persisted["per_symbol_risk"], dict):
+        _pso: dict = {}
+        for _sym, _vals in _persisted["per_symbol_risk"].items():
+            if not isinstance(_vals, dict):
+                continue
+            _rs = RiskSettings()
+            for _rk, _rv in _vals.items():
+                if hasattr(_rs, _rk):
+                    setattr(_rs, _rk, _rv)
+            _pso[_sym] = _rs
+        st.session_state.per_symbol_risk = _pso
     st.session_state._settings_loaded = True
     if _persisted:
         print(f"[SETTINGS] loaded {len(_persisted)} keys from disk", flush=True)
@@ -480,12 +507,12 @@ except Exception:
 bot_inst    = bot_module.get_bot()
 bot_running = bot_inst.is_running() if bot_inst else False
 
-_bot_df = get_shared_df() if bot_running else None
+_bot_df = get_shared_df(symbol=st.session_state.symbol) if bot_running else None
 if _bot_df is not None and len(_bot_df) > 5:
     df_chart     = _bot_df
     chart_source = "bot-live"
     # Also use bot's price if available
-    _bot_price = get_shared_price()
+    _bot_price = get_shared_price(symbol=st.session_state.symbol)
     if _bot_price:
         live_price = _bot_price
 else:
@@ -647,7 +674,7 @@ chg_str   = f"{'▲' if change_pct >= 0 else '▼'} {abs(change_pct):.2f}%"
 h_str     = _fmt_p(high_24h, 2) if high_24h else "—"
 l_str     = _fmt_p(low_24h, 2)  if low_24h  else "—"
 
-_upd_at  = get_shared_updated_at() if bot_running else None
+_upd_at  = get_shared_updated_at(symbol=st.session_state.symbol) if bot_running else None
 _now_tz  = datetime.now(_TZ)
 _upd_str = _upd_at.strftime("%H:%M:%S") if _upd_at else _now_tz.strftime("%H:%M:%S")
 _src_label = {"bot-live": "bot-live", "auth": "auth-live", "public": "public"}.get(chart_source, "—")
@@ -852,7 +879,7 @@ else:
 # Right: bot status + last signal + confidence + last check
 # Prefer the structured meta from shared state (set by every bot tick);
 # fall back to log-message parsing if the bot hasn't ticked yet this process.
-_sig_meta = get_bot_signal_meta()
+_sig_meta = get_bot_signal_meta(symbol=st.session_state.symbol)
 _sig_dir  = _sig_meta.get("signal") or "—"
 _sig_conf = int(_sig_meta.get("confidence") or 0)
 _sig_reason = (_sig_meta.get("reason") or "")[:110]
@@ -873,7 +900,7 @@ elif _sig_conf >= 40: _conf_col = "#e3b341"
 else:                 _conf_col = "#6e7681"
 
 # Last bot check time (London) + seconds elapsed
-_last_tick = get_shared_last_tick()
+_last_tick = get_shared_last_tick(symbol=st.session_state.symbol)
 if _last_tick:
     _tick_str = _last_tick.strftime("%H:%M:%S")
     _elapsed  = int((datetime.now() - _last_tick).total_seconds())
@@ -924,7 +951,7 @@ _bot_status_html = (
     f'</div>'
 )
 
-_diag = get_bot_diagnostics()
+_diag = get_bot_diagnostics(symbol=st.session_state.symbol)
 _block = (_diag.get("block_reason") or "").strip()
 _lo    = _diag.get("last_order") or {}
 
@@ -1075,9 +1102,28 @@ with st.sidebar:
 
     # Market
     st.markdown('<div class="sec-lbl">Market</div>', unsafe_allow_html=True)
-    sym_sel = st.selectbox("Symbol", SYMBOLS,
-                            index=SYMBOLS.index(st.session_state.symbol)
-                            if st.session_state.symbol in SYMBOLS else 0)
+
+    # Active symbols — the bot trades all of these (max 3)
+    _act_default = [s for s in st.session_state.active_symbols if s in SYMBOLS] \
+                   or ["BTCUSDT"]
+    act_sel = st.multiselect(
+        "Active symbols (bot)", SYMBOLS,
+        default=_act_default,
+        max_selections=3,
+        help="Bot trades all selected symbols. Maximum 3.",
+    )
+    if not act_sel:
+        act_sel = ["BTCUSDT"]
+        st.caption("⚠️ At least one symbol required — defaulted to BTCUSDT")
+    st.session_state.active_symbols = act_sel
+
+    # Currently-viewed symbol — drives chart, manual trade, force buttons
+    _view_default = st.session_state.symbol if st.session_state.symbol in act_sel else act_sel[0]
+    sym_sel = st.selectbox(
+        "View symbol", act_sel,
+        index=act_sel.index(_view_default),
+        help="Symbol shown in the main chart + manual-trade buttons.",
+    )
     st.session_state.symbol = sym_sel
 
     intv_sel = st.selectbox("Interval", INTERVALS,
@@ -1126,15 +1172,24 @@ with st.sidebar:
                 st.rerun()
             else:
                 # client=None is fine; bot falls back to public Binance API
+                # Build per-symbol risk managers from overrides (fallback = shared)
+                _per_sym_rm = {}
+                for _s in st.session_state.active_symbols:
+                    _ov = st.session_state.per_symbol_risk.get(_s)
+                    _per_sym_rm[_s] = RiskManager(_ov) if _ov else st.session_state.risk_manager
+                _global_rm = GlobalRiskManager(st.session_state.global_risk)
                 b = bot_module.create_bot(
                     client=c,
-                    symbol=st.session_state.symbol,
+                    symbols=st.session_state.active_symbols,
+                    per_symbol_risk=_per_sym_rm,
+                    global_risk=_global_rm,
                     strategy=st.session_state.strategy,
                     risk_manager=st.session_state.risk_manager,
                     interval=intv_sel,
                     check_every=ck_val,
                     paper_mode=_eff_paper,
                     threshold=thr_val / 100,
+                    initial_balance=st.session_state.initial_balance,
                 )
                 b._initial_balance = st.session_state.initial_balance
                 b.start()
@@ -1224,7 +1279,7 @@ with st.sidebar:
 
     # ── Next-check countdown (only while bot is running) ──────────────────
     if bot_running:
-        _last_tick = get_shared_last_tick()
+        _last_tick = get_shared_last_tick(symbol=st.session_state.symbol)
         if _last_tick:
             from datetime import datetime as _dt
             _elapsed  = (_dt.now() - _last_tick).total_seconds()
@@ -1319,6 +1374,64 @@ with st.sidebar:
     r.max_daily_loss_pct = st.slider("Max daily loss %",1.0, 30.0, float(r.max_daily_loss_pct), 0.5)
     r.max_open_trades    = st.slider("Max open trades", 1,   20,   int(r.max_open_trades),      1)
     st.session_state.risk_manager.settings = r
+
+    # ── Global (account-wide) risk caps — applies across all symbols ──────────
+    with st.expander("🌐 Global risk (account-wide)", expanded=False):
+        g = st.session_state.global_risk
+        g.max_total_exposure_usdt = st.number_input(
+            "Max total exposure (USDT)",
+            min_value=0.0, max_value=1_000_000.0,
+            value=float(g.max_total_exposure_usdt), step=50.0,
+            help="Sum of all open positions across all symbols. 0 = no cap.",
+        )
+        g.max_exposure_per_symbol_pct = st.slider(
+            "Max % of exposure in one symbol",
+            10, 100, int(g.max_exposure_per_symbol_pct), 5,
+            help="No single symbol can exceed this % of total open exposure.",
+        )
+        g.max_open_trades_total = st.slider(
+            "Max open trades (total, all symbols)",
+            1, 50, int(g.max_open_trades_total), 1,
+        )
+        g.max_daily_loss_pct = st.slider(
+            "Global max daily loss %",
+            1.0, 30.0, float(g.max_daily_loss_pct), 0.5,
+            help="Auto-stop the orchestrator when today's PnL ≤ −X%.",
+        )
+
+    # ── Per-symbol risk overrides ─────────────────────────────────────────────
+    with st.expander("🎯 Per-symbol risk overrides", expanded=False):
+        st.caption("Leave OFF to use the shared risk settings above.")
+        for _sym in st.session_state.active_symbols:
+            _en_key = f"pso_en_{_sym}"
+            _has    = _sym in st.session_state.per_symbol_risk
+            _enabled = st.checkbox(f"Override {_sym}", value=_has, key=_en_key)
+            if _enabled:
+                _o = st.session_state.per_symbol_risk.get(_sym) or RiskSettings(
+                    invest_per_trade=r.invest_per_trade,
+                    max_trade_usdt=r.max_trade_usdt,
+                    stop_loss_pct=r.stop_loss_pct,
+                    take_profit_pct=r.take_profit_pct,
+                    max_open_trades=r.max_open_trades,
+                )
+                _c1, _c2 = st.columns(2)
+                with _c1:
+                    _o.invest_per_trade = st.number_input(
+                        f"{_sym} invest/trade", 1.0, 100_000.0,
+                        float(_o.invest_per_trade), 5.0, key=f"pso_inv_{_sym}")
+                    _o.stop_loss_pct    = st.slider(
+                        f"{_sym} SL %", 0.5, 20.0,
+                        float(_o.stop_loss_pct), 0.5, key=f"pso_sl_{_sym}")
+                with _c2:
+                    _o.max_trade_usdt   = st.number_input(
+                        f"{_sym} hard cap", 0.0, 100_000.0,
+                        float(_o.max_trade_usdt), 10.0, key=f"pso_cap_{_sym}")
+                    _o.take_profit_pct  = st.slider(
+                        f"{_sym} TP %", 0.5, 50.0,
+                        float(_o.take_profit_pct), 0.5, key=f"pso_tp_{_sym}")
+                st.session_state.per_symbol_risk[_sym] = _o
+            elif _has:
+                st.session_state.per_symbol_risk.pop(_sym, None)
 
     st.markdown('<hr class="s-div"/>', unsafe_allow_html=True)
 
@@ -1605,15 +1718,22 @@ with st.container():
                     if c is None and not st.session_state.paper_mode:
                         st.error("Connect first for live trading.")
                     else:
+                        _per_sym_rm2 = {}
+                        for _s in st.session_state.active_symbols:
+                            _ov = st.session_state.per_symbol_risk.get(_s)
+                            _per_sym_rm2[_s] = RiskManager(_ov) if _ov else st.session_state.risk_manager
                         b = bot_module.create_bot(
                             client=c,
-                            symbol=st.session_state.symbol,
+                            symbols=st.session_state.active_symbols,
+                            per_symbol_risk=_per_sym_rm2,
+                            global_risk=GlobalRiskManager(st.session_state.global_risk),
                             strategy=st.session_state.strategy,
                             risk_manager=st.session_state.risk_manager,
                             interval=st.session_state.interval,
                             check_every=st.session_state.check_every,
                             paper_mode=True if c is None else st.session_state.paper_mode,
                             threshold=st.session_state.threshold / 100,
+                            initial_balance=st.session_state.initial_balance,
                         )
                         b._initial_balance = st.session_state.initial_balance
                         b.start()
@@ -2166,10 +2286,21 @@ with st.container():
 # Compares current setting values to last saved snapshot; writes settings.json
 # only when something changed. Shows "Settings saved" toast on persist.
 def _collect_settings_snapshot() -> dict:
-    _r = st.session_state.risk
+    _r  = st.session_state.risk
+    _gr = st.session_state.get("global_risk") or GlobalRiskSettings()
+    _pso_dump: dict = {}
+    for _s, _rs in (st.session_state.get("per_symbol_risk") or {}).items():
+        _pso_dump[_s] = {
+            "invest_per_trade":   getattr(_rs, "invest_per_trade", 50.0),
+            "max_trade_usdt":     getattr(_rs, "max_trade_usdt", 100.0),
+            "stop_loss_pct":      getattr(_rs, "stop_loss_pct", 2.0),
+            "take_profit_pct":    getattr(_rs, "take_profit_pct", 4.0),
+            "max_open_trades":    getattr(_rs, "max_open_trades", 3),
+        }
     return {
         "paper_mode":      st.session_state.paper_mode,
         "symbol":          st.session_state.symbol,
+        "active_symbols":  st.session_state.active_symbols,
         "strategy":        st.session_state.strategy,
         "interval":        st.session_state.interval,
         "check_every":     st.session_state.check_every,
@@ -2181,6 +2312,13 @@ def _collect_settings_snapshot() -> dict:
         "tg_enabled":      st.session_state.tg_enabled,
         "tg_token":        st.session_state.tg_token,
         "tg_chat_id":      st.session_state.tg_chat_id,
+        "global_risk": {
+            "max_total_exposure_usdt":     _gr.max_total_exposure_usdt,
+            "max_exposure_per_symbol_pct": _gr.max_exposure_per_symbol_pct,
+            "max_open_trades_total":       _gr.max_open_trades_total,
+            "max_daily_loss_pct":          _gr.max_daily_loss_pct,
+        },
+        "per_symbol_risk": _pso_dump,
         "risk": {
             "invest_per_trade":         getattr(_r, "invest_per_trade", 50.0),
             "max_trade_usdt":           getattr(_r, "max_trade_usdt", 100.0),
