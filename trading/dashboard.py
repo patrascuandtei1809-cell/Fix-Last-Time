@@ -371,7 +371,35 @@ STRATEGIES = ["EMA Crossover","Price Movement","Momentum (RSI)"]
 
 
 def _cl():
-    return st.session_state.get("client")
+    """Return the active Binance client, rebuilding it if credentials drifted.
+
+    A new BinanceClient is constructed every time api_key, api_secret, or testnet
+    differ from what the cached client was built with. This guarantees the bot
+    never silently keeps using stale credentials after the user pastes new keys
+    or flips the testnet toggle.
+    """
+    c = st.session_state.get("client")
+    want_key    = st.session_state.get("api_key", "")
+    want_secret = st.session_state.get("api_secret", "")
+    want_tnet   = bool(st.session_state.get("testnet", True))
+    if not want_key or not want_secret:
+        if c is not None:
+            print("[BINANCE] Credentials cleared — dropping cached client", flush=True)
+            st.session_state.client    = None
+            st.session_state.connected = False
+        return None
+    if (c is None
+            or getattr(c, "api_key", None)    != want_key
+            or getattr(c, "api_secret", None) != want_secret
+            or bool(getattr(c, "testnet", None)) != want_tnet):
+        print(f"[BINANCE] Rebuilding client — drift detected "
+              f"(prev={(getattr(c,'api_key','') or '')[:6]}.../tnet="
+              f"{getattr(c,'testnet',None)} → new={want_key[:6]}.../tnet={want_tnet})",
+              flush=True)
+        from binance_client import BinanceClient
+        c = BinanceClient(want_key, want_secret, testnet=want_tnet)
+        st.session_state.client = c
+    return c
 
 def _fmt_p(v, d=4): return f"${v:,.{d}f}" if v is not None else "—"
 
@@ -902,6 +930,12 @@ with st.sidebar:
     st.markdown('<div class="sec-lbl">API Connection</div>', unsafe_allow_html=True)
     testnet_tog = st.toggle("🧪 Use Binance Testnet", value=st.session_state.testnet,
                              help="Use testnet.binance.vision for safe testing")
+    # Detect testnet flip → force client rebuild (handled by _cl drift check)
+    if testnet_tog != st.session_state.testnet:
+        print(f"[BINANCE] Testnet toggle changed {st.session_state.testnet} → {testnet_tog} "
+              f"— client will rebuild on next API call", flush=True)
+        st.session_state.testnet = testnet_tog
+        st.session_state.client  = None   # force fresh build with new endpoint
     st.session_state.testnet = testnet_tog
     if not testnet_tog:
         st.warning("⚠️ MAINNET — real money at risk! Double-check before trading.")
@@ -924,9 +958,18 @@ with st.sidebar:
 </div>""", unsafe_allow_html=True)
         except Exception as _be:
             st.error(f"❌ Binance balance fetch failed: {_be}")
+        # Show which credentials this client is currently using
+        _cur = _cl()
+        if _cur is not None:
+            _kp = (getattr(_cur, "api_key", "") or "")[:6]
+            _ep = "testnet.binance.vision" if getattr(_cur, "testnet", True) else "api.binance.com"
+            st.caption(f"🔑 Key `{_kp}…` · 🌐 `{_ep}`")
         if st.button("🔌 Disconnect", width="stretch"):
-            st.session_state.client    = None
-            st.session_state.connected = False
+            print("[BINANCE] User disconnected — clearing client and credentials", flush=True)
+            st.session_state.client     = None
+            st.session_state.connected  = False
+            st.session_state.api_key    = ""
+            st.session_state.api_secret = ""
             st.rerun()
     else:
         api_key    = st.text_input("API Key",    type="password",
@@ -938,17 +981,27 @@ with st.sidebar:
                 with st.spinner("Connecting…"):
                     try:
                         from binance_client import BinanceClient
+                        # Persist creds so _cl() can rebuild on every script run
+                        st.session_state.api_key    = api_key
+                        st.session_state.api_secret = api_secret
+                        st.session_state.testnet    = testnet_tog
+                        print(f"[BINANCE] CONNECT clicked — key_prefix={api_key[:6]}... "
+                              f"testnet={testnet_tog}", flush=True)
                         c   = BinanceClient(api_key, api_secret, testnet=testnet_tog)
                         ok, msg = c.test_connection()
                         if ok:
                             st.session_state.client    = c
                             st.session_state.connected = True
-                            log_activity("INFO", f"🔌 Connected {'Testnet' if testnet_tog else 'LIVE'} — {msg}")
+                            log_activity("INFO", f"🔌 Connected {'Testnet' if testnet_tog else 'LIVE'} — {msg} — key {api_key[:6]}...")
                             st.success("✅ Connected!")
                             st.rerun()
                         else:
+                            st.session_state.client    = None
+                            st.session_state.connected = False
                             st.error(f"❌ {msg}")
                     except Exception as e:
+                        st.session_state.client    = None
+                        st.session_state.connected = False
                         st.error(f"Connection error: {e}")
             else:
                 st.info("API keys needed for real balance & live trading.\nChart + paper mode work without keys.")

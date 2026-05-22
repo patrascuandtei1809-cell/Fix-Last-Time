@@ -85,6 +85,13 @@ class BinanceClient:
         self.api_secret = api_secret
         self.testnet    = testnet
         self.client     = Client(api_key, api_secret, testnet=testnet)
+        # Identify the credentials this client is actually using
+        kp = (api_key or "")[:6]
+        endpoint = "testnet.binance.vision" if testnet else "api.binance.com"
+        print(f"[BINANCE] NEW CLIENT created — api_key_prefix={kp}... "
+              f"testnet={testnet} endpoint={endpoint}", flush=True)
+        log.info("BinanceClient created api_key_prefix=%s... testnet=%s endpoint=%s",
+                 kp, testnet, endpoint)
 
     # ── Connection test ───────────────────────────────────────────────────────
     def test_connection(self):
@@ -125,7 +132,9 @@ class BinanceClient:
         Returns {'asset','free','locked','total','testnet'}.
         Raises RuntimeError on API failure (caller MUST handle / surface).
         """
-        print(f"[BINANCE] Fetching Binance balance... asset={asset} testnet={self.testnet}", flush=True)
+        kp = (self.api_key or "")[:6]
+        print(f"[BINANCE] Fetching Binance balance... asset={asset} "
+              f"testnet={self.testnet} api_key_prefix={kp}...", flush=True)
         try:
             account = self.client.get_account()
         except BinanceAPIException as e:
