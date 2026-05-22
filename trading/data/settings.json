@@ -3,6 +3,7 @@
   "active_symbols": [
     "BTCUSDT"
   ],
+  "bot_was_running": false,
   "strategy": "EMA Crossover",
   "interval": "5m",
   "check_every": 30,

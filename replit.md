@@ -73,6 +73,23 @@ LIVE-only Binance Mainnet trading dashboard. **Every BUY/SELL is a real order on
 - `EMA Crossover` is strict (4 filters must align) — sidebar warns the user and points them to `Price Movement` as **scalping mode** (lower threshold = more trades). Threshold slider already exposed.
 - Balance/PnL are LIVE Binance Spot wallet only. After BUY: USDT free decreases, base asset free increases. After SELL: USDT free increases (or decreases at a loss). Bot never holds funds.
 
+## Refresh-proof bot (May 2026)
+
+- **API keys persist** in `data/.binance_creds.json` (chmod 600, atomic write,
+  whitespace stripped on load). On cold start `_init()` auto-loads + reconnects
+  the LIVE client unless the user manually disconnected.
+- **Bot auto-resumes after server restart.** The Start/Stop buttons set
+  `st.session_state.bot_was_running`; the bottom-of-script auto-save persists
+  it (single source of truth — no race with manual saves). On the next cold
+  start, `_maybe_resume_bot()` rebuilds workers from persisted
+  `active_symbols` + per-symbol risk and calls `b.start()`. Logs
+  `[BOT] Auto-resumed bot after server restart — symbols=…`.
+- **Auth-keys guard in `SymbolWorker.tick()`.** If `exchange.client is None`,
+  the worker sets `block_reason="Waiting for API keys"` and returns — bot stays
+  alive across ticks. Log line prints only on state transition (no spam).
+- **Manual Connect** strips whitespace from key/secret before building
+  `BinanceClient`. Secrets never appear in logs or UI (only key prefix).
+
 ## User preferences
 
 - Dark professional UI (GitHub dark color scheme)

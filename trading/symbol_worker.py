@@ -51,6 +51,18 @@ class SymbolWorker:
         """One iteration of the strategy loop for this symbol."""
         tag = f"[{self.symbol}]"
 
+        # 0. Auth-keys guard. The bot must never crash when credentials
+        # disappear (e.g. operator cleared them). Print ONLY on state
+        # transition (creds present → gone) to avoid log spam; the UI surfaces
+        # the persistent state via block_reason.
+        if getattr(self.exchange, "client", None) is None:
+            if self._last_block_reason != "Waiting for API keys":
+                print(f"[BOT] {self.symbol} Waiting for API keys", flush=True)
+                self._log("WARNING", f"{tag} ⏸️ Waiting for API keys")
+            self._on_state(self.symbol, block_reason="Waiting for API keys")
+            self._last_block_reason = "Waiting for API keys"
+            return
+
         # 1. Price
         try:
             price = self.exchange.get_price(self.symbol)

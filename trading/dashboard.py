@@ -408,6 +408,54 @@ def _init():
 
 _init()
 
+
+def _maybe_resume_bot():
+    """If `bot_was_running` was persisted (user had bot ON before the server
+    restarted) AND we just auto-reconnected the LIVE client, rebuild + start
+    the bot using the persisted settings. This makes the bot refresh-proof
+    and independent of UI lifecycle.
+    """
+    import bot as _bm
+    if _bm.get_bot() and _bm.get_bot().is_running():
+        return
+    if not st.session_state.get("client"):
+        return
+    try:
+        cfg = _bm.load_settings() or {}
+    except Exception:
+        return
+    if not cfg.get("bot_was_running"):
+        return
+    syms = cfg.get("active_symbols") or st.session_state.active_symbols
+    if not syms:
+        return
+    # Rebuild per-symbol risk managers from persisted overrides
+    _per_sym_rm = {}
+    for _s in syms:
+        _ov = st.session_state.per_symbol_risk.get(_s)
+        _per_sym_rm[_s] = RiskManager(_ov) if _ov else st.session_state.risk_manager
+    _global_rm = GlobalRiskManager(st.session_state.global_risk)
+    try:
+        b = _bm.create_bot(
+            client          = st.session_state.client,
+            symbols         = syms,
+            per_symbol_risk = _per_sym_rm,
+            global_risk     = _global_rm,
+            strategy        = st.session_state.strategy,
+            risk_manager    = st.session_state.risk_manager,
+            interval        = st.session_state.interval,
+            check_every     = st.session_state.check_every,
+            threshold       = float(st.session_state.threshold) / 100,
+            initial_balance = st.session_state.initial_balance,
+        )
+        b._initial_balance = st.session_state.initial_balance
+        b.start()
+        print(f"[BOT] Auto-resumed bot after server restart — symbols={syms}",
+              flush=True)
+    except Exception as _e:
+        print(f"[BOT] Auto-resume failed: {_e}", flush=True)
+
+
 # ── Load persisted settings from disk (survives restart) ─────────────────────
 # Only runs once per session; user changes auto-save at bottom of script.
 if not st.session_state.get("_settings_loaded"):
@@ -417,7 +465,7 @@ if not st.session_state.get("_settings_loaded"):
         "symbol", "strategy", "interval", "check_every",
         "threshold", "initial_balance", "manual_amount",
         "refresh_secs", "tg_enabled", "tg_token", "tg_chat_id",
-        "active_symbols",
+        "active_symbols", "bot_was_running",
     )
     for _k in _PERSIST_KEYS:
         if _k in _persisted:
@@ -448,11 +496,14 @@ if not st.session_state.get("_settings_loaded"):
     st.session_state._settings_loaded = True
     if _persisted:
         print(f"[SETTINGS] loaded {len(_persisted)} keys from disk", flush=True)
-        tg.configure(
-            token   = st.session_state.get("tg_token",   ""),
-            chat_id = st.session_state.get("tg_chat_id", ""),
-            enabled = st.session_state.get("tg_enabled", False),
-        )
+    tg.configure(
+        token   = st.session_state.get("tg_token",   ""),
+        chat_id = st.session_state.get("tg_chat_id", ""),
+        enabled = st.session_state.get("tg_enabled", False),
+    )
+    # Now that settings are loaded AND auto-connect has run (in _init), try to
+    # resume the bot if it was running before the last server restart.
+    _maybe_resume_bot()
 
 SYMBOLS    = ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT",
               "ADAUSDT","DOGEUSDT","AVAXUSDT","DOTUSDT","MATICUSDT"]
@@ -1197,6 +1248,10 @@ with st.sidebar:
                 with st.spinner("Connecting to api.binance.com…"):
                     try:
                         from binance_client import BinanceClient
+                        # Strip trailing whitespace/newlines that often sneak in
+                        # when pasting keys (especially api_secret) from email/notes.
+                        api_key    = (api_key    or "").strip()
+                        api_secret = (api_secret or "").strip()
                         st.session_state.manual_disconnect = False  # re-enable auto-load
                         st.session_state.api_key    = api_key
                         st.session_state.api_secret = api_secret
@@ -1325,10 +1380,14 @@ with st.sidebar:
                 )
                 b._initial_balance = st.session_state.initial_balance
                 b.start()
+                # Mark for refresh-proof auto-resume — the bottom-of-script
+                # auto-save now owns this flag (single source of truth, no race).
+                st.session_state.bot_was_running = True
                 st.rerun()
     with bc2:
         if st.button("⏹ Stop", width="stretch", disabled=not bot_running):
             bot_module.stop_bot()
+            st.session_state.bot_was_running = False
             st.rerun()
 
     if st.button("🚨 Emergency Stop", width="stretch", type="secondary"):
@@ -2414,6 +2473,7 @@ def _collect_settings_snapshot() -> dict:
     return {
         "symbol":          st.session_state.symbol,
         "active_symbols":  st.session_state.active_symbols,
+        "bot_was_running": bool(st.session_state.get("bot_was_running", False)),
         "strategy":        st.session_state.strategy,
         "interval":        st.session_state.interval,
         "check_every":     st.session_state.check_every,
