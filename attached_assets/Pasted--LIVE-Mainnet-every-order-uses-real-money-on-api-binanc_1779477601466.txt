@@ -1,0 +1,211 @@
+⚡
+LIVE Mainnet — every order uses real money on api.binance.com
+
+❌
+Binance balance fetch failed: Binance API error -2015: Invalid API-key, IP, or permissions for action.
+
+🔑 Key Ma8buc… · 🌐 api.binance.com
+
+
+Market
+Active symbols (bot)
+
+
+BTCUSDT
+View symbol
+
+
+BTCUSDT
+Interval
+
+5m
+Strategy
+
+EMA Crossover
+Bot
+⚡ Bot places real Binance Mainnet orders on every signal.
+
+Check interval (s)
+
+
+10
+
+300
+
+Price threshold %
+
+
+
+0.01
+
+2.00
+
+
+
+
+BOT PERFORMANCE
+Session
+0/∞
+Win Rate
+0%
+Total P&L
++$0.00
+Per Trade
+$50
+Investment
+Investment mode
+
+
+
+Fixed USDT
+
+
+% of Available
+
+Manual order (USDT)
+
+10.00
+
+
+Risk Management
+Per-trade size (active)
+$50.00 USDT
+Invest per trade (USDT)
+
+
+50.00
+
+
+Hard cap per trade (USDT)
+
+
+100.00
+
+
+Max bot trades / session
+
+
+0
+
+
+Stop loss %
+
+
+0.50
+
+20.00
+
+Take profit %
+
+
+0.50
+
+50.00
+
+Max daily loss %
+
+
+1.00
+
+30.00
+
+Max open trades
+
+
+1
+
+20
+
+🌐 Global risk (account-wide)
+
+🎯 Per-symbol risk overrides
+
+Data & Refresh
+Live refresh interval
+
+
+5s
+Chart auto-refreshes every 5s — no manual action needed
+
+
+
+Telegram Notifications
+
+Bot Token
+
+
+1234567890:ABCDef...
+
+Chat ID
+
+
+-100123456789  or  123456789
+
+Enter Token + Chat ID to enable
+
+⚡ Alpha
+Trade
+BTCUSDT
+$76,358.26
+▼ 1.60%
+H $77,900.00  L $76,101.00
+LIVE 5s · 20:19:53
+LON
+MAINNET
+⚡ LIVE
+CONNECTED
+BOT OFF
+BTC
+$76,358.26
+-1.60%
+Vol 9K
+ETH
+$2,092.88
+-1.96%
+Vol 172K
+BNB
+$652.51
+-0.70%
+Vol 116K
+SOL
+$85.24
+-2.63%
+Vol 1.9M
+XRP
+$1.35
+-2.23%
+Vol 81.7M
+ADA
+$0.2451
+-2.81%
+Vol 117.0M
+DOGE
+$0.1041
+-1.61%
+Vol 440.5M
+AVAX
+$9.27
+-2.11%
+Vol 2.0M
+DOT
+$1.29
++0.08%
+Vol 10.7M
+MATIC
+$0.3794
+-0.29%
+Vol 2.8M
+🔴 LIVE MAINNET
+·
+Balance ERR: Binance API error -2015: Invalid API-key, IP, or permissions for action.
+BOT OFF
+STRATEGY EMA Crossover
+SIGNAL
+—
+CONFIDENCE
+0
+LAST CHECK
+—
+⚡ LIVE MAINNET · every order is real
+❌
+Binance balance API failed: Binance API error -2015: Invalid API-key, IP, or permissions for action. — check API key permissions / IP whitel
