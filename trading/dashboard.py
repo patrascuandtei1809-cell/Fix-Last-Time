@@ -321,6 +321,9 @@ def _init():
     defaults = {
         "client":           None,
         "connected":        False,
+        "creds_from_disk":  False,    # True when api_key/secret came from backend file
+        "api_key":          "",
+        "api_secret":       "",
         "symbol":           "BTCUSDT",   # currently-viewed symbol (chart, manual trade)
         "active_symbols":   ["BTCUSDT"], # symbols the bot trades on (max 3)
         "per_symbol_risk":  {},          # {symbol: RiskSettings} — overrides global risk
@@ -362,6 +365,46 @@ def _init():
         chat_id = st.session_state.get("tg_chat_id", ""),
         enabled = st.session_state.get("tg_enabled", False),
     )
+
+    # ── Auto-load persisted Binance credentials (server-side, chmod 600) ─────
+    # Only on first cold-start when session has no key yet — survives both
+    # browser refresh and Streamlit server restart.
+    # The Disconnect button sets `manual_disconnect=True` so we DO NOT
+    # immediately auto-reload from disk on the very next rerun. The user must
+    # press Clear (which removes the file) or refresh the browser tab to
+    # re-enable auto-load.
+    if not st.session_state.get("api_key") and not st.session_state.get("manual_disconnect"):
+        try:
+            from secrets_store import load_credentials
+            _saved = load_credentials()
+        except Exception as _e:
+            _saved = None
+            print(f"[CREDS] load_credentials failed: {_e}", flush=True)
+        if _saved:
+            _k, _s = _saved
+            st.session_state.api_key        = _k
+            st.session_state.api_secret     = _s
+            st.session_state.creds_from_disk = True
+            print(f"[CREDS] Auto-loaded LIVE creds (key={_k[:6]}…) — testing connection…",
+                  flush=True)
+            try:
+                from binance_client import BinanceClient
+                _c = BinanceClient(_k, _s)
+                _ok, _msg = _c.test_connection()
+                if _ok:
+                    st.session_state.client    = _c
+                    st.session_state.connected = True
+                    print(f"[CREDS] Auto-connected LIVE — {_msg}", flush=True)
+                else:
+                    st.session_state.client    = None
+                    st.session_state.connected = False
+                    st.session_state["_auto_conn_err"] = _msg
+                    print(f"[CREDS] Auto-connect FAILED — {_msg}", flush=True)
+            except Exception as _e:
+                st.session_state.client    = None
+                st.session_state.connected = False
+                st.session_state["_auto_conn_err"] = str(_e)
+                print(f"[CREDS] Auto-connect exception: {_e}", flush=True)
 
 _init()
 
@@ -979,6 +1022,12 @@ with st.sidebar:
     st.markdown('<div class="sec-lbl">API Connection</div>', unsafe_allow_html=True)
     st.error("⚡ **LIVE Mainnet** — every order uses real money on api.binance.com")
 
+    from secrets_store import (
+        save_credentials   as _save_creds,
+        clear_credentials  as _clear_creds,
+        has_saved_credentials as _has_saved_creds,
+    )
+
     if st.session_state.connected and _cl():
         _conn_c = _cl()
         try:
@@ -986,9 +1035,11 @@ with st.sidebar:
             _live_usdt = _live_bal["total"]
             _live_free = _live_bal["free"]
             _live_lock = _live_bal["locked"]
+            _src_lbl = "saved backend credentials" if st.session_state.get("creds_from_disk") else "this session"
             st.markdown(f"""
 <div style="background:#1a0a0a;border:1px solid #ef535044;border-radius:8px;padding:10px 12px;margin-bottom:8px;">
   <div style="font-size:9px;color:#ef5350;font-weight:700;letter-spacing:.1em;margin-bottom:4px;">CONNECTED · 🔴 LIVE MAINNET</div>
+  <div style="font-size:10px;color:#8b949e;margin-bottom:6px;">via {_src_lbl}</div>
   <div style="font-size:18px;font-weight:700;color:#f0f6fc;font-family:'JetBrains Mono',monospace;">${_live_usdt:,.2f} <span style="font-size:11px;color:#6e7681;">USDT total</span></div>
   <div style="font-size:10px;color:#8b949e;margin-top:4px;font-family:'JetBrains Mono',monospace;">free ${_live_free:,.2f} · locked ${_live_lock:,.2f}</div>
 </div>""", unsafe_allow_html=True)
@@ -999,23 +1050,49 @@ with st.sidebar:
         if _cur is not None:
             _kp = (getattr(_cur, "api_key", "") or "")[:6]
             st.caption(f"🔑 Key `{_kp}…` · 🌐 `api.binance.com`")
-        if st.button("🔌 Disconnect", width="stretch"):
-            print("[BINANCE] User disconnected — clearing client and credentials", flush=True)
-            st.session_state.client     = None
-            st.session_state.connected  = False
-            st.session_state.api_key    = ""
-            st.session_state.api_secret = ""
-            st.rerun()
+        _dc1, _dc2 = st.columns(2)
+        with _dc1:
+            if st.button("🔌 Disconnect", width="stretch",
+                         help="Drop client from this session. Saved backend keys remain — use 'Clear saved' to delete them permanently."):
+                print("[BINANCE] User disconnected — clearing session client only", flush=True)
+                st.session_state.client            = None
+                st.session_state.connected         = False
+                st.session_state.api_key           = ""
+                st.session_state.api_secret        = ""
+                st.session_state.creds_from_disk   = False
+                st.session_state.manual_disconnect = True  # block auto-reload from disk
+                st.rerun()
+        with _dc2:
+            _has_saved = _has_saved_creds()
+            if st.button("🧹 Clear saved", width="stretch",
+                         disabled=not _has_saved,
+                         help="Delete persisted backend credentials file. Disconnects and prevents auto-reconnect."):
+                _clear_creds()
+                st.session_state.client            = None
+                st.session_state.connected         = False
+                st.session_state.api_key           = ""
+                st.session_state.api_secret        = ""
+                st.session_state.creds_from_disk   = False
+                st.session_state.manual_disconnect = True
+                log_activity("INFO", "🧹 Cleared saved Binance credentials from backend")
+                st.rerun()
     else:
+        # Surface auto-connect failure (e.g. -1022/-2015) so user sees the exact Binance error
+        _auto_err = st.session_state.pop("_auto_conn_err", None)
+        if _auto_err:
+            st.error(f"❌ Auto-connect failed with saved credentials: {_auto_err}")
         api_key    = st.text_input("API Key",    type="password",
                                     placeholder="Binance Mainnet API key (binance.com)")
         api_secret = st.text_input("API Secret", type="password",
                                     placeholder="Binance Mainnet API secret")
+        _remember = st.checkbox("Remember on server (chmod 600, survives refresh + restart)",
+                                value=True, key="_remember_creds")
         if st.button("🔌 Connect to Binance LIVE", width="stretch", type="primary"):
             if api_key and api_secret:
                 with st.spinner("Connecting to api.binance.com…"):
                     try:
                         from binance_client import BinanceClient
+                        st.session_state.manual_disconnect = False  # re-enable auto-load
                         st.session_state.api_key    = api_key
                         st.session_state.api_secret = api_secret
                         print(f"[BINANCE] CONNECT clicked — LIVE key_prefix={api_key[:6]}...",
@@ -1025,7 +1102,20 @@ with st.sidebar:
                         if ok:
                             st.session_state.client    = c
                             st.session_state.connected = True
-                            log_activity("INFO", f"🔌 Connected LIVE — {msg} — key {api_key[:6]}...")
+                            if _remember:
+                                try:
+                                    _save_creds(api_key, api_secret)
+                                    st.session_state.creds_from_disk = True
+                                    log_activity("INFO",
+                                        f"🔌 Connected LIVE + saved to backend — key {api_key[:6]}…")
+                                except Exception as _se:
+                                    log_activity("ERROR",
+                                        f"🔌 Connected LIVE but FAILED to persist creds: {_se}")
+                                    st.warning(f"Connected, but could not save credentials: {_se}")
+                            else:
+                                st.session_state.creds_from_disk = False
+                                log_activity("INFO",
+                                    f"🔌 Connected LIVE (session only) — key {api_key[:6]}…")
                             st.success("✅ Connected to LIVE Mainnet!")
                             st.rerun()
                         else:
@@ -1038,6 +1128,12 @@ with st.sidebar:
                         st.error(f"Connection error: {e}")
             else:
                 st.info("API key required — bot/manual trading is disabled until connected.")
+        if _has_saved_creds():
+            if st.button("🧹 Clear saved Binance keys", width="stretch",
+                         help="Delete persisted backend credentials file."):
+                _clear_creds()
+                log_activity("INFO", "🧹 Cleared saved Binance credentials from backend")
+                st.rerun()
 
     st.markdown('<hr class="s-div"/>', unsafe_allow_html=True)
 

@@ -131,7 +131,7 @@ class BinanceClient:
             t = self.client.get_server_time()
             return True, f"Connected — server time: {t['serverTime']}"
         except BinanceAPIException as e:
-            return False, f"Binance API error: {e.message}"
+            return False, f"Binance API error {e.code}: {e.message}"
         except Exception as e:
             return False, f"Connection error: {e}"
 
