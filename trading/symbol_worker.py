@@ -1,15 +1,7 @@
-"""One SymbolWorker per (exchange, symbol).
+"""One SymbolWorker per (exchange, symbol). LIVE Binance Mainnet only.
 
-Encapsulates everything that used to live inside the single TradingBot._tick:
-  • pulls price + klines from the assigned Exchange
-  • computes signal via strategy module
-  • manages open positions (SL / TP)
-  • opens new trades through the Exchange interface
-  • per-symbol risk gating (RiskManager)
-
-The bot orchestrator calls `worker.tick()` for each enabled worker on every
-loop iteration. Workers share NO state with each other — they each own their
-own risk counters, last-trade timestamp, session counter, etc.
+Every BUY/SELL goes through Exchange.place_*_order, which talks directly to
+api.binance.com. No paper. No testnet. No simulated fills.
 """
 from datetime import datetime
 from typing import Optional, Dict, List, Callable
@@ -27,10 +19,7 @@ class SymbolWorker:
         strategy:        str,
         risk_manager:    RiskManager,
         interval:        str   = "5m",
-        paper_mode:      bool  = True,
         price_threshold: float = 0.0003,
-        # Callbacks injected by the orchestrator — keeps this module
-        # independent of bot.py's persistence/logging globals.
         on_log:          Optional[Callable] = None,
         on_state_update: Optional[Callable] = None,
         on_open_trade:   Optional[Callable] = None,
@@ -42,7 +31,6 @@ class SymbolWorker:
         self.strategy   = strategy
         self.risk       = risk_manager
         self.interval   = interval
-        self.paper      = paper_mode
         self.threshold  = price_threshold
 
         self._on_log    = on_log    or (lambda *_a, **_kw: None)
@@ -60,14 +48,10 @@ class SymbolWorker:
     # ── Public API used by orchestrator ──────────────────────────────────────
     def tick(self, all_open_trades: List[Dict],
              global_gate_fn: Callable[[float, str], tuple]) -> None:
-        """One iteration of the strategy loop for this symbol.
-
-        global_gate_fn(invest, symbol) → (ok: bool, reason: str)
-        Called BEFORE order submission to enforce cross-symbol caps.
-        """
+        """One iteration of the strategy loop for this symbol."""
         tag = f"[{self.symbol}]"
 
-        # 1. Price ─────────────────────────────────────────────────────────────
+        # 1. Price
         try:
             price = self.exchange.get_price(self.symbol)
         except Exception as e:
@@ -75,7 +59,7 @@ class SymbolWorker:
             return
         self._on_state(self.symbol, price=price, tick=True)
 
-        # 2. Manage open positions (SL/TP) ─────────────────────────────────────
+        # 2. Manage open positions (SL/TP)
         my_open = [t for t in all_open_trades
                    if t.get("type") == "bot" and t.get("coin") == self.symbol]
         for trade in my_open:
@@ -97,7 +81,7 @@ class SymbolWorker:
                 self._close_position(trade, price, tp_msg)
                 return
 
-        # 3. Klines + signal ───────────────────────────────────────────────────
+        # 3. Klines + signal
         try:
             df = self.exchange.get_klines(self.symbol, self.interval, limit=150)
         except Exception as e:
@@ -117,7 +101,7 @@ class SymbolWorker:
             self._on_state(self.symbol, block_reason="")
             return
 
-        # 4. Per-symbol gate ──────────────────────────────────────────────────
+        # 4. Per-symbol gate
         ok, block = self.risk.can_open_trade(
             open_trades_for_symbol = my_open,
             symbol                 = self.symbol,
@@ -133,7 +117,7 @@ class SymbolWorker:
             self._last_block_reason = block
             return
 
-        # 5. Sizing ───────────────────────────────────────────────────────────
+        # 5. Sizing
         invested = self.risk.get_invest_amount()
         if invested < 10:
             msg = f"{tag} ⚠️ invest_per_trade ${invested:.2f} < $10 minimum"
@@ -142,7 +126,7 @@ class SymbolWorker:
             self._on_state(self.symbol, block_reason=msg)
             return
 
-        # 6. Global gate ──────────────────────────────────────────────────────
+        # 6. Global gate
         ok_g, block_g = global_gate_fn(invested, self.symbol)
         if not ok_g:
             print(f"[WORKER {self.symbol}] BLOCKED (global) {block_g}", flush=True)
@@ -150,71 +134,57 @@ class SymbolWorker:
             self._on_state(self.symbol, block_reason=block_g)
             return
 
-        # 7. Live balance gate ────────────────────────────────────────────────
-        if not self.paper:
-            try:
-                bal = self.exchange.get_balance("USDT")
-                free_usdt = float(bal.get("free", 0))
-            except Exception as e:
-                msg = f"{tag} balance fetch failed: {e}"
-                self._log("WARNING", msg)
-                self._on_state(self.symbol, block_reason=msg)
-                return
-            if invested > free_usdt:
-                msg = (f"{tag} ⚠️ invest ${invested:.2f} > free USDT ${free_usdt:.2f}")
-                print(f"[WORKER {self.symbol}] BLOCKED (balance) {msg}", flush=True)
-                self._log("WARNING", msg)
-                self._on_state(self.symbol, block_reason=msg)
-                return
+        # 7. LIVE balance gate — always
+        try:
+            bal = self.exchange.get_balance("USDT")
+            free_usdt = float(bal.get("free", 0))
+        except Exception as e:
+            msg = f"{tag} balance fetch failed: {e}"
+            self._log("WARNING", msg)
+            self._on_state(self.symbol, block_reason=msg)
+            return
+        if invested > free_usdt:
+            msg = (f"{tag} ⚠️ invest ${invested:.2f} > free USDT ${free_usdt:.2f}")
+            print(f"[WORKER {self.symbol}] BLOCKED (balance) {msg}", flush=True)
+            self._log("WARNING", msg)
+            self._on_state(self.symbol, block_reason=msg)
+            return
 
         # All gates clear
         self._on_state(self.symbol, block_reason="")
 
         sl_p = self.risk.stop_loss_price(price, signal)
         tp_p = self.risk.take_profit_price(price, signal)
-        mode_tag = "PAPER" if self.paper else ("TESTNET" if self.exchange.testnet else "LIVE")
 
-        # 8. Execute via Exchange interface ───────────────────────────────────
-        fill_price = price
-        qty        = self.exchange.round_quantity(self.symbol, invested / price)
-
-        if not self.paper:
-            print(f"[WORKER {self.symbol}] ORDER REQUEST → {self.exchange.name} {mode_tag} "
-                  f"{signal} qty={qty} (~${invested:.2f})", flush=True)
-            if signal == "BUY":
-                resp = self.exchange.place_buy_order(self.symbol, invested)
-            else:
-                resp = self.exchange.place_sell_order(self.symbol, qty)
-            print(f"[WORKER {self.symbol}] ORDER RESPONSE ← {resp}", flush=True)
-            if not resp.get("ok"):
-                err = resp.get("error", "unknown")
-                self._log("ERROR", f"{tag} order failed: {err}")
-                self._on_state(self.symbol, block_reason=f"Order failed: {err}",
-                               last_order=resp)
-                self._on_tg("error_alert", f"Order FAILED — {signal} {self.symbol}\n{err}")
-                return
-            fill_price = float(resp.get("price") or price)
-            qty        = float(resp.get("qty") or qty)
-            self._log("ORDER", f"{tag} ✅ {mode_tag} {signal} | {qty} @ ${fill_price:.4f}")
-            self._on_state(self.symbol, last_order=resp)
+        # 8. Execute REAL order via Exchange interface
+        qty = self.exchange.round_quantity(self.symbol, invested / price)
+        print(f"[WORKER {self.symbol}] ORDER REQUEST → {self.exchange.name} LIVE "
+              f"{signal} qty={qty} (~${invested:.2f})", flush=True)
+        if signal == "BUY":
+            resp = self.exchange.place_buy_order(self.symbol, invested)
         else:
-            self._log("ORDER",
-                f"{tag} 📋 PAPER {signal} | {qty:.6f} @ ${price:.4f} | "
-                f"${invested:.2f} invested | SL ${sl_p:.4f} | TP ${tp_p:.4f}")
-            self._on_state(self.symbol, last_order={
-                "ok": True, "exchange": self.exchange.name, "side": signal,
-                "qty": qty, "symbol": self.symbol, "price": price, "mode": mode_tag,
-            })
+            resp = self.exchange.place_sell_order(self.symbol, qty)
+        print(f"[WORKER {self.symbol}] ORDER RESPONSE ← {resp}", flush=True)
+        if not resp.get("ok"):
+            err = resp.get("error", "unknown")
+            self._log("ERROR", f"{tag} order failed: {err}")
+            self._on_state(self.symbol, block_reason=f"Order failed: {err}",
+                           last_order=resp)
+            self._on_tg("error_alert", f"Order FAILED — {signal} {self.symbol}\n{err}")
+            return
+        fill_price = float(resp.get("price") or price)
+        qty        = float(resp.get("qty") or qty)
+        self._log("ORDER", f"{tag} ✅ LIVE {signal} | {qty} @ ${fill_price:.4f}")
+        self._on_state(self.symbol, last_order=resp)
 
-        self._on_tg("trade_open", self.symbol, signal, fill_price, invested, reason, mode_tag)
+        self._on_tg("trade_open", self.symbol, signal, fill_price, invested, reason, "LIVE")
         self._last_trade_at  = datetime.now()
         self._last_trade_dir = signal
 
-        # 9. Record trade ─────────────────────────────────────────────────────
+        # 9. Record trade
         trade = {
             "coin":            self.symbol,
-            "exchange":        f"{self.exchange.name}{' (testnet)' if self.exchange.testnet else ''}"
-                               if not self.paper else "Paper (public data)",
+            "exchange":        self.exchange.name,
             "type":            "bot",
             "strategy":        self.strategy,
             "side":            signal,
@@ -231,7 +201,6 @@ class SymbolWorker:
             "stop_loss":       sl_p,
             "take_profit":     tp_p,
             "status":          "open",
-            "paper":           self.paper,
         }
         added = self._on_open(trade)
         self._session_trades += 1
@@ -241,17 +210,42 @@ class SymbolWorker:
             f"Session: {self._session_trades}")
 
     def _close_position(self, trade: Dict, price: float, reason: str) -> None:
-        """Close an open position. Mirrors old TradingBot._close."""
-        if not self.paper:
-            qty = trade.get("quantity", 0)
-            if trade["side"] == "BUY":
-                resp = self.exchange.place_sell_order(self.symbol, qty)
-            else:
-                resp = self.exchange.place_buy_order(self.symbol, qty * price)
-            if not resp.get("ok"):
-                self._log("ERROR", f"[{self.symbol}] Close order failed: {resp.get('error')}")
-                return
-        self._on_close(trade["id"], price, reason)
+        """Close an open position with a REAL counter-order targeting the
+        EXACT base qty of the original open.
+
+        Recorded close price comes from the Binance execution (resp['price']).
+        If the exchange-filled qty deviates from the intended qty by more than
+        5%, we LOG ERROR and refuse to mark the trade closed — the trade
+        stays open so the operator can reconcile residual position manually.
+        """
+        intended_qty = float(trade.get("quantity") or 0)
+        if intended_qty <= 0:
+            self._log("ERROR",
+                f"[{self.symbol}] Cannot close trade {trade.get('id')} — zero qty on record.")
+            return
+        if trade["side"] == "BUY":
+            resp = self.exchange.place_sell_order(self.symbol, intended_qty)
+        else:
+            # SHORT close — BUY exact base qty (NOT quote estimate)
+            resp = self.exchange.place_buy_order_qty(self.symbol, intended_qty)
+        if not resp.get("ok"):
+            self._log("ERROR", f"[{self.symbol}] Close order failed: {resp.get('error')}")
+            return
+        exec_price = float(resp.get("price") or 0)
+        exec_qty   = float(resp.get("qty") or 0)
+        if exec_price <= 0 or exec_qty <= 0:
+            self._log("ERROR",
+                f"[{self.symbol}] Close response missing execution data — NOT marking trade closed. resp={resp}")
+            return
+        # Fill-size guard: refuse to close if Binance filled materially less/more
+        deviation = abs(exec_qty - intended_qty) / intended_qty
+        if deviation > 0.05:
+            self._log("ERROR",
+                f"[{self.symbol}] Close fill size mismatch — intended {intended_qty}, "
+                f"filled {exec_qty} (Δ {deviation*100:.2f}%). Trade {trade.get('id')} "
+                f"left OPEN for manual reconciliation.")
+            return
+        self._on_close(trade["id"], exec_price, reason)
 
     def _log(self, level: str, msg: str) -> None:
         self._on_log(level, msg)
@@ -263,7 +257,6 @@ class SymbolWorker:
             "exchange":         self.exchange.name,
             "strategy":         self.strategy,
             "interval":         self.interval,
-            "paper":            self.paper,
             "session_trades":   self._session_trades,
             "last_trade_at":    self._last_trade_at,
             "last_trade_dir":   self._last_trade_dir,

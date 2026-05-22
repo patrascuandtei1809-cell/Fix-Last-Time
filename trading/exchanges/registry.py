@@ -12,7 +12,7 @@ _exchanges: Dict[str, Exchange] = {}
 def register(ex: Exchange) -> None:
     """Register an exchange. Replaces existing entry with same name."""
     _exchanges[ex.name] = ex
-    print(f"[REGISTRY] registered exchange: {ex.name} testnet={ex.testnet}", flush=True)
+    print(f"[REGISTRY] registered exchange: {ex.name} LIVE", flush=True)
 
 
 def get(name: str) -> Optional[Exchange]:

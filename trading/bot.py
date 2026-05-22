@@ -226,14 +226,10 @@ def _save_trade_file(path: str, trades: List[Dict]) -> None:
 
 
 def _exchange_key(trade: Dict) -> str:
-    """Map a trade dict to its on-disk exchange bucket."""
+    """Map a trade dict to its on-disk exchange bucket. LIVE only."""
     ex = (trade.get("exchange") or "").lower()
-    if "testnet" in ex:
-        return "binance_testnet"
     if "binance" in ex:
         return "binance"
-    if "paper" in ex:
-        return "paper"
     return ex or "unknown"
 
 
@@ -534,33 +530,26 @@ def get_bot_last_signal() -> dict:
 # Builder — accepts BOTH new multi-symbol signature AND legacy single-symbol.
 # ─────────────────────────────────────────────────────────────────────────────
 def create_bot(
-    client=None,                                # legacy: BinanceClient or None
+    client=None,                                # BinanceClient (LIVE) — REQUIRED for orders
     symbol:       Optional[str] = None,         # legacy: single-symbol mode
     strategy:     str = "EMA Crossover",
     risk_manager: Optional[RiskManager] = None,
     interval:     str = "5m",
     check_every:  int = 30,
-    paper_mode:   bool = True,
     threshold:    float = 0.0003,
-    # New multi-symbol args
+    # Multi-symbol args
     symbols:               Optional[List[str]] = None,
     per_symbol_risk:       Optional[Dict[str, RiskManager]] = None,
     global_risk:           Optional[GlobalRiskManager] = None,
     exchange:              Optional[Exchange] = None,
     initial_balance:       float = 1000.0,
 ) -> TradingBot:
-    """Build (or rebuild) the singleton bot.
-
-    Two call modes supported:
-      A. Multi-symbol:   create_bot(exchange=ex, symbols=[...], per_symbol_risk={...}, global_risk=...)
-      B. Legacy single:  create_bot(client=binance_client, symbol="BTCUSDT", risk_manager=rm, ...)
-    """
+    """Build (or rebuild) the singleton bot. LIVE Binance Mainnet only."""
     global _bot, _primary_symbol
 
     # Build / register the exchange
     if exchange is None:
-        # Build a BinanceExchange around the legacy client (or paper-only)
-        exchange = BinanceExchange(client=client, testnet=bool(client and client.testnet))
+        exchange = BinanceExchange(client=client)
         ex_registry.clear()
         ex_registry.register(exchange)
     else:
@@ -608,7 +597,6 @@ def create_bot(
                 strategy        = strategy,
                 risk_manager    = rm,
                 interval        = interval,
-                paper_mode      = paper_mode,
                 price_threshold = threshold,
                 on_log          = log_activity,
                 on_state_update = _set_shared_for,
@@ -635,48 +623,4 @@ def stop_bot():
             _bot.stop()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Force test trade (dashboard button) — back-compat
-# ─────────────────────────────────────────────────────────────────────────────
-def force_paper_trade(symbol: str, side: str, price: float, invested: float) -> dict:
-    """Bypasses signal/risk gates. Paper trade only. For dashboard test button."""
-    # Find a RiskManager for SL/TP calc (use worker's if available)
-    rm: Optional[RiskManager] = None
-    if _bot:
-        for w in _bot.workers.values():
-            if w.symbol == symbol:
-                rm = w.risk
-                break
-    if rm is None:
-        rm = RiskManager(RiskSettings())
-
-    qty  = round(invested / price, 6)
-    sl_p = rm.stop_loss_price(price, side)
-    tp_p = rm.take_profit_price(price, side)
-    trade = {
-        "coin":            symbol,
-        "exchange":        "Paper (force test)",
-        "type":            "bot",
-        "strategy":        "Force Test",
-        "side":            side,
-        "entry_price":     price,
-        "exit_price":      None,
-        "quantity":        qty,
-        "invested":        invested,
-        "profit_loss":     None,
-        "profit_loss_pct": None,
-        "open_time":       datetime.now().isoformat(),
-        "close_time":      None,
-        "reason":          f"🧪 Force test {side} @ ${price:.4f}",
-        "close_reason":    None,
-        "stop_loss":       sl_p,
-        "take_profit":     tp_p,
-        "status":          "open",
-        "paper":           True,
-    }
-    added = add_trade(trade)
-    log_activity("ORDER",
-        f"🧪 FORCE TEST {side} | {qty:.6f} {symbol} @ ${price:.4f} | "
-        f"${invested:.2f} USDT | SL ${sl_p:.4f} | TP ${tp_p:.4f}")
-    _tg_dispatch("trade_open", symbol, side, price, invested, "Force test", "PAPER-FORCE")
-    return added
+# force_paper_trade was removed — LIVE-only build has no force/paper test trades.

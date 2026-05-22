@@ -1,3 +1,4 @@
+"""LIVE Binance Mainnet client only. No testnet. No paper. Real orders."""
 import pandas as pd
 import requests
 import math
@@ -12,18 +13,51 @@ if not log.handlers:
     log.addHandler(_h)
     log.setLevel(logging.INFO)
 
-# ── Public Binance REST (no auth needed) ──────────────────────────────────────
+# ── Public Binance REST (no auth needed) — LIVE Mainnet ONLY ──────────────────
 _PUBLIC_BASE = "https://api.binance.com/api/v3"
-_TESTNET_BASE = "https://testnet.binance.vision/api/v3"
 
 
-def public_klines(symbol: str, interval: str = "5m", limit: int = 200,
-                  testnet: bool = False) -> pd.DataFrame:
+def extract_fill(order: dict) -> tuple[float, float]:
+    """Return (executed_qty, avg_fill_price) from a real Binance order response.
+
+    Resolution order:
+      1. Weighted average of `fills[]` entries (most accurate).
+      2. cummulativeQuoteQty / executedQty (Binance always populates these for
+         MARKET orders that actually filled).
+    Raises RuntimeError if neither is available — callers MUST NOT fall back to
+    a UI/ticker price, because that would record a non-real execution.
+    """
+    fills = order.get("fills") or []
+    total_qty   = 0.0
+    total_quote = 0.0
+    for f in fills:
+        try:
+            q = float(f.get("qty", 0))
+            p = float(f.get("price", 0))
+        except (TypeError, ValueError):
+            continue
+        if q > 0 and p > 0:
+            total_qty   += q
+            total_quote += q * p
+    if total_qty > 0:
+        return total_qty, total_quote / total_qty
+    try:
+        exec_qty   = float(order.get("executedQty") or 0)
+        quote_qty  = float(order.get("cummulativeQuoteQty") or 0)
+    except (TypeError, ValueError):
+        exec_qty = quote_qty = 0.0
+    if exec_qty > 0 and quote_qty > 0:
+        return exec_qty, quote_qty / exec_qty
+    raise RuntimeError(
+        f"Cannot extract executed fill from Binance order response: {order!r}"
+    )
+
+
+def public_klines(symbol: str, interval: str = "5m", limit: int = 200) -> pd.DataFrame:
     """Fetch OHLCV candles using the public REST API — no API key required."""
-    base = _TESTNET_BASE if testnet else _PUBLIC_BASE
     try:
         r = requests.get(
-            f"{base}/klines",
+            f"{_PUBLIC_BASE}/klines",
             params={"symbol": symbol, "interval": interval, "limit": limit},
             timeout=10,
         )
@@ -46,11 +80,10 @@ def public_klines(symbol: str, interval: str = "5m", limit: int = 200,
     return df
 
 
-def public_price(symbol: str, testnet: bool = False) -> float:
+def public_price(symbol: str) -> float:
     """Get current ticker price — no API key required."""
-    base = _TESTNET_BASE if testnet else _PUBLIC_BASE
     try:
-        r = requests.get(f"{base}/ticker/price",
+        r = requests.get(f"{_PUBLIC_BASE}/ticker/price",
                          params={"symbol": symbol}, timeout=8)
         r.raise_for_status()
         return float(r.json()["price"])
@@ -58,11 +91,10 @@ def public_price(symbol: str, testnet: bool = False) -> float:
         raise RuntimeError(f"Public price fetch failed: {e}")
 
 
-def public_24h(symbol: str, testnet: bool = False) -> dict:
+def public_24h(symbol: str) -> dict:
     """24-hour stats (% change, high, low, volume) — no auth needed."""
-    base = _TESTNET_BASE if testnet else _PUBLIC_BASE
     try:
-        r = requests.get(f"{base}/ticker/24hr",
+        r = requests.get(f"{_PUBLIC_BASE}/ticker/24hr",
                          params={"symbol": symbol}, timeout=8)
         r.raise_for_status()
         d = r.json()
@@ -78,20 +110,19 @@ def public_24h(symbol: str, testnet: bool = False) -> dict:
         raise RuntimeError(f"24h stats fetch failed: {e}")
 
 
-# ── Authenticated BinanceClient (API key required) ────────────────────────────
+# ── Authenticated BinanceClient — LIVE MAINNET ONLY ───────────────────────────
 class BinanceClient:
-    def __init__(self, api_key: str, api_secret: str, testnet: bool = True):
+    """Authenticated client against api.binance.com. No testnet, ever."""
+
+    def __init__(self, api_key: str, api_secret: str):
         self.api_key    = api_key
         self.api_secret = api_secret
-        self.testnet    = testnet
-        self.client     = Client(api_key, api_secret, testnet=testnet)
-        # Identify the credentials this client is actually using
+        # Hard-coded testnet=False; we never construct a testnet client.
+        self.client     = Client(api_key, api_secret, testnet=False)
         kp = (api_key or "")[:6]
-        endpoint = "testnet.binance.vision" if testnet else "api.binance.com"
-        print(f"[BINANCE] NEW CLIENT created — api_key_prefix={kp}... "
-              f"testnet={testnet} endpoint={endpoint}", flush=True)
-        log.info("BinanceClient created api_key_prefix=%s... testnet=%s endpoint=%s",
-                 kp, testnet, endpoint)
+        print(f"[BINANCE] LIVE client created — api_key_prefix={kp}... "
+              f"endpoint=api.binance.com", flush=True)
+        log.info("BinanceClient LIVE created api_key_prefix=%s... endpoint=api.binance.com", kp)
 
     # ── Connection test ───────────────────────────────────────────────────────
     def test_connection(self):
@@ -104,7 +135,7 @@ class BinanceClient:
         except Exception as e:
             return False, f"Connection error: {e}"
 
-    # ── Market data (uses auth client — works on testnet) ─────────────────────
+    # ── Market data ───────────────────────────────────────────────────────────
     def get_symbol_price(self, symbol: str) -> float:
         ticker = self.client.get_symbol_ticker(symbol=symbol)
         return float(ticker["price"])
@@ -127,14 +158,12 @@ class BinanceClient:
 
     # ── Account ───────────────────────────────────────────────────────────────
     def get_account_balance(self, asset: str = "USDT") -> dict:
-        """Real Binance balance for one asset via client.get_account().
-
-        Returns {'asset','free','locked','total','testnet'}.
+        """Real Binance balance for one asset. Returns {asset, free, locked, total}.
         Raises RuntimeError on API failure (caller MUST handle / surface).
         """
         kp = (self.api_key or "")[:6]
-        print(f"[BINANCE] Fetching Binance balance... asset={asset} "
-              f"testnet={self.testnet} api_key_prefix={kp}...", flush=True)
+        print(f"[BINANCE] Fetching LIVE balance... asset={asset} api_key_prefix={kp}...",
+              flush=True)
         try:
             account = self.client.get_account()
         except BinanceAPIException as e:
@@ -149,29 +178,25 @@ class BinanceClient:
             raise RuntimeError(err) from e
 
         bals = account.get("balances", [])
-        # Print short summary of the response (avoid dumping 350 lines)
         match = next((b for b in bals if b["asset"] == asset), None)
-        print(f"[BINANCE] get_account OK testnet={self.testnet} "
-              f"canTrade={account.get('canTrade')} accountType={account.get('accountType')} "
-              f"assets={len(bals)} {asset}={match}", flush=True)
-        log.info("Binance get_account OK (testnet=%s) — %d assets, canTrade=%s",
-                 self.testnet, len(bals), account.get("canTrade"))
+        print(f"[BINANCE] get_account OK LIVE canTrade={account.get('canTrade')} "
+              f"accountType={account.get('accountType')} assets={len(bals)} {asset}={match}",
+              flush=True)
+        log.info("Binance get_account OK LIVE — %d assets, canTrade=%s",
+                 len(bals), account.get("canTrade"))
 
         if match:
             f = float(match["free"]); l = float(match["locked"])
-            out = {"asset": asset, "free": f, "locked": l,
-                   "total": f + l, "testnet": self.testnet}
+            out = {"asset": asset, "free": f, "locked": l, "total": f + l}
             print(f"[BINANCE] {asset} free={f:.8f} locked={l:.8f} total={f+l:.8f}", flush=True)
-            log.info("Balance %s: free=%.8f locked=%.8f total=%.8f",
-                     asset, f, l, f + l)
+            log.info("Balance %s: free=%.8f locked=%.8f total=%.8f", asset, f, l, f + l)
             return out
 
         print(f"[BINANCE][WARN] Asset {asset} not in balances", flush=True)
         log.warning("Asset %s not present in account balances", asset)
-        return {"asset": asset, "free": 0.0, "locked": 0.0,
-                "total": 0.0, "testnet": self.testnet}
+        return {"asset": asset, "free": 0.0, "locked": 0.0, "total": 0.0}
 
-    # Back-compat alias used elsewhere in the codebase
+    # Back-compat alias
     def get_asset_balance_full(self, asset: str = "USDT") -> dict:
         return self.get_account_balance(asset)
 
@@ -214,7 +239,7 @@ class BinanceClient:
                 return float(f["minNotional"])
         return 10.0
 
-    # ── Orders ────────────────────────────────────────────────────────────────
+    # ── Orders (REAL Binance Mainnet) ─────────────────────────────────────────
     def place_market_order(self, symbol: str, side: str, quantity: float) -> dict:
         return self.client.create_order(
             symbol=symbol,

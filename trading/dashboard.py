@@ -22,7 +22,7 @@ from bot import (
     load_trades, load_activity, get_open_trades,
     add_trade, close_trade, reset_all_data, clear_activity, log_activity,
     get_shared_df, get_shared_price, get_shared_updated_at, get_shared_last_tick,
-    get_bot_session_trades, get_bot_last_signal, get_bot_signal_meta, force_paper_trade,
+    get_bot_session_trades, get_bot_last_signal, get_bot_signal_meta,
     get_bot_diagnostics, save_settings,
 )
 from strategy import get_indicators
@@ -321,7 +321,6 @@ def _init():
     defaults = {
         "client":           None,
         "connected":        False,
-        "paper_mode":       True,
         "symbol":           "BTCUSDT",   # currently-viewed symbol (chart, manual trade)
         "active_symbols":   ["BTCUSDT"], # symbols the bot trades on (max 3)
         "per_symbol_risk":  {},          # {symbol: RiskSettings} — overrides global risk
@@ -334,7 +333,6 @@ def _init():
         "risk_manager":     RiskManager(),
         "initial_balance":  1000.0,
         "manual_amount":    100.0,
-        "testnet":          False,   # default to LIVE Mainnet; user can opt into Testnet via radio
         "refresh_secs":     5,
         "alert_open_ids":      [],
         "alert_closed_ids":    [],
@@ -373,8 +371,8 @@ if not st.session_state.get("_settings_loaded"):
     from bot import load_settings as _load_settings
     _persisted = _load_settings()
     _PERSIST_KEYS = (
-        "paper_mode", "symbol", "strategy", "interval", "check_every",
-        "threshold", "initial_balance", "manual_amount", "testnet",
+        "symbol", "strategy", "interval", "check_every",
+        "threshold", "initial_balance", "manual_amount",
         "refresh_secs", "tg_enabled", "tg_token", "tg_chat_id",
         "active_symbols",
     )
@@ -420,17 +418,10 @@ STRATEGIES = ["EMA Crossover","Price Movement","Momentum (RSI)"]
 
 
 def _cl():
-    """Return the active Binance client, rebuilding it if credentials drifted.
-
-    A new BinanceClient is constructed every time api_key, api_secret, or testnet
-    differ from what the cached client was built with. This guarantees the bot
-    never silently keeps using stale credentials after the user pastes new keys
-    or flips the testnet toggle.
-    """
+    """Return the active LIVE Binance client, rebuilding it if credentials drifted."""
     c = st.session_state.get("client")
     want_key    = st.session_state.get("api_key", "")
     want_secret = st.session_state.get("api_secret", "")
-    want_tnet   = bool(st.session_state.get("testnet", True))
     if not want_key or not want_secret:
         if c is not None:
             print("[BINANCE] Credentials cleared — dropping cached client", flush=True)
@@ -439,14 +430,12 @@ def _cl():
         return None
     if (c is None
             or getattr(c, "api_key", None)    != want_key
-            or getattr(c, "api_secret", None) != want_secret
-            or bool(getattr(c, "testnet", None)) != want_tnet):
-        print(f"[BINANCE] Rebuilding client — drift detected "
-              f"(prev={(getattr(c,'api_key','') or '')[:6]}.../tnet="
-              f"{getattr(c,'testnet',None)} → new={want_key[:6]}.../tnet={want_tnet})",
+            or getattr(c, "api_secret", None) != want_secret):
+        print(f"[BINANCE] Rebuilding LIVE client — drift detected "
+              f"(prev={(getattr(c,'api_key','') or '')[:6]}... → new={want_key[:6]}...)",
               flush=True)
         from binance_client import BinanceClient
-        c = BinanceClient(want_key, want_secret, testnet=want_tnet)
+        c = BinanceClient(want_key, want_secret)
         st.session_state.client = c
     return c
 
@@ -458,7 +447,7 @@ def _market_overview():
     from concurrent.futures import ThreadPoolExecutor, as_completed as _asc
     out = {}
     def _fetch(s):
-        try: return s, public_24h(s, testnet=False)
+        try: return s, public_24h(s)
         except: return s, None
     try:
         with ThreadPoolExecutor(max_workers=10) as ex:
@@ -483,7 +472,6 @@ def _fmt_pct(v):
 # LIVE MARKET DATA — always fetched fresh on every rerun
 # ─────────────────────────────────────────────────────────────────────────────
 sym       = st.session_state.symbol
-testnet   = st.session_state.testnet
 interval  = st.session_state.interval
 
 live_price    = None
@@ -495,7 +483,7 @@ chart_source  = ""
 
 # 1. Always fetch 24h stats (public, no auth needed)
 try:
-    stats      = public_24h(sym, testnet=False)
+    stats      = public_24h(sym)
     live_price = stats["price"]
     change_pct = stats["change_pct"]
     high_24h   = stats["high"]
@@ -518,13 +506,13 @@ if _bot_df is not None and len(_bot_df) > 5:
 else:
     # Fall back: fetch fresh from public API every rerun
     try:
-        df_raw   = public_klines(sym, interval, limit=200, testnet=False)
+        df_raw   = public_klines(sym, interval, limit=200)
         df_chart = get_indicators(df_raw)
         chart_source = "public"
     except Exception:
         pass
 
-    # Authenticated client overrides (testnet prices differ)
+    # Authenticated client overrides for live price + auth klines
     if st.session_state.connected and _cl():
         try:
             live_price = _cl().get_symbol_price(sym)
@@ -564,7 +552,7 @@ def _cur_price_for(sym: str) -> float | None:
     if sym in _price_cache:
         return _price_cache[sym]
     try:
-        p = public_price(sym, testnet=st.session_state.testnet)
+        p = public_price(sym)
         _price_cache[sym] = p
         return p
     except Exception:
@@ -590,8 +578,8 @@ daily_pnl = daily_realized + unrealized_pnl  # today's realized + currently-open
 # Equity = starting capital + realized PnL + unrealized PnL
 equity  = st.session_state.initial_balance + realized_pnl + unrealized_pnl
 
-# Paper balance mirrors equity (no margin in paper mode); LIVE overrides with API
-balance = equity
+# LIVE Binance balance — single source of truth. No simulated/paper equity.
+balance = 0.0
 binance_total_usdt   = 0.0   # free + locked, real Binance balance
 binance_free_usdt    = 0.0   # available USDT for new orders
 binance_locked_usdt  = 0.0   # in open orders
@@ -604,13 +592,11 @@ if _binance_connected:
         binance_total_usdt  = _bal["total"]
         binance_free_usdt   = _bal["free"]
         binance_locked_usdt = _bal["locked"]
-        if not st.session_state.paper_mode:
-            balance = binance_total_usdt   # LIVE/TESTNET equity = real Binance balance
+        balance             = binance_total_usdt
     except Exception as _e:
         binance_balance_err = str(_e)
-        # In LIVE mode a failed balance call is critical — surface it, do NOT fall back to fake equity
-        if not st.session_state.paper_mode:
-            balance = 0.0
+        # Failed balance call is critical — surface it, do NOT fall back to fake equity
+        balance = 0.0
 
 roi = (total_pnl / st.session_state.initial_balance * 100) if st.session_state.initial_balance else 0.0
 
@@ -685,12 +671,8 @@ conn_pill = ('<span class="pill p-green"><span class="dot dot-g"></span>CONNECTE
 bot_pill  = ('<span class="pill p-blue"><span class="dot dot-y"></span>BOT ON</span>'
              if bot_running
              else '<span class="pill p-gray">BOT OFF</span>')
-mode_pill = ('<span class="pill p-gray">📋 PAPER</span>'
-             if st.session_state.paper_mode
-             else '<span class="pill p-red"><span class="dot dot-r"></span>⚡ LIVE</span>')
-net_pill  = ('<span class="pill p-blue">TESTNET</span>'
-             if testnet
-             else '<span class="pill p-red">MAINNET</span>')
+mode_pill = '<span class="pill p-red"><span class="dot dot-r"></span>⚡ LIVE</span>'
+net_pill  = '<span class="pill p-red">MAINNET</span>'
 _ref_secs = st.session_state.get("refresh_secs", 5)
 live_pill = f'<span class="pill p-gold"><span class="dot dot-y"></span>LIVE {_ref_secs}s · {_upd_str} <span style="font-size:9px;opacity:.6;">LON</span></span>'
 
@@ -838,23 +820,12 @@ for _s in SYMBOLS:
   </div>"""
 st.markdown(f'<div class="mkt-strip">{_tiles_html}</div>', unsafe_allow_html=True)
 
-# ── Paper-verification gate ───────────────────────────────────────────────────
-# LIVE trading is locked until ≥3 paper trades have been opened AND closed.
-def paper_verified() -> tuple[bool, int, int]:
-    """Returns (verified, paper_open_count, paper_closed_count)."""
-    _trs = load_trades()
-    _p   = [t for t in _trs if t.get("paper") is True]
-    _po  = sum(1 for t in _p if t.get("status") == "open")
-    _pc  = sum(1 for t in _p if t.get("status") == "closed")
-    return (_pc >= 3, _po, _pc)   # require 3 closed paper trades before LIVE unlock
-
-
 # ── Verification Panel (always visible in main area) ──────────────────────────
 _conn_banner_parts = []
 # Left: connection status
 if st.session_state.connected and _cl():
-    _net_lbl  = "TESTNET" if st.session_state.testnet else "🔴 LIVE MAINNET"
-    _net_col  = "#26a69a" if st.session_state.testnet else "#ef5350"
+    _net_lbl  = "🔴 LIVE MAINNET"
+    _net_col  = "#ef5350"
     try:
         _b_usdt = _cl().get_account_balance("USDT")["total"]
         _bal_str = f"${_b_usdt:,.2f} USDT"
@@ -872,7 +843,7 @@ else:
     _conn_banner_parts.append(
         f'<div style="display:flex;align-items:center;gap:8px;">'
         f'<span class="dot dot-x"></span>'
-        f'<span style="font-size:11px;color:#6e7681;">Not connected · Paper mode · open sidebar to connect</span>'
+        f'<span style="font-size:11px;color:#6e7681;">Not connected · LIVE trading requires API key · open sidebar to connect</span>'
         f'</div>'
     )
 
@@ -908,14 +879,9 @@ if _last_tick:
 else:
     _tick_disp = "—"
 
-# Paper verification status
-_pv_ok, _pv_open, _pv_closed = paper_verified()
-if _pv_ok:
-    _gate_html = (f'<span class="pill p-green"><span class="dot dot-g"></span>'
-                  f'✅ LIVE UNLOCKED · {_pv_closed} paper closed</span>')
-else:
-    _gate_html = (f'<span class="pill p-gold"><span class="dot dot-y"></span>'
-                  f'🔒 LIVE LOCKED · {_pv_open} open / {_pv_closed} closed paper</span>')
+# LIVE mode always — paper verification has been removed
+_gate_html = ('<span class="pill p-red"><span class="dot dot-r"></span>'
+              '⚡ LIVE MAINNET · every order is real</span>')
 
 if bot_running:
     _bot_dot = '<span class="dot dot-y"></span>'
@@ -1009,30 +975,9 @@ st.markdown(
 with st.sidebar:
     st.markdown("## ⚡ AlphaTrade")
 
-    # Connection
+    # Connection — LIVE Mainnet ONLY
     st.markdown('<div class="sec-lbl">API Connection</div>', unsafe_allow_html=True)
-    # Unambiguous radio — no more confusing "Use Testnet" boolean.
-    # LIVE  = api.binance.com    (real money, real binance.com keys)
-    # TEST  = testnet.binance.vision (sandbox, testnet.binance.vision keys)
-    _env_choice = st.radio(
-        "Binance environment",
-        options=["🔴 LIVE Mainnet (api.binance.com)", "🧪 Testnet (testnet.binance.vision)"],
-        index=1 if st.session_state.testnet else 0,
-        horizontal=False,
-        help="MUST match the source of your API key. Mainnet keys do NOT work on Testnet and vice-versa.",
-    )
-    testnet_tog = _env_choice.startswith("🧪")
-    # Drift detection — force client rebuild on environment switch
-    if testnet_tog != st.session_state.testnet:
-        print(f"[BINANCE] Environment changed: testnet {st.session_state.testnet} → {testnet_tog} "
-              f"— dropping cached client", flush=True)
-        st.session_state.testnet = testnet_tog
-        st.session_state.client  = None
-    st.session_state.testnet = testnet_tog
-    if not testnet_tog:
-        st.warning("⚠️ MAINNET selected — uses **real money**. Use a key from **binance.com**.")
-    else:
-        st.info("Testnet selected — uses **fake money**. Use a key from **testnet.binance.vision**.")
+    st.error("⚡ **LIVE Mainnet** — every order uses real money on api.binance.com")
 
     if st.session_state.connected and _cl():
         _conn_c = _cl()
@@ -1041,10 +986,9 @@ with st.sidebar:
             _live_usdt = _live_bal["total"]
             _live_free = _live_bal["free"]
             _live_lock = _live_bal["locked"]
-            _net_label = "Testnet" if st.session_state.testnet else "🔴 LIVE"
             st.markdown(f"""
-<div style="background:#0d2a1a;border:1px solid #26a69a44;border-radius:8px;padding:10px 12px;margin-bottom:8px;">
-  <div style="font-size:9px;color:#26a69a;font-weight:700;letter-spacing:.1em;margin-bottom:4px;">CONNECTED · {_net_label}</div>
+<div style="background:#1a0a0a;border:1px solid #ef535044;border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+  <div style="font-size:9px;color:#ef5350;font-weight:700;letter-spacing:.1em;margin-bottom:4px;">CONNECTED · 🔴 LIVE MAINNET</div>
   <div style="font-size:18px;font-weight:700;color:#f0f6fc;font-family:'JetBrains Mono',monospace;">${_live_usdt:,.2f} <span style="font-size:11px;color:#6e7681;">USDT total</span></div>
   <div style="font-size:10px;color:#8b949e;margin-top:4px;font-family:'JetBrains Mono',monospace;">free ${_live_free:,.2f} · locked ${_live_lock:,.2f}</div>
 </div>""", unsafe_allow_html=True)
@@ -1054,8 +998,7 @@ with st.sidebar:
         _cur = _cl()
         if _cur is not None:
             _kp = (getattr(_cur, "api_key", "") or "")[:6]
-            _ep = "testnet.binance.vision" if getattr(_cur, "testnet", True) else "api.binance.com"
-            st.caption(f"🔑 Key `{_kp}…` · 🌐 `{_ep}`")
+            st.caption(f"🔑 Key `{_kp}…` · 🌐 `api.binance.com`")
         if st.button("🔌 Disconnect", width="stretch"):
             print("[BINANCE] User disconnected — clearing client and credentials", flush=True)
             st.session_state.client     = None
@@ -1065,27 +1008,25 @@ with st.sidebar:
             st.rerun()
     else:
         api_key    = st.text_input("API Key",    type="password",
-                                    placeholder="Paste your Binance API key")
+                                    placeholder="Binance Mainnet API key (binance.com)")
         api_secret = st.text_input("API Secret", type="password",
-                                    placeholder="Paste your Binance API secret")
-        if st.button("🔌 Connect to Binance", width="stretch", type="primary"):
+                                    placeholder="Binance Mainnet API secret")
+        if st.button("🔌 Connect to Binance LIVE", width="stretch", type="primary"):
             if api_key and api_secret:
-                with st.spinner("Connecting…"):
+                with st.spinner("Connecting to api.binance.com…"):
                     try:
                         from binance_client import BinanceClient
-                        # Persist creds so _cl() can rebuild on every script run
                         st.session_state.api_key    = api_key
                         st.session_state.api_secret = api_secret
-                        st.session_state.testnet    = testnet_tog
-                        print(f"[BINANCE] CONNECT clicked — key_prefix={api_key[:6]}... "
-                              f"testnet={testnet_tog}", flush=True)
-                        c   = BinanceClient(api_key, api_secret, testnet=testnet_tog)
+                        print(f"[BINANCE] CONNECT clicked — LIVE key_prefix={api_key[:6]}...",
+                              flush=True)
+                        c   = BinanceClient(api_key, api_secret)
                         ok, msg = c.test_connection()
                         if ok:
                             st.session_state.client    = c
                             st.session_state.connected = True
-                            log_activity("INFO", f"🔌 Connected {'Testnet' if testnet_tog else 'LIVE'} — {msg} — key {api_key[:6]}...")
-                            st.success("✅ Connected!")
+                            log_activity("INFO", f"🔌 Connected LIVE — {msg} — key {api_key[:6]}...")
+                            st.success("✅ Connected to LIVE Mainnet!")
                             st.rerun()
                         else:
                             st.session_state.client    = None
@@ -1096,7 +1037,7 @@ with st.sidebar:
                         st.session_state.connected = False
                         st.error(f"Connection error: {e}")
             else:
-                st.info("API keys needed for real balance & live trading.\nChart + paper mode work without keys.")
+                st.info("API key required — bot/manual trading is disabled until connected.")
 
     st.markdown('<hr class="s-div"/>', unsafe_allow_html=True)
 
@@ -1138,19 +1079,9 @@ with st.sidebar:
 
     st.markdown('<hr class="s-div"/>', unsafe_allow_html=True)
 
-    # Bot
+    # Bot — LIVE only
     st.markdown('<div class="sec-lbl">Bot</div>', unsafe_allow_html=True)
-    _pv_ok_sb, _pv_open_sb, _pv_closed_sb = paper_verified()
-    if not _pv_ok_sb:
-        st.session_state.paper_mode = True
-        paper_tog = st.toggle(
-            "Paper mode (LIVE locked until 3 paper trades close)",
-            value=True, disabled=True,
-            help=f"Close ≥3 paper trades to unlock LIVE. Open: {_pv_open_sb} · Closed: {_pv_closed_sb}",
-        )
-    else:
-        paper_tog = st.toggle("Paper mode (no real orders)", value=st.session_state.paper_mode)
-        st.session_state.paper_mode = paper_tog
+    st.caption("⚡ Bot places **real** Binance Mainnet orders on every signal.")
 
     ck_val = st.slider("Check interval (s)", 10, 300, st.session_state.check_every, 10)
     st.session_state.check_every = ck_val
@@ -1163,15 +1094,9 @@ with st.sidebar:
     with bc1:
         if st.button("▶ Start", width="stretch", disabled=bot_running):
             c = _cl()
-            _eff_paper = True if c is None else paper_tog
-            if c is None and not paper_tog:
-                st.error("Connect to Binance first — live trading requires API keys.")
-            elif not _eff_paper and not paper_verified()[0]:
-                st.error("🔒 LIVE trading locked — close ≥3 paper trades first to unlock LIVE.")
-                st.session_state.paper_mode = True
-                st.rerun()
+            if c is None:
+                st.error("Connect to Binance first — LIVE bot requires API keys.")
             else:
-                # client=None is fine; bot falls back to public Binance API
                 # Build per-symbol risk managers from overrides (fallback = shared)
                 _per_sym_rm = {}
                 for _s in st.session_state.active_symbols:
@@ -1187,39 +1112,16 @@ with st.sidebar:
                     risk_manager=st.session_state.risk_manager,
                     interval=intv_sel,
                     check_every=ck_val,
-                    paper_mode=_eff_paper,
                     threshold=thr_val / 100,
                     initial_balance=st.session_state.initial_balance,
                 )
                 b._initial_balance = st.session_state.initial_balance
                 b.start()
-                if c is None:
-                    st.info("🔓 Running in paper mode with public Binance data — no API key needed.")
                 st.rerun()
     with bc2:
         if st.button("⏹ Stop", width="stretch", disabled=not bot_running):
             bot_module.stop_bot()
             st.rerun()
-
-    # Force test trade (bypasses signal — paper only)
-    if live_price:
-        _ft1, _ft2 = st.columns(2)
-        with _ft1:
-            if st.button("🧪 Force BUY", width="stretch",
-                          help="Open a paper BUY trade right now — no signal needed"):
-                _inv_ft = st.session_state.risk_manager.get_invest_amount()
-                force_paper_trade(st.session_state.symbol, "BUY", live_price, _inv_ft)
-                st.success(f"✅ Force BUY @ ${live_price:.4f}")
-                st.rerun()
-        with _ft2:
-            if st.button("🧪 Force SELL", width="stretch",
-                          help="Open a paper SELL trade right now — no signal needed"):
-                _inv_ft = st.session_state.risk_manager.get_invest_amount()
-                force_paper_trade(st.session_state.symbol, "SELL", live_price, _inv_ft)
-                st.success(f"✅ Force SELL @ ${live_price:.4f}")
-                st.rerun()
-    else:
-        st.caption("Waiting for live price before force trade is available…")
 
     if st.button("🚨 Emergency Stop", width="stretch", type="secondary"):
         st.session_state.risk.emergency_stop = True
@@ -1299,10 +1201,6 @@ with st.sidebar:
 
     # Investment
     st.markdown('<div class="sec-lbl">Investment</div>', unsafe_allow_html=True)
-    if paper_tog:
-        ib = st.number_input("Simulated balance (USDT)", 100.0, 1_000_000.0,
-                              st.session_state.initial_balance, 100.0)
-        st.session_state.initial_balance = ib
 
     # ── Investment mode selector (Fixed USDT vs % of Available) ──────────────
     if "invest_mode" not in st.session_state:
@@ -1310,13 +1208,14 @@ with st.sidebar:
     if "invest_pct"  not in st.session_state:
         st.session_state.invest_pct  = 5.0
 
-    _avail_for_calc = binance_free_usdt if (_binance_connected and not paper_tog) else st.session_state.initial_balance
+    # Available = real Binance free USDT (or 0 if not connected)
+    _avail_for_calc = binance_free_usdt if _binance_connected else 0.0
     st.session_state.invest_mode = st.radio(
         "Investment mode",
         ["Fixed USDT", "% of Available"],
         index=0 if st.session_state.invest_mode == "Fixed USDT" else 1,
         horizontal=True,
-        help="Fixed = exact USDT per trade. % = portion of Available USDT (Binance balance when LIVE, simulated when paper). Bot NEVER uses your full balance.",
+        help="Fixed = exact USDT per trade. % = portion of real free USDT on Binance. Bot NEVER uses your full balance.",
     )
     if st.session_state.invest_mode == "% of Available":
         st.session_state.invest_pct = st.slider(
@@ -1546,9 +1445,9 @@ with st.container():
     <div class="c-sub">{_bin_sub_free}</div>
   </div>
   <div class="card">
-    <div class="c-lbl">📋 Paper Equity</div>
-    <div class="c-val">${equity:,.2f}</div>
-    <div class="c-sub">Init ${st.session_state.initial_balance:,.0f} · {len(open_trades)} open</div>
+    <div class="c-lbl">Locked (USDT)</div>
+    <div class="c-val">{f"${binance_locked_usdt:,.2f}" if _binance_connected else "—"}</div>
+    <div class="c-sub">{f"In open orders · {len(open_trades)} positions" if _binance_connected else "Connect to Binance"}</div>
   </div>
   <div class="card">
     <div class="c-lbl">Realized PnL</div>
@@ -1666,9 +1565,7 @@ with st.container():
 
         tb1, tb2, tb3, tb4, tb5, tb6 = st.columns([4, 1, 1, 1, 1, 1])
         with tb1:
-            mode_badge = ('<span class="cbadge green">📋 PAPER</span>'
-                          if st.session_state.paper_mode
-                          else '<span class="cbadge red">⚡ LIVE</span>')
+            mode_badge = '<span class="cbadge red">⚡ LIVE</span>'
             src_note = "live • public API" if chart_source == "public" else "live • auth"
             # Last signal summary for chart bar
             _ls = get_bot_last_signal()
@@ -1715,8 +1612,8 @@ with st.container():
                     bot_module.stop_bot()
                 else:
                     c = _cl()
-                    if c is None and not st.session_state.paper_mode:
-                        st.error("Connect first for live trading.")
+                    if c is None:
+                        st.error("Connect to Binance first — LIVE bot requires API keys.")
                     else:
                         _per_sym_rm2 = {}
                         for _s in st.session_state.active_symbols:
@@ -1731,7 +1628,6 @@ with st.container():
                             risk_manager=st.session_state.risk_manager,
                             interval=st.session_state.interval,
                             check_every=st.session_state.check_every,
-                            paper_mode=True if c is None else st.session_state.paper_mode,
                             threshold=st.session_state.threshold / 100,
                             initial_balance=st.session_state.initial_balance,
                         )
@@ -1762,31 +1658,32 @@ with st.container():
             _cf1, _cf2 = st.columns(2)
             with _cf1:
                 if st.button("✅ Confirm LIVE trade", width="stretch", type="primary"):
-                    # Re-check gate at confirm time (defence in depth)
-                    if (not paper_verified()[0]) or st.session_state.paper_mode or st.session_state.testnet:
-                        st.error("🔒 LIVE trade blocked — paper verification required and paper/testnet must be OFF.")
-                        st.session_state.pending_live_trade = None
-                        st.rerun()
                     _do_live = True
                     c = _cl()
+                    if c is None:
+                        st.error("❌ Disconnected — reconnect before confirming.")
+                        st.session_state.pending_live_trade = None
+                        st.rerun()
+                    _exec_price = 0.0
+                    _exec_qty   = _plt_qty
                     try:
+                        from binance_client import extract_fill as _extract_fill
                         order = c.place_market_order(st.session_state.symbol, _plt_side, _plt_qty)
-                        _exec_price = float(order.get("fills", [{}])[0].get("price", _plt_pr))
+                        _exec_qty, _exec_price = _extract_fill(order)
                     except Exception as _e:
-                        st.error(f"Order failed: {_e}")
+                        st.error(f"Order failed (NOT recorded — no execution): {_e}")
                         _do_live = False
-                        _exec_price = _plt_pr
                     if _do_live:
                         rm = st.session_state.risk_manager
                         _t = {
                             "coin":            st.session_state.symbol,
-                            "exchange":        "Binance Testnet" if st.session_state.testnet else "Binance LIVE",
+                            "exchange":        "binance",
                             "type":            "manual",
                             "strategy":        "Manual",
                             "side":            _plt_side,
                             "entry_price":     _exec_price,
                             "exit_price":      None,
-                            "quantity":        _plt_qty,
+                            "quantity":        _exec_qty,
                             "invested":        _plt_inv,
                             "profit_loss":     None,
                             "profit_loss_pct": None,
@@ -1797,7 +1694,6 @@ with st.container():
                             "stop_loss":       rm.stop_loss_price(_exec_price, _plt_side),
                             "take_profit":     rm.take_profit_price(_exec_price, _plt_side),
                             "status":          "open",
-                            "paper":           False,
                         }
                         add_trade(_t)
                         log_activity("ORDER",
@@ -1810,7 +1706,7 @@ with st.container():
                     st.session_state.pending_live_trade = None
                     st.rerun()
 
-        # Manual trade execution
+        # Manual trade execution — LIVE only, always staged for confirmation
         if buy_btn or sell_btn:
             side = "BUY" if buy_btn else "SELL"
             price = live_price
@@ -1818,65 +1714,26 @@ with st.container():
                 st.error("No price available — chart not loaded yet.")
             else:
                 c = _cl()
-                invested = st.session_state.manual_amount
-                # Enforce hard cap
-                _cap = st.session_state.risk.max_trade_usdt
-                if _cap > 0 and invested > _cap:
-                    st.warning(f"⚠️ Amount ${invested:.2f} exceeds hard cap ${_cap:.2f} — capped automatically.")
-                    invested = _cap
-                qty = invested / price
-
-                if c is not None:
+                if c is None:
+                    st.error("Connect to Binance first — manual LIVE trades require API keys.")
+                else:
+                    invested = st.session_state.manual_amount
+                    # Enforce hard cap
+                    _cap = st.session_state.risk.max_trade_usdt
+                    if _cap > 0 and invested > _cap:
+                        st.warning(f"⚠️ Amount ${invested:.2f} exceeds hard cap ${_cap:.2f} — capped automatically.")
+                        invested = _cap
+                    qty = invested / price
                     try:
                         qty = c.round_quantity(st.session_state.symbol, qty)
                     except Exception:
                         qty = round(qty, 6)
-
-                    # LIVE mode → stage confirmation; paper/testnet → execute immediately
-                    if not st.session_state.paper_mode and not st.session_state.testnet:
-                        if not paper_verified()[0]:
-                            st.error("🔒 LIVE trading locked — close ≥3 paper trades first.")
-                            st.session_state.paper_mode = True
-                            st.rerun()
-                        st.session_state.pending_live_trade = {
-                            "side": side, "invested": invested,
-                            "price": price, "qty": qty,
-                        }
-                        st.rerun()
-                else:
-                    qty = round(qty, 6)
-
-                # Paper mode (or testnet with auth): execute without confirmation
-                if not st.session_state.pending_live_trade:
-                    rm = st.session_state.risk_manager
-                    trade = {
-                        "coin":            st.session_state.symbol,
-                        "exchange":        "Binance Testnet" if st.session_state.testnet else "Binance Live",
-                        "type":            "manual",
-                        "strategy":        "Manual",
-                        "side":            side,
-                        "entry_price":     price,
-                        "exit_price":      None,
-                        "quantity":        qty,
-                        "invested":        invested,
-                        "profit_loss":     None,
-                        "profit_loss_pct": None,
-                        "open_time":       datetime.now(_TZ).isoformat(),
-                        "close_time":      None,
-                        "reason":          f"Manual {side} ({'Paper' if st.session_state.paper_mode else 'Testnet'}) — ${invested:.2f} USDT @ ${price:.4f}",
-                        "close_reason":    None,
-                        "stop_loss":       rm.stop_loss_price(price, side),
-                        "take_profit":     rm.take_profit_price(price, side),
-                        "status":          "open",
-                        "paper":           st.session_state.paper_mode,
+                    # Stage LIVE order for explicit confirmation
+                    st.session_state.pending_live_trade = {
+                        "side": side, "invested": invested,
+                        "price": price, "qty": qty,
                     }
-                    added = add_trade(trade)
-                    log_activity("ORDER",
-                        f"👤 Manual {side} | {qty:.6f} {st.session_state.symbol} "
-                        f"@ ${price:.4f} | ${invested:.2f} invested | ID:{added['id']}")
-                    _m_mode = "PAPER" if st.session_state.paper_mode else "TESTNET"
-                    tg.trade_open(st.session_state.symbol, side, price, invested, "Manual trade", mode=_m_mode)
-                    st.success(f"✅ {side} @ ${price:.4f} — ID: {added['id']}")
+                    st.rerun()
 
         if emg_btn:
             st.session_state.risk.emergency_stop = True
@@ -2187,11 +2044,62 @@ with st.container():
                 with pc2:
                     if st.button(f"✕ Close", key=f"cl_{ot.get('id')}",
                                  width="stretch"):
-                        c   = _cl()
-                        xp  = c.get_symbol_price(ot["coin"]) if c else (live_price or ep)
-                        close_trade(ot["id"], xp, "Manual close via dashboard")
-                        log_activity("ORDER", f"👤 Closed {ot['id']} @ ${xp:.4f}")
-                        st.rerun()
+                        c = _cl()
+                        if c is None:
+                            st.error("❌ Connect to Binance first — closes require a real counter-order.")
+                        else:
+                            _coin = ot["coin"]
+                            _qty  = float(ot.get("quantity") or 0)
+                            _side = ot.get("side", "BUY")
+                            if _qty <= 0:
+                                st.error("❌ Position has zero quantity — cannot place counter-order.")
+                            else:
+                                try:
+                                    _q_rnd = c.round_quantity(_coin, _qty)
+                                except Exception:
+                                    _q_rnd = round(_qty, 6)
+                                # Counter-order: long → SELL, short → BUY.
+                                # Recorded close MUST come from Binance execution
+                                # (extract_fill raises if Binance didn't fill) — never
+                                # fall back to ticker. Fill-size guard mirrors
+                                # SymbolWorker._close_position: >5% qty deviation
+                                # leaves the trade OPEN for manual reconciliation.
+                                from binance_client import extract_fill as _extract_fill
+                                try:
+                                    _counter_side = "SELL" if _side == "BUY" else "BUY"
+                                    _order = c.place_market_order(_coin, _counter_side, _q_rnd)
+                                    _exec_q, xp = _extract_fill(_order)
+                                except Exception as _e:
+                                    st.error(f"❌ LIVE close order failed (NOT recorded): {_e}")
+                                    log_activity("ERROR", f"👤 Close {ot['id']} FAILED on Binance: {_e}")
+                                    st.stop()
+                                if xp <= 0 or _exec_q <= 0:
+                                    st.error(f"❌ Close response missing execution data — trade NOT closed.")
+                                    log_activity("ERROR",
+                                        f"👤 Close {ot['id']} aborted — invalid execution data "
+                                        f"(qty={_exec_q}, price={xp}).")
+                                    st.stop()
+                                _dev = abs(_exec_q - _q_rnd) / _q_rnd if _q_rnd > 0 else 1.0
+                                if _dev > 0.05:
+                                    st.error(
+                                        f"❌ Fill size mismatch — intended {_q_rnd}, "
+                                        f"filled {_exec_q} (Δ {_dev*100:.2f}%). Trade "
+                                        f"left OPEN for manual reconciliation.")
+                                    log_activity("ERROR",
+                                        f"👤 Close {ot['id']} qty mismatch — intended {_q_rnd}, "
+                                        f"filled {_exec_q} (Δ {_dev*100:.2f}%). Trade OPEN.")
+                                    st.stop()
+                                _closed = close_trade(ot["id"], xp, "Manual close via dashboard (LIVE)")
+                                if not _closed:
+                                    st.error("❌ Counter-order filled but persistence failed — manual reconciliation required.")
+                                    log_activity("ERROR",
+                                        f"👤 Close {ot['id']} — Binance filled {_counter_side} "
+                                        f"{_exec_q} @ ${xp:.4f} but close_trade returned no record.")
+                                    st.stop()
+                                log_activity("ORDER",
+                                    f"👤 Closed {ot['id']} | LIVE {_counter_side} {_exec_q:.6f} "
+                                    f"{_coin} @ ${xp:.4f}")
+                                st.rerun()
 
         # ── Tabs: History + Activity ──────────────────────────────────────────
         tab_h, tab_a, tab_s = st.tabs(["📋  Trade History", "📟  Activity Log", "📊  Stats"])
@@ -2298,7 +2206,6 @@ def _collect_settings_snapshot() -> dict:
             "max_open_trades":    getattr(_rs, "max_open_trades", 3),
         }
     return {
-        "paper_mode":      st.session_state.paper_mode,
         "symbol":          st.session_state.symbol,
         "active_symbols":  st.session_state.active_symbols,
         "strategy":        st.session_state.strategy,
@@ -2307,7 +2214,6 @@ def _collect_settings_snapshot() -> dict:
         "threshold":       st.session_state.threshold,
         "initial_balance": st.session_state.initial_balance,
         "manual_amount":   st.session_state.manual_amount,
-        "testnet":         st.session_state.testnet,
         "refresh_secs":    st.session_state.refresh_secs,
         "tg_enabled":      st.session_state.tg_enabled,
         "tg_token":        st.session_state.tg_token,

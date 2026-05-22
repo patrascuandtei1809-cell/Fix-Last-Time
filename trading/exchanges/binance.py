@@ -1,31 +1,24 @@
-"""Binance implementation of the Exchange interface.
-
-Wraps the existing binance_client.BinanceClient (auth) and the public REST
-helpers (public_klines / public_price). Falls back to public when no auth.
-"""
-from typing import Dict, List, Optional
+"""Binance LIVE Mainnet implementation. Authenticated client REQUIRED for orders."""
+from typing import Dict, List
 import pandas as pd
 
 from .base import Exchange
 from binance_client import (
-    BinanceClient, public_klines, public_price, public_24h,
+    BinanceClient, public_klines, public_price, public_24h, extract_fill,
 )
 
 
 class BinanceExchange(Exchange):
     name = "binance"
 
-    # Symbols Binance is allowed to trade. None = all supported.
     _SUPPORTED_QUOTES = ("USDT", "BUSD", "USDC")
 
-    def __init__(self, client: Optional[BinanceClient] = None,
-                 testnet: bool = False):
-        """
-        client: authenticated BinanceClient, or None for public-only mode.
-        testnet: True = use testnet endpoints for public data too.
+    def __init__(self, client: BinanceClient | None = None):
+        """client: authenticated BinanceClient.
+        For chart-only / pre-connect display, client may be None — but every
+        order method will raise. There is NO paper fallback.
         """
         self.client = client
-        self.testnet = bool(testnet if client is None else client.testnet)
 
     # ── Market data ──────────────────────────────────────────────────────────
     def get_price(self, symbol: str) -> float:
@@ -35,7 +28,7 @@ class BinanceExchange(Exchange):
             except Exception as e:
                 print(f"[BINANCE-EX] auth price failed, falling back to public: {e}",
                       flush=True)
-        return public_price(symbol, testnet=self.testnet)
+        return public_price(symbol)
 
     def get_klines(self, symbol: str, interval: str = "5m",
                    limit: int = 150) -> pd.DataFrame:
@@ -45,21 +38,21 @@ class BinanceExchange(Exchange):
             except Exception as e:
                 print(f"[BINANCE-EX] auth klines failed, falling back to public: {e}",
                       flush=True)
-        return public_klines(symbol, interval, limit=limit, testnet=self.testnet)
+        return public_klines(symbol, interval, limit=limit)
 
     def get_24h(self, symbol: str) -> Dict:
-        return public_24h(symbol, testnet=self.testnet)
+        return public_24h(symbol)
 
     # ── Account ──────────────────────────────────────────────────────────────
     def get_balance(self, asset: str = "USDT") -> Dict[str, float]:
         if not self.client:
-            # No auth = no real balance. Return zeros so callers handle it.
-            return {"asset": asset, "free": 0.0, "locked": 0.0,
-                    "total": 0.0, "testnet": self.testnet}
+            raise RuntimeError(
+                f"BinanceExchange.get_balance({asset}) called without an "
+                "authenticated client — connect a LIVE Binance API key first."
+            )
         return self.client.get_account_balance(asset)
 
     def get_positions(self) -> List[Dict]:
-        """Spot 'positions' = any non-zero non-quote asset balance."""
         if not self.client:
             return []
         try:
@@ -74,29 +67,32 @@ class BinanceExchange(Exchange):
             print(f"[BINANCE-EX][ERROR] get_positions failed: {e}", flush=True)
             return []
 
-    # ── Orders ───────────────────────────────────────────────────────────────
+    # ── Orders (REAL) ────────────────────────────────────────────────────────
     def _normalize_order(self, raw: dict, symbol: str, side: str,
                          qty: float, fallback_price: float) -> Dict:
-        """Convert Binance order response → uniform shape used by SymbolWorker."""
-        fills = raw.get("fills") or [{}]
-        fill_price = float(fills[0].get("price", fallback_price))
+        # Always derive qty + price from the actual Binance response.
+        # extract_fill raises if Binance returned no executable fill data,
+        # which is treated as an order failure (NEVER fall back to ticker).
+        exec_qty, exec_price = extract_fill(raw)
         return {
             "ok": True,
             "exchange": self.name,
             "symbol": symbol,
             "side": side,
-            "qty": float(raw.get("executedQty", qty)),
-            "price": fill_price,
+            "qty": exec_qty,
+            "price": exec_price,
             "raw": raw,
         }
 
     def place_buy_order(self, symbol: str, quote_amount: float) -> Dict:
         if not self.client:
-            return {"ok": False, "exchange": self.name, "symbol": symbol,
-                    "side": "BUY", "error": "no auth client (paper only)"}
+            raise RuntimeError(
+                f"BinanceExchange.place_buy_order({symbol}) refused — no "
+                "authenticated client. LIVE orders require a connected API key."
+            )
         price = self.get_price(symbol)
         qty   = self.round_quantity(symbol, quote_amount / price)
-        print(f"[BINANCE-EX] BUY {symbol} qty={qty} (~${quote_amount:.2f} @ ${price:.4f})",
+        print(f"[BINANCE-EX] LIVE BUY {symbol} qty={qty} (~${quote_amount:.2f} @ ${price:.4f})",
               flush=True)
         try:
             raw = self.client.place_market_order(symbol, "BUY", qty)
@@ -106,13 +102,34 @@ class BinanceExchange(Exchange):
             return {"ok": False, "exchange": self.name, "symbol": symbol,
                     "side": "BUY", "qty": qty, "error": str(e)}
 
-    def place_sell_order(self, symbol: str, qty: float) -> Dict:
+    def place_buy_order_qty(self, symbol: str, qty: float) -> Dict:
+        """MARKET BUY by exact base qty — used for deterministic short closes."""
         if not self.client:
-            return {"ok": False, "exchange": self.name, "symbol": symbol,
-                    "side": "SELL", "error": "no auth client (paper only)"}
+            raise RuntimeError(
+                f"BinanceExchange.place_buy_order_qty({symbol}) refused — no "
+                "authenticated client. LIVE orders require a connected API key."
+            )
         qty = self.round_quantity(symbol, qty)
         price = self.get_price(symbol)
-        print(f"[BINANCE-EX] SELL {symbol} qty={qty} @ ~${price:.4f}", flush=True)
+        print(f"[BINANCE-EX] LIVE BUY (qty) {symbol} qty={qty} @ ~${price:.4f}",
+              flush=True)
+        try:
+            raw = self.client.place_market_order(symbol, "BUY", qty)
+            return self._normalize_order(raw, symbol, "BUY", qty, price)
+        except Exception as e:
+            print(f"[BINANCE-EX][ERROR] BUY(qty) failed: {e}", flush=True)
+            return {"ok": False, "exchange": self.name, "symbol": symbol,
+                    "side": "BUY", "qty": qty, "error": str(e)}
+
+    def place_sell_order(self, symbol: str, qty: float) -> Dict:
+        if not self.client:
+            raise RuntimeError(
+                f"BinanceExchange.place_sell_order({symbol}) refused — no "
+                "authenticated client. LIVE orders require a connected API key."
+            )
+        qty = self.round_quantity(symbol, qty)
+        price = self.get_price(symbol)
+        print(f"[BINANCE-EX] LIVE SELL {symbol} qty={qty} @ ~${price:.4f}", flush=True)
         try:
             raw = self.client.place_market_order(symbol, "SELL", qty)
             return self._normalize_order(raw, symbol, "SELL", qty, price)
@@ -148,9 +165,8 @@ class BinanceExchange(Exchange):
                 pass
         return round(qty, 6)
 
-    # ── Fees (smart routing input) ───────────────────────────────────────────
+    # ── Fees ─────────────────────────────────────────────────────────────────
     def get_fees(self, symbol: str) -> Dict[str, float]:
-        """Binance spot default: 0.10% maker/taker. Could be fetched live."""
         return {"maker": 0.0010, "taker": 0.0010}
 
     def supports(self, symbol: str) -> bool:

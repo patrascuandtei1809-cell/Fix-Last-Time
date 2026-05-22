@@ -1,5 +1,4 @@
 {
-  "paper_mode": true,
   "symbol": "BTCUSDT",
   "active_symbols": [
     "BTCUSDT"
@@ -10,7 +9,6 @@
   "threshold": 0.3,
   "initial_balance": 1000.0,
   "manual_amount": 100.0,
-  "testnet": false,
   "refresh_secs": 5,
   "tg_enabled": false,
   "tg_token": "",
