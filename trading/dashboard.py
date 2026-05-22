@@ -696,7 +696,18 @@ for _s in SYMBOLS:
   </div>"""
 st.markdown(f'<div class="mkt-strip">{_tiles_html}</div>', unsafe_allow_html=True)
 
-# ── Connection + Bot status banner (always visible in main area) ──────────────
+# ── Paper-verification gate ───────────────────────────────────────────────────
+# LIVE trading is locked until ≥1 paper trade has been opened AND closed.
+def paper_verified() -> tuple[bool, int, int]:
+    """Returns (verified, paper_open_count, paper_closed_count)."""
+    _trs = load_trades()
+    _p   = [t for t in _trs if t.get("paper") is True]
+    _po  = sum(1 for t in _p if t.get("status") == "open")
+    _pc  = sum(1 for t in _p if t.get("status") == "closed")
+    return (_pc >= 1, _po, _pc)
+
+
+# ── Verification Panel (always visible in main area) ──────────────────────────
 _conn_banner_parts = []
 # Left: connection status
 if st.session_state.connected and _cl():
@@ -723,32 +734,80 @@ else:
         f'</div>'
     )
 
-# Right: bot status + last signal
+# Right: bot status + last signal + last check
 _sig_entry = get_bot_last_signal()
-_sig_txt   = (_sig_entry.get("message","") or "")[:80] if _sig_entry else ""
-_sig_time  = (_sig_entry.get("time","") or "")[:19].replace("T"," ") if _sig_entry else ""
-if bot_running:
-    _bot_status_html = (
-        f'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
-        f'<span class="dot dot-y"></span>'
-        f'<span style="font-size:11px;font-weight:700;color:#e3b341;">BOT RUNNING</span>'
-        + (f'<span style="font-size:10px;color:#484f58;max-width:320px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">{_sig_txt}</span>' if _sig_txt else "")
-        + f'</div>'
-    )
+_sig_msg   = (_sig_entry.get("message","") or "") if _sig_entry else ""
+# Parse signal direction from message ("→ BUY", "→ SELL", "→ HOLD")
+_sig_dir = "—"
+for _d in ("BUY", "SELL", "HOLD"):
+    if f"→ {_d}" in _sig_msg:
+        _sig_dir = _d
+        break
+_sig_col_map = {"BUY":"#26a69a","SELL":"#ef5350","HOLD":"#6e7681","—":"#484f58"}
+_sig_col = _sig_col_map[_sig_dir]
+_sig_reason = _sig_msg.split("|", 1)[1].strip() if "|" in _sig_msg else _sig_msg
+_sig_reason = _sig_reason[:90]
+
+# Last bot check time (London) + seconds elapsed
+_last_tick = get_shared_last_tick()
+if _last_tick:
+    _tick_str = _last_tick.strftime("%H:%M:%S")
+    _elapsed  = int((datetime.now() - _last_tick).total_seconds())
+    _tick_disp = f"{_tick_str} <span style=\"opacity:.55;\">· {_elapsed}s ago</span>"
 else:
-    _bot_status_html = (
-        f'<div style="display:flex;align-items:center;gap:6px;">'
-        f'<span class="dot dot-x"></span>'
-        f'<span style="font-size:11px;color:#484f58;">Bot stopped</span>'
-        f'</div>'
-    )
+    _tick_disp = "—"
+
+# Paper verification status
+_pv_ok, _pv_open, _pv_closed = paper_verified()
+if _pv_ok:
+    _gate_html = (f'<span class="pill p-green"><span class="dot dot-g"></span>'
+                  f'✅ LIVE UNLOCKED · {_pv_closed} paper closed</span>')
+else:
+    _gate_html = (f'<span class="pill p-gold"><span class="dot dot-y"></span>'
+                  f'🔒 LIVE LOCKED · {_pv_open} open / {_pv_closed} closed paper</span>')
+
+if bot_running:
+    _bot_dot = '<span class="dot dot-y"></span>'
+    _bot_lbl = '<span style="font-size:11px;font-weight:700;color:#e3b341;">BOT ON</span>'
+else:
+    _bot_dot = '<span class="dot dot-x"></span>'
+    _bot_lbl = '<span style="font-size:11px;font-weight:700;color:#6e7681;">BOT OFF</span>'
+
+_strat_html = (f'<span style="font-size:10px;color:#484f58;">STRATEGY</span> '
+               f'<span style="font-size:11px;font-weight:700;color:#79b0ff;font-family:\'JetBrains Mono\',monospace;">'
+               f'{st.session_state.strategy}</span>')
+
+_bot_status_html = (
+    f'<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">'
+    f'<div style="display:flex;align-items:center;gap:6px;">{_bot_dot}{_bot_lbl}</div>'
+    f'<div>{_strat_html}</div>'
+    f'<div style="display:flex;align-items:center;gap:6px;">'
+    f'<span style="font-size:10px;color:#484f58;">SIGNAL</span>'
+    f'<span style="font-size:11px;font-weight:800;color:{_sig_col};font-family:\'JetBrains Mono\',monospace;">{_sig_dir}</span>'
+    f'</div>'
+    f'<div style="display:flex;align-items:center;gap:6px;">'
+    f'<span style="font-size:10px;color:#484f58;">LAST CHECK</span>'
+    f'<span style="font-size:11px;color:#c9d1d9;font-family:\'JetBrains Mono\',monospace;">{_tick_disp}</span>'
+    f'</div>'
+    f'<div>{_gate_html}</div>'
+    f'</div>'
+)
+
+_reason_html = (
+    f'<div style="padding:5px 20px;background:#0a0d12;border-bottom:1px solid #1e2736;'
+    f'font-size:10px;color:#6e7681;font-family:\'JetBrains Mono\',monospace;'
+    f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'
+    f'<span style="color:#484f58;">REASON ›</span> {_sig_reason or "Waiting for first bot check…"}'
+    f'</div>'
+) if bot_running else ""
 
 st.markdown(
     f'<div style="display:flex;align-items:center;justify-content:space-between;'
-    f'flex-wrap:wrap;gap:8px;padding:7px 20px;background:#0d1117;border-bottom:1px solid #1e2736;">'
+    f'flex-wrap:wrap;gap:10px;padding:8px 20px;background:#0d1117;border-bottom:1px solid #1e2736;">'
     f'{"".join(_conn_banner_parts)}'
     f'{_bot_status_html}'
-    f'</div>',
+    f'</div>'
+    f'{_reason_html}',
     unsafe_allow_html=True,
 )
 
@@ -832,8 +891,17 @@ with st.sidebar:
 
     # Bot
     st.markdown('<div class="sec-lbl">Bot</div>', unsafe_allow_html=True)
-    paper_tog = st.toggle("Paper mode (no real orders)", value=st.session_state.paper_mode)
-    st.session_state.paper_mode = paper_tog
+    _pv_ok_sb, _pv_open_sb, _pv_closed_sb = paper_verified()
+    if not _pv_ok_sb:
+        st.session_state.paper_mode = True
+        paper_tog = st.toggle(
+            "Paper mode (LIVE locked until 1 paper trade closes)",
+            value=True, disabled=True,
+            help=f"Close ≥1 paper trade to unlock LIVE. Open: {_pv_open_sb} · Closed: {_pv_closed_sb}",
+        )
+    else:
+        paper_tog = st.toggle("Paper mode (no real orders)", value=st.session_state.paper_mode)
+        st.session_state.paper_mode = paper_tog
 
     ck_val = st.slider("Check interval (s)", 10, 300, st.session_state.check_every, 10)
     st.session_state.check_every = ck_val
@@ -846,8 +914,13 @@ with st.sidebar:
     with bc1:
         if st.button("▶ Start", use_container_width=True, disabled=bot_running):
             c = _cl()
+            _eff_paper = True if c is None else paper_tog
             if c is None and not paper_tog:
                 st.error("Connect to Binance first — live trading requires API keys.")
+            elif not _eff_paper and not paper_verified()[0]:
+                st.error("🔒 LIVE trading locked — close ≥1 paper trade first to unlock LIVE.")
+                st.session_state.paper_mode = True
+                st.rerun()
             else:
                 # client=None is fine; bot falls back to public Binance API
                 b = bot_module.create_bot(
@@ -857,7 +930,7 @@ with st.sidebar:
                     risk_manager=st.session_state.risk_manager,
                     interval=intv_sel,
                     check_every=ck_val,
-                    paper_mode=True if c is None else paper_tog,
+                    paper_mode=_eff_paper,
                     threshold=thr_val / 100,
                 )
                 b.start()
@@ -1315,6 +1388,11 @@ with st.container():
             _cf1, _cf2 = st.columns(2)
             with _cf1:
                 if st.button("✅ Confirm LIVE trade", use_container_width=True, type="primary"):
+                    # Re-check gate at confirm time (defence in depth)
+                    if (not paper_verified()[0]) or st.session_state.paper_mode or st.session_state.testnet:
+                        st.error("🔒 LIVE trade blocked — paper verification required and paper/testnet must be OFF.")
+                        st.session_state.pending_live_trade = None
+                        st.rerun()
                     _do_live = True
                     c = _cl()
                     try:
@@ -1382,6 +1460,10 @@ with st.container():
 
                     # LIVE mode → stage confirmation; paper/testnet → execute immediately
                     if not st.session_state.paper_mode and not st.session_state.testnet:
+                        if not paper_verified()[0]:
+                            st.error("🔒 LIVE trading locked — close ≥1 paper trade first.")
+                            st.session_state.paper_mode = True
+                            st.rerun()
                         st.session_state.pending_live_trade = {
                             "side": side, "invested": invested,
                             "price": price, "qty": qty,
