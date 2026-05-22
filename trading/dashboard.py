@@ -451,27 +451,64 @@ else:
 # ─────────────────────────────────────────────────────────────────────────────
 # METRICS
 # ─────────────────────────────────────────────────────────────────────────────
-all_trades    = load_trades()
-open_trades   = get_open_trades()
-closed_trades = [t for t in all_trades if t.get("status") == "closed"]
-total_pnl     = sum((t.get("profit_loss") or 0) for t in closed_trades)
-today_str     = datetime.now(_TZ).strftime("%Y-%m-%d")
-daily_pnl     = sum(
+all_trades     = load_trades()
+open_trades    = get_open_trades()
+closed_trades  = [t for t in all_trades if t.get("status") == "closed"]
+realized_pnl   = sum((t.get("profit_loss") or 0) for t in closed_trades)
+today_str      = datetime.now(_TZ).strftime("%Y-%m-%d")
+daily_realized = sum(
     (t.get("profit_loss") or 0) for t in closed_trades
     if (t.get("close_time") or "").startswith(today_str)
 )
 wins     = sum(1 for t in closed_trades if (t.get("profit_loss") or 0) >= 0)
 win_rate = (wins / len(closed_trades) * 100) if closed_trades else 0.0
 
-balance = st.session_state.initial_balance + total_pnl
+# ── Unrealized PnL: mark-to-market on every open position ─────────────────────
+# Uses live_price for trades on the active symbol; falls back to public_price
+# for any open position on a different symbol. Per-symbol price cached per render.
+_price_cache: dict[str, float] = {}
+if live_price:
+    _price_cache[st.session_state.symbol] = live_price
+
+def _cur_price_for(sym: str) -> float | None:
+    if sym in _price_cache:
+        return _price_cache[sym]
+    try:
+        p = public_price(sym, testnet=st.session_state.testnet)
+        _price_cache[sym] = p
+        return p
+    except Exception:
+        return None
+
+unrealized_pnl = 0.0
+for _ot in open_trades:
+    _ep   = _ot.get("entry_price")
+    _inv  = _ot.get("invested") or 0
+    _side = _ot.get("side", "BUY")
+    _cp   = _cur_price_for(_ot.get("coin", st.session_state.symbol))
+    if not (_ep and _cp and _inv):
+        continue
+    _u = ((_cp - _ep) / _ep * _inv) if _side == "BUY" else ((_ep - _cp) / _ep * _inv)
+    unrealized_pnl += _u
+    # Cache per-position unrealized for re-use in the open-positions list
+    _ot["_unrealized"] = _u
+    _ot["_cur_price"]  = _cp
+
+total_pnl = realized_pnl + unrealized_pnl
+daily_pnl = daily_realized + unrealized_pnl  # today's realized + currently-open marks
+
+# Equity = starting capital + realized PnL + unrealized PnL
+equity  = st.session_state.initial_balance + realized_pnl + unrealized_pnl
+
+# Paper balance mirrors equity (no margin in paper mode); LIVE overrides with API
+balance = equity
 if not st.session_state.paper_mode and st.session_state.connected and _cl():
     try:
         balance = _cl().get_account_balance("USDT")
     except Exception:
         pass
 
-equity = st.session_state.initial_balance + total_pnl
-roi    = (total_pnl / st.session_state.initial_balance * 100) if st.session_state.initial_balance else 0.0
+roi = (total_pnl / st.session_state.initial_balance * 100) if st.session_state.initial_balance else 0.0
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ALERT DETECTION — diff against last known trade IDs
@@ -1179,7 +1216,7 @@ with st.container():
   <div class="card">
     <div class="c-lbl">Total Equity</div>
     <div class="c-val">${equity:,.2f}</div>
-    <div class="c-sub">Initial ${st.session_state.initial_balance:,.0f}</div>
+    <div class="c-sub">Init ${st.session_state.initial_balance:,.0f} · R {_fmt_pnl(realized_pnl)} · U {_fmt_pnl(unrealized_pnl)}</div>
   </div>
   <div class="card" style="{'border-color:#26a69a55;' if (not st.session_state.paper_mode and st.session_state.connected) else ''}">
     <div class="c-lbl">{'🔴 Live' if (not st.session_state.paper_mode and st.session_state.connected) else '📋 Paper'} Balance</div>
@@ -1189,17 +1226,17 @@ with st.container():
   <div class="card">
     <div class="c-lbl">ROI</div>
     <div class="c-val {roi_cls}">{roi:+.2f}%</div>
-    <div class="c-sub">P&L {_fmt_pnl(total_pnl)}</div>
+    <div class="c-sub">Total P&L {_fmt_pnl(total_pnl)}</div>
   </div>
   <div class="card">
     <div class="c-lbl">Open Positions</div>
     <div class="c-val">{len(open_trades)}</div>
-    <div class="c-sub">Win rate {win_rate:.1f}%</div>
+    <div class="c-sub">Unrealized {_fmt_pnl(unrealized_pnl)} · Win {win_rate:.1f}%</div>
   </div>
   <div class="card">
     <div class="c-lbl">Daily P&L</div>
     <div class="c-val {dpnl_cls}">{_fmt_pnl(daily_pnl)}</div>
-    <div class="c-sub">{len([t for t in closed_trades if (t.get('close_time') or '').startswith(today_str)])} trades today</div>
+    <div class="c-sub">Realized {_fmt_pnl(daily_realized)} · {len([t for t in closed_trades if (t.get('close_time') or '').startswith(today_str)])} closed today</div>
   </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1752,7 +1789,15 @@ with st.container():
                 pos_cls = "pos-buy" if side == "BUY" else "pos-sell"
 
                 upnl_html = ""
-                if live_price and ep:
+                # Prefer cached per-position unrealized (uses correct symbol's price)
+                _u_cached = ot.get("_unrealized")
+                _cp_cached = ot.get("_cur_price")
+                if _u_cached is not None and _cp_cached:
+                    uc = "#26a69a" if _u_cached >= 0 else "#ef5350"
+                    _u_pct = (_u_cached / (ot.get("invested") or 1)) * 100
+                    upnl_html = (f'<span style="color:{uc};font-weight:700;">{_fmt_pnl(_u_cached)}</span> '
+                                 f'<span style="color:{uc};font-size:10px;opacity:.75;">({_u_pct:+.2f}%)</span>')
+                elif live_price and ep:
                     inv  = ot.get("invested", 0) or 0
                     upnl = (live_price - ep) / ep * inv if side == "BUY" else (ep - live_price) / ep * inv
                     uc   = "#26a69a" if upnl >= 0 else "#ef5350"
