@@ -527,7 +527,8 @@ class TradingBot:
         """Return USDT balance. Uses simulated balance of $1000 when no auth client."""
         if self.client and not self.paper:
             try:
-                return self.client.get_account_balance("USDT")
+                _b = self.client.get_account_balance("USDT")
+                return float(_b["total"]) if isinstance(_b, dict) else float(_b)
             except Exception as e:
                 log_activity("WARNING", f"Balance fetch failed: {e}")
         # Paper or no auth — derive from initial assumption

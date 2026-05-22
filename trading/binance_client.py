@@ -1,8 +1,16 @@
 import pandas as pd
 import requests
 import math
+import logging
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
+
+log = logging.getLogger("alphatrade.binance")
+if not log.handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s %(name)s: %(message)s"))
+    log.addHandler(_h)
+    log.setLevel(logging.INFO)
 
 # ── Public Binance REST (no auth needed) ──────────────────────────────────────
 _PUBLIC_BASE = "https://api.binance.com/api/v3"
@@ -111,22 +119,40 @@ class BinanceClient:
         return df
 
     # ── Account ───────────────────────────────────────────────────────────────
-    def get_account_balance(self, asset: str = "USDT") -> float:
-        """Free (available) balance for one asset."""
-        account = self.client.get_account()
-        for b in account["balances"]:
-            if b["asset"] == asset:
-                return float(b["free"])
-        return 0.0
+    def get_account_balance(self, asset: str = "USDT") -> dict:
+        """Real Binance balance for one asset via client.get_account().
 
-    def get_asset_balance_full(self, asset: str = "USDT") -> dict:
-        """Returns {'free': X, 'locked': Y, 'total': X+Y} for one asset."""
-        account = self.client.get_account()
-        for b in account["balances"]:
+        Returns {'asset','free','locked','total','testnet'}.
+        Raises RuntimeError on API failure (caller MUST handle / surface).
+        """
+        try:
+            account = self.client.get_account()
+        except BinanceAPIException as e:
+            log.error("get_account() BinanceAPIException code=%s msg=%s", e.code, e.message)
+            raise RuntimeError(f"Binance API error {e.code}: {e.message}") from e
+        except Exception as e:
+            log.error("get_account() failed: %s", e)
+            raise RuntimeError(f"Binance request failed: {e}") from e
+
+        bals = account.get("balances", [])
+        log.info("Binance get_account OK (testnet=%s) — %d assets, canTrade=%s",
+                 self.testnet, len(bals), account.get("canTrade"))
+
+        for b in bals:
             if b["asset"] == asset:
                 f = float(b["free"]); l = float(b["locked"])
-                return {"free": f, "locked": l, "total": f + l}
-        return {"free": 0.0, "locked": 0.0, "total": 0.0}
+                out = {"asset": asset, "free": f, "locked": l,
+                       "total": f + l, "testnet": self.testnet}
+                log.info("Balance %s: free=%.8f locked=%.8f total=%.8f",
+                         asset, f, l, f + l)
+                return out
+        log.warning("Asset %s not present in account balances", asset)
+        return {"asset": asset, "free": 0.0, "locked": 0.0,
+                "total": 0.0, "testnet": self.testnet}
+
+    # Back-compat alias used elsewhere in the codebase
+    def get_asset_balance_full(self, asset: str = "USDT") -> dict:
+        return self.get_account_balance(asset)
 
     def get_all_balances(self) -> dict:
         account = self.client.get_account()

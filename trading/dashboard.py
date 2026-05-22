@@ -502,18 +502,25 @@ equity  = st.session_state.initial_balance + realized_pnl + unrealized_pnl
 
 # Paper balance mirrors equity (no margin in paper mode); LIVE overrides with API
 balance = equity
-binance_total_usdt = 0.0     # free + locked, real Binance balance
-binance_free_usdt  = 0.0     # available USDT for new orders
-_binance_connected = (st.session_state.connected and _cl() is not None)
+binance_total_usdt   = 0.0   # free + locked, real Binance balance
+binance_free_usdt    = 0.0   # available USDT for new orders
+binance_locked_usdt  = 0.0   # in open orders
+binance_balance_err  = None  # populated on API failure → shown in UI
+_binance_connected   = (st.session_state.connected and _cl() is not None)
 if _binance_connected:
     try:
-        _bal = _cl().get_asset_balance_full("USDT")
-        binance_total_usdt = _bal["total"]
-        binance_free_usdt  = _bal["free"]
+        # CALLED EVERY REFRESH (no cache) — this is the live USDT balance
+        _bal = _cl().get_account_balance("USDT")
+        binance_total_usdt  = _bal["total"]
+        binance_free_usdt   = _bal["free"]
+        binance_locked_usdt = _bal["locked"]
         if not st.session_state.paper_mode:
             balance = binance_total_usdt   # LIVE/TESTNET equity = real Binance balance
-    except Exception:
-        pass
+    except Exception as _e:
+        binance_balance_err = str(_e)
+        # In LIVE mode a failed balance call is critical — surface it, do NOT fall back to fake equity
+        if not st.session_state.paper_mode:
+            balance = 0.0
 
 roi = (total_pnl / st.session_state.initial_balance * 100) if st.session_state.initial_balance else 0.0
 
@@ -759,10 +766,10 @@ if st.session_state.connected and _cl():
     _net_lbl  = "TESTNET" if st.session_state.testnet else "🔴 LIVE MAINNET"
     _net_col  = "#26a69a" if st.session_state.testnet else "#ef5350"
     try:
-        _b_usdt = _cl().get_account_balance("USDT")
+        _b_usdt = _cl().get_account_balance("USDT")["total"]
         _bal_str = f"${_b_usdt:,.2f} USDT"
-    except Exception:
-        _bal_str = "Balance unavailable"
+    except Exception as _e:
+        _bal_str = f"Balance ERR: {_e}"
     _conn_banner_parts.append(
         f'<div style="display:flex;align-items:center;gap:8px;">'
         f'<span class="dot dot-g"></span>'
@@ -891,15 +898,19 @@ with st.sidebar:
     if st.session_state.connected and _cl():
         _conn_c = _cl()
         try:
-            _live_usdt = _conn_c.get_account_balance("USDT")
+            _live_bal  = _conn_c.get_account_balance("USDT")
+            _live_usdt = _live_bal["total"]
+            _live_free = _live_bal["free"]
+            _live_lock = _live_bal["locked"]
             _net_label = "Testnet" if st.session_state.testnet else "🔴 LIVE"
             st.markdown(f"""
 <div style="background:#0d2a1a;border:1px solid #26a69a44;border-radius:8px;padding:10px 12px;margin-bottom:8px;">
   <div style="font-size:9px;color:#26a69a;font-weight:700;letter-spacing:.1em;margin-bottom:4px;">CONNECTED · {_net_label}</div>
-  <div style="font-size:18px;font-weight:700;color:#f0f6fc;font-family:'JetBrains Mono',monospace;">${_live_usdt:,.2f} <span style="font-size:11px;color:#6e7681;">USDT</span></div>
+  <div style="font-size:18px;font-weight:700;color:#f0f6fc;font-family:'JetBrains Mono',monospace;">${_live_usdt:,.2f} <span style="font-size:11px;color:#6e7681;">USDT total</span></div>
+  <div style="font-size:10px;color:#8b949e;margin-top:4px;font-family:'JetBrains Mono',monospace;">free ${_live_free:,.2f} · locked ${_live_lock:,.2f}</div>
 </div>""", unsafe_allow_html=True)
-        except Exception:
-            st.success("✅ Connected to Binance")
+        except Exception as _be:
+            st.error(f"❌ Binance balance fetch failed: {_be}")
         if st.button("🔌 Disconnect", use_container_width=True):
             st.session_state.client    = None
             st.session_state.connected = False
@@ -1267,17 +1278,28 @@ with st.container():
         _r_cls = "up" if realized_pnl   >= 0 else "dn"
         _bin_card_style = 'border-color:#26a69a55;' if _binance_connected else 'opacity:.55;'
 
+        if binance_balance_err:
+            st.error(f"❌ Binance balance API failed: {binance_balance_err} — check API key permissions / IP whitelist / system clock")
+        _bin_total_disp = "ERR"  if binance_balance_err else f"${binance_total_usdt:,.2f}"
+        _bin_free_disp  = "ERR"  if binance_balance_err else f"${binance_free_usdt:,.2f}"
+        _bin_sub_total  = ("⚠️ API ERROR" if binance_balance_err
+                           else ('🟢 Live · free + locked' if _binance_connected else 'Not connected'))
+        _bin_sub_free   = ("⚠️ API ERROR" if binance_balance_err
+                           else ('Free for new orders' if _binance_connected else 'Connect API key'))
+        if binance_balance_err:
+            _bin_card_style = 'border-color:#ef535088;background:#2a0f0f;'
+
         st.markdown(f"""
 <div class="cards">
   <div class="card" style="{_bin_card_style}">
     <div class="c-lbl">Binance Total (USDT)</div>
-    <div class="c-val">${binance_total_usdt:,.2f}</div>
-    <div class="c-sub">{'🟢 Live · free + locked' if _binance_connected else 'Not connected'}</div>
+    <div class="c-val">{_bin_total_disp}</div>
+    <div class="c-sub">{_bin_sub_total}</div>
   </div>
   <div class="card" style="{_bin_card_style}">
     <div class="c-lbl">Available (USDT)</div>
-    <div class="c-val">${binance_free_usdt:,.2f}</div>
-    <div class="c-sub">{'Free for new orders' if _binance_connected else 'Connect API key'}</div>
+    <div class="c-val">{_bin_free_disp}</div>
+    <div class="c-sub">{_bin_sub_free}</div>
   </div>
   <div class="card">
     <div class="c-lbl">📋 Paper Equity</div>
