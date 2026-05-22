@@ -1,0 +1,252 @@
+⚡
+LIVE Mainnet — every order uses real money on api.binance.com
+
+❌
+Binance balance fetch failed: Binance API error -1022: Signature for this request is not valid.
+
+🔑 Key Ma8buc… · 🌐 api.binance.com
+
+
+Market
+Active symbols (bot)
+
+
+BTCUSDT
+View symbol
+
+
+BTCUSDT
+Interval
+
+5m
+Strategy
+
+EMA Crossover
+Bot
+⚡ Bot places real Binance Mainnet orders on every signal.
+
+Check interval (s)
+
+
+10
+
+300
+
+Price threshold %
+
+
+
+0.01
+
+2.00
+
+
+
+
+BOT PERFORMANCE
+Session
+0/∞
+Win Rate
+0%
+Total P&L
++$0.00
+Per Trade
+$50
+Investment
+Investment mode
+
+
+
+Fixed USDT
+
+
+% of Available
+
+Manual order (USDT)
+
+10.00
+
+
+Risk Management
+Per-trade size (active)
+$50.00 USDT
+Invest per trade (USDT)
+
+
+50.00
+
+
+Hard cap per trade (USDT)
+
+
+100.00
+
+
+Max bot trades / session
+
+
+0
+
+
+Stop loss %
+
+
+0.50
+
+20.00
+
+Take profit %
+
+
+0.50
+
+50.00
+
+Max daily loss %
+
+
+1.00
+
+30.00
+
+Max open trades
+
+
+1
+
+20
+
+🌐 Global risk (account-wide)
+
+🎯 Per-symbol risk overrides
+
+Data & Refresh
+Live refresh interval
+
+
+5s
+Chart auto-refreshes every 5s — no manual action needed
+
+
+
+Telegram Notifications
+
+Bot Token
+
+
+1234567890:ABCDef...
+
+Chat ID
+
+
+-100123456789  or  123456789
+
+Enter Token + Chat ID to enable
+
+⚡ Alpha
+Trade
+BTCUSDT
+$76,238.76
+▼ 1.66%
+H $77,900.00  L $76,101.00
+LIVE 5s · 20:09:48
+LON
+MAINNET
+⚡ LIVE
+CONNECTED
+BOT OFF
+BTC
+$76,231.67
+-1.66%
+Vol 9K
+ETH
+$2,088.35
+-2.05%
+Vol 171K
+BNB
+$651.60
+-0.78%
+Vol 115K
+SOL
+$85.02
+-2.75%
+Vol 1.9M
+XRP
+$1.34
+-2.24%
+Vol 81.6M
+ADA
+$0.2444
+-3.13%
+Vol 116.5M
+DOGE
+$0.1038
+-1.91%
+Vol 437.4M
+AVAX
+$9.25
+-2.28%
+Vol 2.0M
+DOT
+$1.28
++0.00%
+Vol 10.7M
+MATIC
+$0.3794
+-0.29%
+Vol 2.8M
+🔴 LIVE MAINNET
+·
+Balance ERR: Binance API error -1022: Signature for this request is not valid.
+BOT OFF
+STRATEGY EMA Crossover
+SIGNAL
+—
+CONFIDENCE
+0
+LAST CHECK
+—
+⚡ LIVE MAINNET · every order is real
+❌
+Binance balance API failed: Binance API error -1022: Signature for this request is not valid. — check API key permissions / IP whitelist / system clock
+
+Binance Total (USDT)
+ERR
+⚠️ API ERROR
+Available (USDT)
+ERR
+⚠️ API ERROR
+Locked (USDT)
+$0.00
+In open orders · 0 positions
+Realized PnL
++$0.0000
+0 closed · Win 0.0%
+Unrealized PnL
++$0.0000
+Exposure 0.0% · ROI +0.00%
+Daily P&L
++$0.0000
+R +$0.0000 · 0 today
+Equity Curve
+  
++$0.0000
+  
+0 closed trades
+10.00
+
+
+BTCUSDT
+5m
+EMA Crossover
+⚡ LIVE
+BOT OFF
+<span style="font-size:10px;color:#484f58;font-weight:400;">live • auth</span>
+
+
+
+
+
+PRICE
+$76,249.7600
+
