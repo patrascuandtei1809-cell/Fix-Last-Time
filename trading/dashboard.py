@@ -1148,8 +1148,9 @@ with st.sidebar:
 
     # Data & Live Refresh
     st.markdown('<div class="sec-lbl">Data & Refresh</div>', unsafe_allow_html=True)
-    _ref_opts = [3, 5, 10, 30, 60]
-    _ref_idx  = _ref_opts.index(st.session_state.refresh_secs) if st.session_state.refresh_secs in _ref_opts else 1
+    _ref_opts = [5, 10, 30, 60]   # min 5s to prevent chart flicker
+    _cur_ref  = max(5, int(st.session_state.refresh_secs))
+    _ref_idx  = _ref_opts.index(_cur_ref) if _cur_ref in _ref_opts else 0
     _ref_choice = st.selectbox(
         "Live refresh interval",
         options=_ref_opts,
@@ -1320,6 +1321,7 @@ with st.container():
             hovermode="x unified",
             hoverlabel=dict(bgcolor="#161b22", bordercolor="#30363d",
                             font_color="#c9d1d9", font_size=11),
+            uirevision="alphatrade-spark",
         )
 
         _sp_lbl = f'<span style="font-size:10px;color:#6e7681;text-transform:uppercase;letter-spacing:.1em;font-weight:600;">Equity Curve</span>'
@@ -1330,7 +1332,7 @@ with st.container():
             f'{_sp_lbl}&nbsp;&nbsp;{_sp_val}&nbsp;&nbsp;{_sp_cnt}</div>',
             unsafe_allow_html=True,
         )
-        st.plotly_chart(_sfig, use_container_width=True,
+        st.plotly_chart(_sfig, use_container_width=True, key="equity_spark_chart",
                         config={"displayModeBar": False, "staticPlot": False})
 
         # ── Chart toolbar ─────────────────────────────────────────────────────
@@ -1748,26 +1750,34 @@ with st.container():
                 plot_bgcolor="#0a0c10",
                 font=dict(color="#6e7681", family="'JetBrains Mono',monospace", size=10),
                 xaxis_rangeslider_visible=False,
-                height=640,
-                margin=dict(l=0, r=64, t=18, b=0),
+                height=700,
+                # Right margin shrunk (no in-chart legend); bottom expanded for legend below
+                margin=dict(l=0, r=64, t=18, b=72),
                 showlegend=True,
+                # Legend BELOW chart (horizontal) — never overlays candles
                 legend=dict(
-                    bgcolor="rgba(13,17,23,0.88)",
-                    bordercolor="#1e2736", borderwidth=1,
-                    font=dict(size=10),
-                    orientation="v",
-                    yanchor="top", y=0.99,
-                    xanchor="right", x=0.99,
+                    bgcolor="rgba(13,17,23,0.0)",
+                    bordercolor="rgba(0,0,0,0)", borderwidth=0,
+                    font=dict(size=10, color="#9ba3ad"),
+                    orientation="h",
+                    yanchor="top", y=-0.10,
+                    xanchor="center", x=0.5,
+                    itemsizing="constant",
                 ),
                 hovermode="x unified",
                 hoverlabel=dict(bgcolor="#161b22", bordercolor="#30363d",
                                 font_color="#c9d1d9", font_size=11),
+                # Stable uirevision — Plotly preserves zoom/pan/selection across rerenders
+                uirevision="alphatrade-main-chart",
             )
             for r in range(1, n_rows + 1):
                 fig.update_xaxes(
                     gridcolor=G, gridwidth=1, zerolinecolor=G,
                     showspikes=True, spikecolor="#484f58", spikethickness=1,
                     tickfont=dict(size=10), row=r, col=1,
+                    # Exact HH:MM:SS Europe/London time (klines already tz-converted in binance_client)
+                    tickformat="%H:%M:%S",
+                    hoverformat="%Y-%m-%d %H:%M:%S",
                 )
             fig.update_yaxes(
                 gridcolor=G, gridwidth=1, zerolinecolor=G,
@@ -1789,7 +1799,8 @@ with st.container():
                 ann.font.color = "#484f58"
                 ann.font.size  = 9
 
-            st.plotly_chart(fig, use_container_width=True,
+            # Stable key → Streamlit reuses the same DOM node across reruns (no flicker / no remount)
+            st.plotly_chart(fig, use_container_width=True, key="main_candle_chart",
                             config={"displayModeBar": True, "displaylogo": False,
                                     "modeBarButtonsToRemove": ["select2d", "lasso2d", "toImage"]})
         else:
@@ -1942,6 +1953,6 @@ with st.container():
 # ── Auto-refresh (always-on, configurable interval) ───────────────────────────
 # This is the ONLY place st.rerun() is called for live updates.
 # After the full page renders, we sleep N seconds then trigger the next cycle.
-_sleep = st.session_state.get("refresh_secs", 5)
+_sleep = max(5, int(st.session_state.get("refresh_secs", 5)))   # never below 5s
 time.sleep(_sleep)
 st.rerun()
