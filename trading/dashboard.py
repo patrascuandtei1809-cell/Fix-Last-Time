@@ -502,9 +502,16 @@ equity  = st.session_state.initial_balance + realized_pnl + unrealized_pnl
 
 # Paper balance mirrors equity (no margin in paper mode); LIVE overrides with API
 balance = equity
-if not st.session_state.paper_mode and st.session_state.connected and _cl():
+binance_total_usdt = 0.0     # free + locked, real Binance balance
+binance_free_usdt  = 0.0     # available USDT for new orders
+_binance_connected = (st.session_state.connected and _cl() is not None)
+if _binance_connected:
     try:
-        balance = _cl().get_account_balance("USDT")
+        _bal = _cl().get_asset_balance_full("USDT")
+        binance_total_usdt = _bal["total"]
+        binance_free_usdt  = _bal["free"]
+        if not st.session_state.paper_mode:
+            balance = binance_total_usdt   # LIVE/TESTNET equity = real Binance balance
     except Exception:
         pass
 
@@ -1100,6 +1107,33 @@ with st.sidebar:
                               st.session_state.initial_balance, 100.0)
         st.session_state.initial_balance = ib
 
+    # ── Investment mode selector (Fixed USDT vs % of Available) ──────────────
+    if "invest_mode" not in st.session_state:
+        st.session_state.invest_mode = "Fixed USDT"
+    if "invest_pct"  not in st.session_state:
+        st.session_state.invest_pct  = 5.0
+
+    _avail_for_calc = binance_free_usdt if (_binance_connected and not paper_tog) else st.session_state.initial_balance
+    st.session_state.invest_mode = st.radio(
+        "Investment mode",
+        ["Fixed USDT", "% of Available"],
+        index=0 if st.session_state.invest_mode == "Fixed USDT" else 1,
+        horizontal=True,
+        help="Fixed = exact USDT per trade. % = portion of Available USDT (Binance balance when LIVE, simulated when paper). Bot NEVER uses your full balance.",
+    )
+    if st.session_state.invest_mode == "% of Available":
+        st.session_state.invest_pct = st.slider(
+            "% of available per trade", 0.5, 25.0,
+            float(st.session_state.invest_pct), 0.5,
+            help="Capped at Hard cap below. Recommended: 1–5%.",
+        )
+        _effective_invest = _avail_for_calc * st.session_state.invest_pct / 100
+        st.session_state.risk.invest_per_trade = round(_effective_invest, 2)
+        st.caption(
+            f"➜ Using **${st.session_state.risk.invest_per_trade:,.2f} USDT** per trade "
+            f"({st.session_state.invest_pct:.1f}% of ${_avail_for_calc:,.2f} available)"
+        )
+
     ma = st.number_input("Manual order (USDT)", 10.0, 100_000.0,
                           st.session_state.manual_amount, 10.0)
     st.session_state.manual_amount = ma
@@ -1229,32 +1263,41 @@ with st.container():
         roi_cls  = "up" if roi >= 0  else "dn"
         dpnl_cls = "up" if daily_pnl >= 0 else "dn"
 
+        _u_cls = "up" if unrealized_pnl >= 0 else "dn"
+        _r_cls = "up" if realized_pnl   >= 0 else "dn"
+        _bin_card_style = 'border-color:#26a69a55;' if _binance_connected else 'opacity:.55;'
+
         st.markdown(f"""
 <div class="cards">
+  <div class="card" style="{_bin_card_style}">
+    <div class="c-lbl">Binance Total (USDT)</div>
+    <div class="c-val">${binance_total_usdt:,.2f}</div>
+    <div class="c-sub">{'🟢 Live · free + locked' if _binance_connected else 'Not connected'}</div>
+  </div>
+  <div class="card" style="{_bin_card_style}">
+    <div class="c-lbl">Available (USDT)</div>
+    <div class="c-val">${binance_free_usdt:,.2f}</div>
+    <div class="c-sub">{'Free for new orders' if _binance_connected else 'Connect API key'}</div>
+  </div>
   <div class="card">
-    <div class="c-lbl">Total Equity</div>
+    <div class="c-lbl">📋 Paper Equity</div>
     <div class="c-val">${equity:,.2f}</div>
-    <div class="c-sub">Init ${st.session_state.initial_balance:,.0f} · R {_fmt_pnl(realized_pnl)} · U {_fmt_pnl(unrealized_pnl)}</div>
-  </div>
-  <div class="card" style="{'border-color:#26a69a55;' if (not st.session_state.paper_mode and st.session_state.connected) else ''}">
-    <div class="c-lbl">{'🔴 Live' if (not st.session_state.paper_mode and st.session_state.connected) else '📋 Paper'} Balance</div>
-    <div class="c-val">${balance:,.2f}</div>
-    <div class="c-sub">{'USDT · Binance' if (not st.session_state.paper_mode and st.session_state.connected) else 'USDT · Simulated'}</div>
+    <div class="c-sub">Init ${st.session_state.initial_balance:,.0f} · {len(open_trades)} open</div>
   </div>
   <div class="card">
-    <div class="c-lbl">ROI</div>
-    <div class="c-val {roi_cls}">{roi:+.2f}%</div>
-    <div class="c-sub">Total P&L {_fmt_pnl(total_pnl)}</div>
+    <div class="c-lbl">Realized PnL</div>
+    <div class="c-val {_r_cls}">{_fmt_pnl(realized_pnl)}</div>
+    <div class="c-sub">{len(closed_trades)} closed · Win {win_rate:.1f}%</div>
   </div>
   <div class="card">
-    <div class="c-lbl">Open Positions</div>
-    <div class="c-val">{len(open_trades)}</div>
-    <div class="c-sub">Exposure {(sum((t.get('invested') or 0) for t in open_trades)/equity*100 if equity else 0):.1f}% · U {_fmt_pnl(unrealized_pnl)} · Win {win_rate:.1f}%</div>
+    <div class="c-lbl">Unrealized PnL</div>
+    <div class="c-val {_u_cls}">{_fmt_pnl(unrealized_pnl)}</div>
+    <div class="c-sub">Exposure {(sum((t.get('invested') or 0) for t in open_trades)/equity*100 if equity else 0):.1f}% · ROI {roi:+.2f}%</div>
   </div>
   <div class="card">
     <div class="c-lbl">Daily P&L</div>
     <div class="c-val {dpnl_cls}">{_fmt_pnl(daily_pnl)}</div>
-    <div class="c-sub">Realized {_fmt_pnl(daily_realized)} · {len([t for t in closed_trades if (t.get('close_time') or '').startswith(today_str)])} closed today</div>
+    <div class="c-sub">R {_fmt_pnl(daily_realized)} · {len([t for t in closed_trades if (t.get('close_time') or '').startswith(today_str)])} today</div>
   </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1569,7 +1612,35 @@ with st.container():
             st.rerun()
 
         # ── Chart (3-panel: Candles+EMA | Stochastic | RSI) ───────────────────
+        # ── Active Levels strip (replaces in-chart annotations) ─────────────────
         if df_chart is not None and len(df_chart) > 5:
+            _lvl_bits = []
+            if live_price:
+                _lc = "#26a69a" if change_pct >= 0 else "#ef5350"
+                _lvl_bits.append(
+                    f'<span style="color:#6e7681;">PRICE</span> '
+                    f'<span style="color:{_lc};font-weight:700;">${live_price:,.4f}</span>'
+                )
+            for _op in open_trades:
+                _sid = _op.get("side","BUY"); _tid = (_op.get("id") or "?")[:6]
+                _sl = _op.get("stop_loss"); _tp = _op.get("take_profit")
+                if _sl or _tp:
+                    _side_col = "#26a69a" if _sid == "BUY" else "#ef5350"
+                    _lvl_bits.append(
+                        f'<span style="color:#6e7681;">{_tid}</span> '
+                        f'<span style="color:{_side_col};font-weight:600;">{_sid}</span> '
+                        + (f'<span style="color:#ef5350;">SL ${_sl:,.4f}</span> ' if _sl else '')
+                        + (f'<span style="color:#26a69a;">TP ${_tp:,.4f}</span>' if _tp else '')
+                    )
+            if _lvl_bits:
+                st.markdown(
+                    '<div style="display:flex;flex-wrap:wrap;gap:14px;padding:6px 10px;'
+                    'background:#0d1117;border:1px solid #1a2030;border-radius:6px;'
+                    "margin:4px 0 8px 0;font-size:11px;font-family:'JetBrains Mono',monospace;\">"
+                    + " · ".join(_lvl_bits) + "</div>",
+                    unsafe_allow_html=True,
+                )
+
             _has_rsi = "rsi" in df_chart.columns
 
             fig = make_subplots(
@@ -1633,16 +1704,12 @@ with st.container():
                         hovertemplate="Vol: %{customdata:,.0f}<extra></extra>",
                     ), row=1, col=1)
 
-            # ── Live price line ────────────────────────────────────────────────
+            # ── Live price line (NO inline text — info shown in strip above chart) ─
             if live_price:
                 p_color = "#26a69a" if change_pct >= 0 else "#ef5350"
                 fig.add_hline(
                     y=live_price, row=1, col=1,
                     line=dict(color=p_color, width=1, dash="dot"),
-                    annotation_text=f"  {_fmt_p(live_price, 2)}",
-                    annotation_position="right",
-                    annotation_font_color=p_color,
-                    annotation_font_size=10,
                 )
 
             # ── Trade markers ──────────────────────────────────────────────────
@@ -1693,19 +1760,11 @@ with st.container():
                     fig.add_hline(
                         y=_sl, row=1, col=1,
                         line=dict(color="rgba(239,83,80,0.55)", width=1, dash="dash"),
-                        annotation_text=f"  SL {_tid}",
-                        annotation_position="right",
-                        annotation_font_color="#ef5350",
-                        annotation_font_size=9,
                     )
                 if _tp:
                     fig.add_hline(
                         y=_tp, row=1, col=1,
                         line=dict(color="rgba(38,166,154,0.55)", width=1, dash="dash"),
-                        annotation_text=f"  TP {_tid}",
-                        annotation_position="right",
-                        annotation_font_color="#26a69a",
-                        annotation_font_size=9,
                     )
 
             # ── Stochastic (row 2) ─────────────────────────────────────────────
@@ -1950,9 +2009,11 @@ with st.container():
 
         st.markdown("<div style='height:48px'></div>", unsafe_allow_html=True)
 
-# ── Auto-refresh (always-on, configurable interval) ───────────────────────────
-# This is the ONLY place st.rerun() is called for live updates.
-# After the full page renders, we sleep N seconds then trigger the next cycle.
-_sleep = max(5, int(st.session_state.get("refresh_secs", 5)))   # never below 5s
-time.sleep(_sleep)
-st.rerun()
+# ── Auto-refresh (silent JS-driven, no page-stall flash) ─────────────────────
+# Uses streamlit-autorefresh: a JS setInterval that triggers a rerun WITHOUT
+# blocking the python process. This is the only correct way — the old
+# `time.sleep(N); st.rerun()` loop caused the entire page to flash + duplicate
+# render at the bottom because the websocket was stalled during sleep.
+from streamlit_autorefresh import st_autorefresh
+_refresh_ms = max(5, int(st.session_state.get("refresh_secs", 5))) * 1000
+st_autorefresh(interval=_refresh_ms, key="alphatrade_autorefresh", limit=None)

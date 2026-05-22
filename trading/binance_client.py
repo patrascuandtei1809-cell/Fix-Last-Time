@@ -112,11 +112,21 @@ class BinanceClient:
 
     # ── Account ───────────────────────────────────────────────────────────────
     def get_account_balance(self, asset: str = "USDT") -> float:
+        """Free (available) balance for one asset."""
         account = self.client.get_account()
         for b in account["balances"]:
             if b["asset"] == asset:
                 return float(b["free"])
         return 0.0
+
+    def get_asset_balance_full(self, asset: str = "USDT") -> dict:
+        """Returns {'free': X, 'locked': Y, 'total': X+Y} for one asset."""
+        account = self.client.get_account()
+        for b in account["balances"]:
+            if b["asset"] == asset:
+                f = float(b["free"]); l = float(b["locked"])
+                return {"free": f, "locked": l, "total": f + l}
+        return {"free": 0.0, "locked": 0.0, "total": 0.0}
 
     def get_all_balances(self) -> dict:
         account = self.client.get_account()
