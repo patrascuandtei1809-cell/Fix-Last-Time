@@ -49,15 +49,33 @@ def get_shared_updated_at():
     with _state_lock:
         return _shared.get("updated_at")
 
-def _set_shared(df=None, price=None, tick=False, signal=None, reason=None, confidence=None):
+def _set_shared(df=None, price=None, tick=False, signal=None, reason=None,
+                confidence=None, block_reason=None, last_order=None):
     with _state_lock:
         if df         is not None: _shared["df"]    = df
         if price      is not None: _shared["price"] = price
         if signal     is not None: _shared["last_signal"]     = signal
         if reason     is not None: _shared["last_reason"]     = reason
         if confidence is not None: _shared["last_confidence"] = int(confidence)
+        if block_reason is not None:
+            _shared["block_reason"]    = block_reason
+            _shared["block_reason_at"] = datetime.now()
+        if last_order is not None:
+            _shared["last_order"]    = last_order
+            _shared["last_order_at"] = datetime.now()
         _shared["updated_at"] = datetime.now()
         if tick: _shared["last_tick_at"] = datetime.now()
+
+
+def get_bot_diagnostics() -> dict:
+    """All bot decision/exec state for the dashboard to display."""
+    with _state_lock:
+        return {
+            "block_reason":    _shared.get("block_reason"),
+            "block_reason_at": _shared.get("block_reason_at"),
+            "last_order":      _shared.get("last_order"),
+            "last_order_at":   _shared.get("last_order_at"),
+        }
 
 
 def get_bot_signal_meta() -> dict:
@@ -80,8 +98,39 @@ os.makedirs(DATA_DIR, exist_ok=True)
 
 TRADES_FILE   = os.path.join(DATA_DIR, "trades.json")
 ACTIVITY_FILE = os.path.join(DATA_DIR, "activity.json")
+SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")
 _file_lock    = threading.Lock()
+_settings_lock = threading.Lock()
 MAX_ACTIVITY  = 500
+
+
+# ── Settings persistence (survives restarts) ──────────────────────────────────
+def load_settings() -> dict:
+    """Load persisted user settings from disk. Returns {} if no file."""
+    with _settings_lock:
+        if not os.path.exists(SETTINGS_FILE):
+            return {}
+        try:
+            with open(SETTINGS_FILE) as f:
+                return json.load(f) or {}
+        except Exception as e:
+            print(f"[SETTINGS] load failed: {e}", flush=True)
+            return {}
+
+
+def save_settings(data: dict) -> bool:
+    """Persist a dict of user settings to disk. Returns True on success."""
+    with _settings_lock:
+        try:
+            tmp = SETTINGS_FILE + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump(data, f, indent=2, default=str)
+            os.replace(tmp, SETTINGS_FILE)
+            print(f"[SETTINGS] saved {len(data)} keys to {SETTINGS_FILE}", flush=True)
+            return True
+        except Exception as e:
+            print(f"[SETTINGS] save failed: {e}", flush=True)
+            return False
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -382,7 +431,9 @@ class TradingBot:
             session_count  = self._session_trades,
         )
         if not can_trade:
+            print(f"[BOT] BLOCKED signal={signal} reason={block_reason}", flush=True)
             log_activity("INFO", f"⏸️ {block_reason}")
+            _set_shared(block_reason=block_reason)
             # Auto-stop on daily-loss breaker
             if "Daily loss limit" in block_reason:
                 log_activity("WARNING", "🛑 Auto-stopping bot — daily loss limit hit")
@@ -390,15 +441,37 @@ class TradingBot:
                                              f"{self.risk.settings.max_daily_loss_pct}%")
                 self._running = False
             return
+        # Clear stale block reason when trade is allowed
+        _set_shared(block_reason="")
 
         # ── 5. Size the position (FIXED USDT — never uses full balance) ─────────
         invested = self.risk.get_invest_amount()
+        # For LIVE balance gate we need FREE USDT (locked funds cannot be spent).
+        free_usdt = None
+        if not self.paper and self.client:
+            try:
+                _bd = self.client.get_account_balance("USDT")
+                free_usdt = float(_bd["free"]) if isinstance(_bd, dict) else float(_bd)
+            except Exception as e:
+                print(f"[BOT][ERROR] free balance fetch failed: {e}", flush=True)
+                log_activity("WARNING", f"Balance fetch failed: {e}")
+        bal_display = free_usdt if free_usdt is not None else self._get_balance()
+        print(f"[BOT] SIZING signal={signal} price={price:.6f} invest_per_trade=${invested:.2f} "
+              f"free_usdt={free_usdt} balance=${bal_display:.2f} paper={self.paper}", flush=True)
+
         if invested < 10:
-            log_activity(
-                "WARNING",
-                f"⚠️ Skipping — invest_per_trade ${invested:.2f} < $10 minimum. "
-                f"Raise it in Risk → Invest per trade."
-            )
+            msg = (f"⚠️ Skipping — invest_per_trade ${invested:.2f} < $10 min. "
+                   f"Raise it in Risk → Invest per trade.")
+            print(f"[BOT] BLOCKED reason={msg}", flush=True)
+            log_activity("WARNING", msg)
+            _set_shared(block_reason=msg)
+            return
+        if not self.paper and free_usdt is not None and invested > free_usdt:
+            msg = (f"⚠️ Skipping — invest_per_trade ${invested:.2f} > free USDT "
+                   f"${free_usdt:.2f} (locked funds excluded). Top up or lower invest size.")
+            print(f"[BOT] BLOCKED reason={msg}", flush=True)
+            log_activity("WARNING", msg)
+            _set_shared(block_reason=msg)
             return
 
         qty = self._round_qty(invested / price)
@@ -408,14 +481,27 @@ class TradingBot:
         # ── 6. Execute ────────────────────────────────────────────────────────
         _mode_tag = "PAPER" if self.paper else ("TESTNET" if (self.client and self.client.testnet) else "LIVE")
         if not self.paper and self.client:
+            print(f"[BOT] ORDER REQUEST → Binance {_mode_tag} | "
+                  f"{signal} {qty} {self.symbol} (market)", flush=True)
             try:
                 order      = self.client.place_market_order(self.symbol, signal, qty)
+                print(f"[BOT] ORDER RESPONSE ← {order}", flush=True)
                 fill_price = float(order.get("fills", [{}])[0].get("price", price))
                 price      = fill_price
                 log_activity("ORDER",
                     f"✅ LIVE {signal} | {qty} {self.symbol} @ ${price:.4f}")
+                _set_shared(last_order={
+                    "ok": True, "side": signal, "qty": qty,
+                    "symbol": self.symbol, "price": price, "mode": _mode_tag,
+                })
             except Exception as e:
-                log_activity("ERROR", f"Order failed: {e}")
+                err = f"Order failed: {e}"
+                print(f"[BOT][ERROR] {err}", flush=True)
+                log_activity("ERROR", err)
+                _set_shared(block_reason=err, last_order={
+                    "ok": False, "side": signal, "qty": qty,
+                    "symbol": self.symbol, "error": str(e), "mode": _mode_tag,
+                })
                 tg.error_alert(f"Order FAILED — {signal} {self.symbol}\n{e}")
                 return
         else:

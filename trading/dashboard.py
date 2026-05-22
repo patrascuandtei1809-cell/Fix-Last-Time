@@ -23,6 +23,7 @@ from bot import (
     add_trade, close_trade, reset_all_data, clear_activity, log_activity,
     get_shared_df, get_shared_price, get_shared_updated_at, get_shared_last_tick,
     get_bot_session_trades, get_bot_last_signal, get_bot_signal_meta, force_paper_trade,
+    get_bot_diagnostics, save_settings,
 )
 from strategy import get_indicators
 from risk import RiskManager, RiskSettings
@@ -249,22 +250,17 @@ section[data-testid="stSidebar"] * { color: #c9d1d9 !important; }
     border-color: #2962ff66;
     box-shadow: 0 0 0 1px rgba(41,98,255,0.18), 0 4px 18px -8px rgba(41,98,255,0.35);
 }
-.c-val.up { text-shadow: 0 0 14px rgba(38,166,154,0.45); }
-.c-val.dn { text-shadow: 0 0 14px rgba(239,83,80,0.45); }
+/* text-shadow removed — caused ghosting on rerun */
+.c-val.up { color: #26a69a; }
+.c-val.dn { color: #ef5350; }
 .p-green { box-shadow: 0 0 12px -2px rgba(38,166,154,0.30); }
 .p-red   { box-shadow: 0 0 12px -2px rgba(239,83,80,0.30); }
 .p-gold  { box-shadow: 0 0 12px -2px rgba(227,179,65,0.25); }
 .cbadge.green { box-shadow: 0 0 10px -3px rgba(63,185,80,0.45); }
 .cbadge.red   { box-shadow: 0 0 10px -3px rgba(239,83,80,0.45); }
-.stButton>button {
-    transition: transform .08s ease, box-shadow .15s ease, border-color .15s ease !important;
-}
-.stButton>button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 14px -6px rgba(41,98,255,0.55) !important;
-    border-color: #2962ff88 !important;
-}
-.stButton>button:active { transform: translateY(0); }
+/* button transform removed — caused layout jitter on rerun */
+.stButton>button { transition: border-color .15s ease, background-color .15s ease !important; }
+.stButton>button:hover { border-color: #2962ff88 !important; }
 .mkt-tile.mkt-active {
     box-shadow: 0 0 0 1px #2962ff88, 0 0 18px -6px rgba(41,98,255,0.5);
 }
@@ -363,6 +359,32 @@ def _init():
     )
 
 _init()
+
+# ── Load persisted settings from disk (survives restart) ─────────────────────
+# Only runs once per session; user changes auto-save at bottom of script.
+if not st.session_state.get("_settings_loaded"):
+    from bot import load_settings as _load_settings
+    _persisted = _load_settings()
+    _PERSIST_KEYS = (
+        "paper_mode", "symbol", "strategy", "interval", "check_every",
+        "threshold", "initial_balance", "manual_amount", "testnet",
+        "refresh_secs", "tg_enabled", "tg_token", "tg_chat_id",
+    )
+    for _k in _PERSIST_KEYS:
+        if _k in _persisted:
+            st.session_state[_k] = _persisted[_k]
+    if "risk" in _persisted and isinstance(_persisted["risk"], dict):
+        for _rk, _rv in _persisted["risk"].items():
+            if hasattr(st.session_state.risk, _rk):
+                setattr(st.session_state.risk, _rk, _rv)
+    st.session_state._settings_loaded = True
+    if _persisted:
+        print(f"[SETTINGS] loaded {len(_persisted)} keys from disk", flush=True)
+        tg.configure(
+            token   = st.session_state.get("tg_token",   ""),
+            chat_id = st.session_state.get("tg_chat_id", ""),
+            enabled = st.session_state.get("tg_enabled", False),
+        )
 
 SYMBOLS    = ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT",
               "ADAUSDT","DOGEUSDT","AVAXUSDT","DOTUSDT","MATICUSDT"]
@@ -902,6 +924,39 @@ _bot_status_html = (
     f'</div>'
 )
 
+_diag = get_bot_diagnostics()
+_block = (_diag.get("block_reason") or "").strip()
+_lo    = _diag.get("last_order") or {}
+
+_block_html = ""
+if bot_running and _block:
+    _block_html = (
+        f'<div style="padding:6px 20px;background:#2a0f0f;border-bottom:1px solid #ef535066;'
+        f'font-size:11px;color:#ffb4b0;font-family:\'JetBrains Mono\',monospace;'
+        f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;">'
+        f'<span style="color:#ef5350;">⛔ BOT BLOCKED ›</span> {_block}'
+        f'</div>'
+    )
+
+_order_html = ""
+if bot_running and _lo:
+    if _lo.get("ok"):
+        _order_html = (
+            f'<div style="padding:5px 20px;background:#0d2a1a;border-bottom:1px solid #26a69a44;'
+            f'font-size:10px;color:#7ce0c2;font-family:\'JetBrains Mono\',monospace;">'
+            f'<span style="color:#26a69a;">✅ LAST ORDER ›</span> {_lo.get("mode")} '
+            f'{_lo.get("side")} {_lo.get("qty")} {_lo.get("symbol")} @ ${(_lo.get("price") or 0):.4f}'
+            f'</div>'
+        )
+    else:
+        _order_html = (
+            f'<div style="padding:5px 20px;background:#2a0f0f;border-bottom:1px solid #ef535066;'
+            f'font-size:10px;color:#ffb4b0;font-family:\'JetBrains Mono\',monospace;">'
+            f'<span style="color:#ef5350;">❌ LAST ORDER FAILED ›</span> {_lo.get("mode")} '
+            f'{_lo.get("side")} {_lo.get("qty")} {_lo.get("symbol")} — {_lo.get("error")}'
+            f'</div>'
+        )
+
 _reason_html = (
     f'<div style="padding:5px 20px;background:#0a0d12;border-bottom:1px solid #1e2736;'
     f'font-size:10px;color:#6e7681;font-family:\'JetBrains Mono\',monospace;'
@@ -909,6 +964,7 @@ _reason_html = (
     f'<span style="color:#484f58;">REASON ›</span> {_sig_reason or "Waiting for first bot check…"}'
     f'</div>'
 ) if bot_running else ""
+_reason_html = _block_html + _order_html + _reason_html
 
 st.markdown(
     f'<div style="display:flex;align-items:center;justify-content:space-between;'
@@ -2106,11 +2162,53 @@ with st.container():
 
         st.markdown("<div style='height:48px'></div>", unsafe_allow_html=True)
 
+# ── Auto-persist settings on every script run ────────────────────────────────
+# Compares current setting values to last saved snapshot; writes settings.json
+# only when something changed. Shows "Settings saved" toast on persist.
+def _collect_settings_snapshot() -> dict:
+    _r = st.session_state.risk
+    return {
+        "paper_mode":      st.session_state.paper_mode,
+        "symbol":          st.session_state.symbol,
+        "strategy":        st.session_state.strategy,
+        "interval":        st.session_state.interval,
+        "check_every":     st.session_state.check_every,
+        "threshold":       st.session_state.threshold,
+        "initial_balance": st.session_state.initial_balance,
+        "manual_amount":   st.session_state.manual_amount,
+        "testnet":         st.session_state.testnet,
+        "refresh_secs":    st.session_state.refresh_secs,
+        "tg_enabled":      st.session_state.tg_enabled,
+        "tg_token":        st.session_state.tg_token,
+        "tg_chat_id":      st.session_state.tg_chat_id,
+        "risk": {
+            "invest_per_trade":         getattr(_r, "invest_per_trade", 50.0),
+            "max_trade_usdt":           getattr(_r, "max_trade_usdt", 100.0),
+            "stop_loss_pct":            getattr(_r, "stop_loss_pct", 2.0),
+            "take_profit_pct":          getattr(_r, "take_profit_pct", 4.0),
+            "max_open_trades":          getattr(_r, "max_open_trades", 2),
+            "cooldown_seconds":         getattr(_r, "cooldown_seconds", 180),
+            "max_daily_loss_pct":       getattr(_r, "max_daily_loss_pct", 5.0),
+            "max_trades_per_session":   getattr(_r, "max_trades_per_session", 0),
+            "emergency_stop":           getattr(_r, "emergency_stop", False),
+        },
+    }
+
+import json as _json
+_snap = _collect_settings_snapshot()
+_snap_hash = hash(_json.dumps(_snap, sort_keys=True, default=str))
+if st.session_state.get("_last_settings_hash") != _snap_hash:
+    if save_settings(_snap):
+        st.session_state._last_settings_hash = _snap_hash
+        # Only toast after the initial load (avoids "saved" flash on first render)
+        if st.session_state.get("_settings_initial_saved"):
+            st.toast("✅ Settings saved", icon="💾")
+        st.session_state._settings_initial_saved = True
+
 # ── Auto-refresh (silent JS-driven, no page-stall flash) ─────────────────────
-# Uses streamlit-autorefresh: a JS setInterval that triggers a rerun WITHOUT
-# blocking the python process. This is the only correct way — the old
-# `time.sleep(N); st.rerun()` loop caused the entire page to flash + duplicate
-# render at the bottom because the websocket was stalled during sleep.
+# streamlit-autorefresh = JS setInterval → triggers rerun WITHOUT blocking python.
+# Minimum 5s. Combined with uirevision + stable plotly keys + anti-flicker CSS
+# (status widgets hidden), this gives smooth updates with no visible flash.
 from streamlit_autorefresh import st_autorefresh
 _refresh_ms = max(5, int(st.session_state.get("refresh_secs", 5))) * 1000
 st_autorefresh(interval=_refresh_ms, key="alphatrade_autorefresh", limit=None)
