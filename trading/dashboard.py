@@ -1578,7 +1578,7 @@ with st.container():
             for r in range(1, n_rows + 1):
                 fig.update_xaxes(
                     gridcolor=G, gridwidth=1, zerolinecolor=G,
-                    showspikes=True, spikecolor="#484f58", spikewidth=1,
+                    showspikes=True, spikecolor="#484f58", spikethickness=1,
                     tickfont=dict(size=10), row=r, col=1,
                 )
             fig.update_yaxes(
