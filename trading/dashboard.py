@@ -225,9 +225,11 @@ section[data-testid="stSidebar"] * { color: #c9d1d9 !important; }
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     color: transparent;
 }
+/* NOTE: backdrop-filter intentionally REMOVED — it caused ghost/duplicate
+   layers during scroll inside Streamlit's iframe (GPU compositing artifact).
+   Visual depth is now achieved via solid gradients + box-shadows only. */
 .card {
-    background: linear-gradient(180deg, rgba(22,27,34,0.85) 0%, rgba(13,17,23,0.95) 100%);
-    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    background: linear-gradient(180deg, #161b22 0%, #0d1117 100%);
     box-shadow: 0 1px 0 rgba(255,255,255,0.02) inset;
 }
 .card:hover {
@@ -236,7 +238,6 @@ section[data-testid="stSidebar"] * { color: #c9d1d9 !important; }
 }
 .c-val.up { text-shadow: 0 0 14px rgba(38,166,154,0.45); }
 .c-val.dn { text-shadow: 0 0 14px rgba(239,83,80,0.45); }
-.pill { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
 .p-green { box-shadow: 0 0 12px -2px rgba(38,166,154,0.30); }
 .p-red   { box-shadow: 0 0 12px -2px rgba(239,83,80,0.30); }
 .p-gold  { box-shadow: 0 0 12px -2px rgba(227,179,65,0.25); }
