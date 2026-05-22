@@ -42,6 +42,19 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
+/* ── ANTI-FLICKER: suppress Streamlit's per-rerun status indicators ──────── */
+/* These are the small banners/spinners that appear top-right on every script
+   rerun and are the actual visible "flash" the user perceives. */
+[data-testid="stStatusWidget"] { display: none !important; }
+[data-testid="stToolbar"]      { visibility: hidden !important; height: 0 !important; }
+[data-testid="stDecoration"]   { display: none !important; }
+[data-testid="stHeader"]       { background: transparent !important; }
+div[data-testid="stConnectionStatus"] { display: none !important; }
+/* Hide the small "Running..." spinner overlay */
+.stSpinner > div { background: transparent !important; }
+/* Keep the page from briefly going blank during rerun */
+.main .block-container { transition: none !important; }
+
 * { box-sizing: border-box; }
 html, body {
     background: #0a0c10 !important;
@@ -911,7 +924,7 @@ with st.sidebar:
 </div>""", unsafe_allow_html=True)
         except Exception as _be:
             st.error(f"❌ Binance balance fetch failed: {_be}")
-        if st.button("🔌 Disconnect", use_container_width=True):
+        if st.button("🔌 Disconnect", width="stretch"):
             st.session_state.client    = None
             st.session_state.connected = False
             st.rerun()
@@ -920,7 +933,7 @@ with st.sidebar:
                                     placeholder="Paste your Binance API key")
         api_secret = st.text_input("API Secret", type="password",
                                     placeholder="Paste your Binance API secret")
-        if st.button("🔌 Connect to Binance", use_container_width=True, type="primary"):
+        if st.button("🔌 Connect to Binance", width="stretch", type="primary"):
             if api_key and api_secret:
                 with st.spinner("Connecting…"):
                     try:
@@ -984,7 +997,7 @@ with st.sidebar:
 
     bc1, bc2 = st.columns(2)
     with bc1:
-        if st.button("▶ Start", use_container_width=True, disabled=bot_running):
+        if st.button("▶ Start", width="stretch", disabled=bot_running):
             c = _cl()
             _eff_paper = True if c is None else paper_tog
             if c is None and not paper_tog:
@@ -1011,7 +1024,7 @@ with st.sidebar:
                     st.info("🔓 Running in paper mode with public Binance data — no API key needed.")
                 st.rerun()
     with bc2:
-        if st.button("⏹ Stop", use_container_width=True, disabled=not bot_running):
+        if st.button("⏹ Stop", width="stretch", disabled=not bot_running):
             bot_module.stop_bot()
             st.rerun()
 
@@ -1019,14 +1032,14 @@ with st.sidebar:
     if live_price:
         _ft1, _ft2 = st.columns(2)
         with _ft1:
-            if st.button("🧪 Force BUY", use_container_width=True,
+            if st.button("🧪 Force BUY", width="stretch",
                           help="Open a paper BUY trade right now — no signal needed"):
                 _inv_ft = st.session_state.risk_manager.get_invest_amount()
                 force_paper_trade(st.session_state.symbol, "BUY", live_price, _inv_ft)
                 st.success(f"✅ Force BUY @ ${live_price:.4f}")
                 st.rerun()
         with _ft2:
-            if st.button("🧪 Force SELL", use_container_width=True,
+            if st.button("🧪 Force SELL", width="stretch",
                           help="Open a paper SELL trade right now — no signal needed"):
                 _inv_ft = st.session_state.risk_manager.get_invest_amount()
                 force_paper_trade(st.session_state.symbol, "SELL", live_price, _inv_ft)
@@ -1035,7 +1048,7 @@ with st.sidebar:
     else:
         st.caption("Waiting for live price before force trade is available…")
 
-    if st.button("🚨 Emergency Stop", use_container_width=True, type="secondary"):
+    if st.button("🚨 Emergency Stop", width="stretch", type="secondary"):
         st.session_state.risk.emergency_stop = True
         bot_module.stop_bot()
         log_activity("WARNING", "🚨 EMERGENCY STOP activated — all trading halted")
@@ -1044,7 +1057,7 @@ with st.sidebar:
 
     if st.session_state.risk.emergency_stop:
         st.error("🚨 Emergency stop ACTIVE")
-        if st.button("✅ Clear Emergency Stop", use_container_width=True):
+        if st.button("✅ Clear Emergency Stop", width="stretch"):
             st.session_state.risk.emergency_stop = False
             log_activity("INFO", "✅ Emergency stop cleared — trading resumed")
             st.rerun()
@@ -1205,9 +1218,9 @@ with st.sidebar:
     )
     st.session_state.refresh_secs = _ref_choice
     st.caption(f"Chart auto-refreshes every {_ref_choice}s — no manual action needed")
-    if st.button("↺ Refresh Now", use_container_width=True):
+    if st.button("↺ Refresh Now", width="stretch"):
         st.rerun()
-    if st.button("🗑 Reset All Data", use_container_width=True):
+    if st.button("🗑 Reset All Data", width="stretch"):
         reset_all_data()
         st.rerun()
 
@@ -1245,7 +1258,7 @@ with st.sidebar:
         enabled = st.session_state.tg_enabled,
     )
 
-    if st.button("📨 Send Test Notification", use_container_width=True):
+    if st.button("📨 Send Test Notification", width="stretch"):
         if not st.session_state.tg_token or not st.session_state.tg_chat_id:
             st.warning("Enter Token and Chat ID first.")
         else:
@@ -1397,7 +1410,7 @@ with st.container():
             f'{_sp_lbl}&nbsp;&nbsp;{_sp_val}&nbsp;&nbsp;{_sp_cnt}</div>',
             unsafe_allow_html=True,
         )
-        st.plotly_chart(_sfig, use_container_width=True, key="equity_spark_chart",
+        st.plotly_chart(_sfig, width="stretch", key="equity_spark_chart",
                         config={"displayModeBar": False, "staticPlot": False})
 
         # ── Chart toolbar ─────────────────────────────────────────────────────
@@ -1456,16 +1469,16 @@ with st.container():
 </div>
 """, unsafe_allow_html=True)
         with tb2:
-            buy_btn  = st.button("▲ BUY",  use_container_width=True,
+            buy_btn  = st.button("▲ BUY",  width="stretch",
                                   help="Manual BUY at current market price")
         with tb3:
-            sell_btn = st.button("▼ SELL", use_container_width=True,
+            sell_btn = st.button("▼ SELL", width="stretch",
                                   help="Manual SELL at current market price")
         with tb4:
-            emg_btn  = st.button("🚨 STOP", use_container_width=True, type="secondary")
+            emg_btn  = st.button("🚨 STOP", width="stretch", type="secondary")
         with tb5:
             bot_label = "⏹ Bot OFF" if bot_running else "⏩ Bot ON"
-            if st.button(bot_label, use_container_width=True,
+            if st.button(bot_label, width="stretch",
                           help="Toggle bot on/off"):
                 if bot_running:
                     bot_module.stop_bot()
@@ -1488,7 +1501,7 @@ with st.container():
                         b.start()
                 st.rerun()
         with tb6:
-            if st.button("↺", use_container_width=True, help="Refresh"):
+            if st.button("↺", width="stretch", help="Refresh"):
                 st.rerun()
 
         # ── Live-trade confirmation dialog ────────────────────────────────────
@@ -1510,7 +1523,7 @@ with st.container():
 </div>""", unsafe_allow_html=True)
             _cf1, _cf2 = st.columns(2)
             with _cf1:
-                if st.button("✅ Confirm LIVE trade", use_container_width=True, type="primary"):
+                if st.button("✅ Confirm LIVE trade", width="stretch", type="primary"):
                     # Re-check gate at confirm time (defence in depth)
                     if (not paper_verified()[0]) or st.session_state.paper_mode or st.session_state.testnet:
                         st.error("🔒 LIVE trade blocked — paper verification required and paper/testnet must be OFF.")
@@ -1555,7 +1568,7 @@ with st.container():
                     st.session_state.pending_live_trade = None
                     st.rerun()
             with _cf2:
-                if st.button("✕ Cancel", use_container_width=True):
+                if st.button("✕ Cancel", width="stretch"):
                     st.session_state.pending_live_trade = None
                     st.rerun()
 
@@ -1881,7 +1894,7 @@ with st.container():
                 ann.font.size  = 9
 
             # Stable key → Streamlit reuses the same DOM node across reruns (no flicker / no remount)
-            st.plotly_chart(fig, use_container_width=True, key="main_candle_chart",
+            st.plotly_chart(fig, width="stretch", key="main_candle_chart",
                             config={"displayModeBar": True, "displaylogo": False,
                                     "modeBarButtonsToRemove": ["select2d", "lasso2d", "toImage"]})
         else:
@@ -1935,7 +1948,7 @@ with st.container():
 """, unsafe_allow_html=True)
                 with pc2:
                     if st.button(f"✕ Close", key=f"cl_{ot.get('id')}",
-                                 use_container_width=True):
+                                 width="stretch"):
                         c   = _cl()
                         xp  = c.get_symbol_price(ot["coin"]) if c else (live_price or ep)
                         close_trade(ot["id"], xp, "Manual close via dashboard")
@@ -1971,7 +1984,7 @@ with st.container():
                     })
                 st.dataframe(
                     pd.DataFrame(rows),
-                    use_container_width=True, hide_index=True, height=280,
+                    width="stretch", hide_index=True, height=280,
                     column_config={
                         "Reason": st.column_config.TextColumn("Reason", width="large"),
                     },
@@ -1980,7 +1993,7 @@ with st.container():
         with tab_a:
             ac1, ac2 = st.columns([8, 1])
             with ac2:
-                if st.button("🗑 Clear", use_container_width=True):
+                if st.button("🗑 Clear", width="stretch"):
                     clear_activity(); st.rerun()
 
             activity = load_activity()
@@ -2026,7 +2039,7 @@ with st.container():
                      "Closed": (t.get("close_time") or "")[:16].replace("T"," ")}
                     for t in closed_trades
                 ]
-                st.dataframe(pd.DataFrame(pnl_data), use_container_width=True,
+                st.dataframe(pd.DataFrame(pnl_data), width="stretch",
                              hide_index=True, height=220)
 
         st.markdown("<div style='height:48px'></div>", unsafe_allow_html=True)

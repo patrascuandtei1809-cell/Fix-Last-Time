@@ -125,27 +125,39 @@ class BinanceClient:
         Returns {'asset','free','locked','total','testnet'}.
         Raises RuntimeError on API failure (caller MUST handle / surface).
         """
+        print(f"[BINANCE] Fetching Binance balance... asset={asset} testnet={self.testnet}", flush=True)
         try:
             account = self.client.get_account()
         except BinanceAPIException as e:
+            err = f"Binance API error {e.code}: {e.message}"
+            print(f"[BINANCE][ERROR] {err}", flush=True)
             log.error("get_account() BinanceAPIException code=%s msg=%s", e.code, e.message)
-            raise RuntimeError(f"Binance API error {e.code}: {e.message}") from e
+            raise RuntimeError(err) from e
         except Exception as e:
+            err = f"Binance request failed: {e}"
+            print(f"[BINANCE][ERROR] {err}", flush=True)
             log.error("get_account() failed: %s", e)
-            raise RuntimeError(f"Binance request failed: {e}") from e
+            raise RuntimeError(err) from e
 
         bals = account.get("balances", [])
+        # Print short summary of the response (avoid dumping 350 lines)
+        match = next((b for b in bals if b["asset"] == asset), None)
+        print(f"[BINANCE] get_account OK testnet={self.testnet} "
+              f"canTrade={account.get('canTrade')} accountType={account.get('accountType')} "
+              f"assets={len(bals)} {asset}={match}", flush=True)
         log.info("Binance get_account OK (testnet=%s) — %d assets, canTrade=%s",
                  self.testnet, len(bals), account.get("canTrade"))
 
-        for b in bals:
-            if b["asset"] == asset:
-                f = float(b["free"]); l = float(b["locked"])
-                out = {"asset": asset, "free": f, "locked": l,
-                       "total": f + l, "testnet": self.testnet}
-                log.info("Balance %s: free=%.8f locked=%.8f total=%.8f",
-                         asset, f, l, f + l)
-                return out
+        if match:
+            f = float(match["free"]); l = float(match["locked"])
+            out = {"asset": asset, "free": f, "locked": l,
+                   "total": f + l, "testnet": self.testnet}
+            print(f"[BINANCE] {asset} free={f:.8f} locked={l:.8f} total={f+l:.8f}", flush=True)
+            log.info("Balance %s: free=%.8f locked=%.8f total=%.8f",
+                     asset, f, l, f + l)
+            return out
+
+        print(f"[BINANCE][WARN] Asset {asset} not in balances", flush=True)
         log.warning("Asset %s not present in account balances", asset)
         return {"asset": asset, "free": 0.0, "locked": 0.0,
                 "total": 0.0, "testnet": self.testnet}
