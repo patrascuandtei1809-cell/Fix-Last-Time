@@ -1,0 +1,72 @@
+
+# 3. Stash YOUR settings.json, pull, then restore it
+git stash push -m "local settings" -- trading/data/settings.json
+git pull
+git stash pop                # restores your settings.json
+
+# 4. Put the credentials file back
+mv /root/.binance_creds.json.bak trading/data/.binance_creds.json
+chmod 600 trading/data/.binance_creds.json
+
+# 5. Restart the bot
+cd /root/trading-bot-clean/trading
+source /root/trading-bot-clean/venv/bin/activate
+nohup streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0 \
+  > /root/alphatrade.log 2>&1 &
+disown
+tail -f /root/alphatrade.log
+Saved working directory and index state On main: local settings
+remote: Enumerating objects: 9, done.
+remote: Counting objects: 100% (9/9), done.
+remote: Compressing objects: 100% (1/1), done.
+remote: Total 5 (delta 4), reused 5 (delta 4), pack-reused 0 (from 0)
+Unpacking objects: 100% (5/5), 811 bytes | 101.00 KiB/s, done.
+From https://github.com/patrascuandtei1809-cell/Fix-Last-Time
+   0a9f178..10fdc2d  main       -> origin/main
+Updating 5da8bc2..10fdc2d
+Fast-forward
+ attached_assets/Pasted--verify-sleep-2-tail-n-20-alphatrade-log-remote-Enumera_1779480452561.txt | 174 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ replit.md                                                                                        |  17 +++++++++++
+ trading/bot.py                                                                                   |  38 +++++++++++++++++++++++
+ trading/dashboard.py                                                                             |  82 +++++++++++++++++++++++++++++++++++++++++++-------
+ trading/data/.binance_creds.json                                                                 |   1 +
+ trading/data/settings.json                                                                       |   9 +++---
+ trading/symbol_worker.py                                                                         |  15 ++++++++++
+ 7 files changed, 321 insertions(+), 15 deletions(-)
+ create mode 100644 attached_assets/Pasted--verify-sleep-2-tail-n-20-alphatrade-log-remote-Enumera_1779480452561.txt
+ create mode 100644 trading/data/.binance_creds.json
+Auto-merging trading/data/settings.json
+CONFLICT (content): Merge conflict in trading/data/settings.json
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Unmerged paths:
+  (use "git restore --staged <file>..." to unstage)
+  (use "git add <file>..." to mark resolution)
+        both modified:   trading/data/settings.json
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+        modified:   .gitignore
+        modified:   trading/data/activity.json
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+        trading/__pycache__/
+        trading/data/trades.json.bak
+        trading/exchanges/__pycache__/
+        venv/
+
+no changes added to commit (use "git add" and/or "git commit -a")
+The stash entry is kept in case you need it again.
+[1] 177375
+nohup: ignoring input
+2026-05-23 18:55:03.596 Uvicorn server started on 0.0.0.0:8501
+
+  You can now view your Streamlit app in your browser.
+
+  Local URL: http://localhost:8501
+  Network URL: http://134.122.107.236:8501
+  External URL: http://134.122.107.236:8501
+
