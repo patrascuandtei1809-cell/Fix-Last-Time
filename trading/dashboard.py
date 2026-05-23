@@ -328,10 +328,10 @@ def _init():
         "active_symbols":   ["BTCUSDT", "ETHUSDT", "SOLUSDT"], # symbols the bot trades on (max 3)
         "per_symbol_risk":  {},          # {symbol: RiskSettings} — overrides global risk
         "global_risk":      None,        # GlobalRiskSettings (built lazily below)
-        "strategy":         "EMA Crossover",
-        "interval":         "5m",
-        "check_every":      30,
-        "threshold":        0.30,
+        "strategy":         "Price Movement",   # scalping by default
+        "interval":         "1m",                # 1-minute candles → faster signals
+        "check_every":      15,                  # tick twice as fast
+        "threshold":        0.05,                # 0.05% — aggressive scalping
         "risk":             RiskSettings(),
         "risk_manager":     RiskManager(),
         "initial_balance":  1000.0,
@@ -1350,7 +1350,7 @@ with st.sidebar:
     st.session_state.check_every = ck_val
 
     thr_val = st.slider("Price threshold %", 0.01, 2.0, st.session_state.threshold, 0.01,
-                         help="Trigger % for Price Movement strategy")
+                         help="Trigger % for Price Movement. 0.05% = aggressive scalping, 0.30%+ = conservative.")
     st.session_state.threshold = thr_val
 
     bc1, bc2 = st.columns(2)

@@ -438,6 +438,13 @@ class TradingBot:
         log_activity("INFO",
             f"📡 Orchestrator alive — {len(self.workers)} workers, "
             f"tick every {self.check_every}s")
+        # Track last successful order across all symbols for the
+        # "ACTIVE BUT NO SIGNALS" forced log.
+        self._last_trade_executed_at: Optional[datetime] = None
+        self._loop_started_at = datetime.now()
+        self._last_idle_warn_at: Optional[datetime] = None
+        # Threshold for idle warning: 5 min OR 10× check_every, whichever is larger.
+        idle_warn_secs = max(300, self.check_every * 10)
         while self._running:
             # Helper: re-read current open trades + today's PnL fresh.
             # Called between EACH worker so global caps cannot be overshot by
@@ -459,6 +466,15 @@ class TradingBot:
                 return open_now, pct
 
             all_open, daily_pct = _refresh_global_state()
+
+            # Headline "scan starting" log line per cycle.
+            _syms = "/".join(sorted({w.symbol.replace("USDT", "")
+                                     for w in self.workers.values()}))
+            print(f"[BOT] ACTIVE SCAN {_syms} | open={len(all_open)} "
+                  f"| daily_pnl={daily_pct:+.2f}%", flush=True)
+
+            # Snapshot count of bot trades opened this session before workers run.
+            _before_count = sum(w._session_trades for w in self.workers.values())
 
             # Iterate workers — refresh state between each so the gate sees
             # any trades just opened in this same cycle.
@@ -483,6 +499,28 @@ class TradingBot:
                 except Exception as exc:
                     log_activity("ERROR", f"Worker {key} crashed: {exc}")
                     _tg_dispatch("error_alert", f"Worker {key} crashed: {exc}")
+
+            # Did any worker execute a trade this cycle?
+            _after_count = sum(w._session_trades for w in self.workers.values())
+            if _after_count > _before_count:
+                self._last_trade_executed_at = datetime.now()
+
+            # Idle warning: bot ON, has been running long enough, no trades for
+            # idle_warn_secs → force a single log line per warning interval.
+            _now = datetime.now()
+            _ref = self._last_trade_executed_at or self._loop_started_at
+            _idle = (_now - _ref).total_seconds()
+            _last_warn = self._last_idle_warn_at
+            _warned_recently = (_last_warn is not None
+                                and (_now - _last_warn).total_seconds() < idle_warn_secs)
+            if _idle >= idle_warn_secs and not _warned_recently:
+                _mins = int(_idle // 60)
+                print(f"[BOT] BOT ACTIVE BUT NO SIGNALS — threshold too strict "
+                      f"(no trades for {_mins} min across {_syms})", flush=True)
+                log_activity("WARNING",
+                    f"⏳ Bot active but no signals for {_mins} min — "
+                    f"consider lowering threshold or switching to Price Movement.")
+                self._last_idle_warn_at = _now
 
             # Auto-stop on daily-loss breaker (re-read once more after all workers)
             _, daily_pct = _refresh_global_state()

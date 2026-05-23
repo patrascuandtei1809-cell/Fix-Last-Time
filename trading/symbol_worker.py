@@ -191,6 +191,9 @@ class SymbolWorker:
         fill_price = float(resp.get("price") or price)
         qty        = float(resp.get("qty") or qty)
         self._log("ORDER", f"{tag} ✅ LIVE {signal} | {qty} @ ${fill_price:.4f}")
+        # Headline log line in the format the operator asked for.
+        print(f"[BOT] TRADE EXECUTED {self.symbol} {signal} qty={qty} "
+              f"price=${fill_price:.4f} invested=${invested:.2f}", flush=True)
         self._on_state(self.symbol, last_order=resp)
 
         self._on_tg("trade_open", self.symbol, signal, fill_price, invested, reason, "LIVE")
