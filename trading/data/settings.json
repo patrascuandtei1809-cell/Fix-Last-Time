@@ -4,10 +4,6 @@
     "BTCUSDT"
   ],
   "bot_was_running": false,
-  "strategy": "EMA Crossover",
-  "interval": "5m",
-  "check_every": 30,
-  "threshold": 0.3,
   "initial_balance": 1000.0,
   "manual_amount": 100.0,
   "refresh_secs": 5,
