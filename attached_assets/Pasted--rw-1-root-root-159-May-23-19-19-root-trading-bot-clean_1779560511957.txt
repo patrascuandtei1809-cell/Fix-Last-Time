@@ -1,0 +1,23 @@
+-rw------- 1 root root 159 May 23 19:19 /root/trading-bot-clean/trading/data/.binance_creds.json
+(venv) root@AlphaTrade-bot:~/trading-bot-clean/trading# tail -n 20 /root/alphatrade.log
+[BINANCE] Fetching LIVE balance... asset=USDT api_key_prefix=jeK0ec...
+[BINANCE] get_account OK LIVE canTrade=True accountType=SPOT assets=757 USDT={'asset': 'USDT', 'free': '42.98990053', 'locked': '0.00000000'}
+[2026-05-23 19:19:53,988] INFO alphatrade.binance: Binance get_account OK LIVE — 757 assets, canTrade=True
+[BINANCE] USDT free=42.98990053 locked=0.00000000 total=42.98990053
+[2026-05-23 19:19:53,988] INFO alphatrade.binance: Balance USDT: free=42.98990053 locked=0.00000000 total=42.98990053
+[BINANCE] Fetching LIVE balance... asset=USDT api_key_prefix=jeK0ec...
+[BINANCE] get_account OK LIVE canTrade=True accountType=SPOT assets=757 USDT={'asset': 'USDT', 'free': '42.98990053', 'locked': '0.00000000'}
+[2026-05-23 19:19:58,562] INFO alphatrade.binance: Binance get_account OK LIVE — 757 assets, canTrade=True
+[BINANCE] USDT free=42.98990053 locked=0.00000000 total=42.98990053
+[2026-05-23 19:19:58,562] INFO alphatrade.binance: Balance USDT: free=42.98990053 locked=0.00000000 total=42.98990053
+[BINANCE] Fetching LIVE balance... asset=USDT api_key_prefix=jeK0ec...
+[BINANCE] get_account OK LIVE canTrade=True accountType=SPOT assets=757 USDT={'asset': 'USDT', 'free': '42.98990053', 'locked': '0.00000000'}
+[2026-05-23 19:19:58,786] INFO alphatrade.binance: Binance get_account OK LIVE — 757 assets, canTrade=True
+[BINANCE] USDT free=42.98990053 locked=0.00000000 total=42.98990053
+[2026-05-23 19:19:58,786] INFO alphatrade.binance: Balance USDT: free=42.98990053 locked=0.00000000 total=42.98990053
+[BINANCE] Fetching LIVE balance... asset=USDT api_key_prefix=jeK0ec...
+[BINANCE] get_account OK LIVE canTrade=True accountType=SPOT assets=757 USDT={'asset': 'USDT', 'free': '42.98990053', 'locked': '0.00000000'}
+[2026-05-23 19:19:59,011] INFO alphatrade.binance: Binance get_account OK LIVE — 757 assets, canTrade=True
+[BINANCE] USDT free=42.98990053 locked=0.00000000 total=42.98990053
+[2026-05-23 19:19:59,011] INFO alphatrade.binance: Balance USDT: free=42.98990053 locked=0.00000000 total=42.98990053
+(venv) root@AlphaTrade-bot:~/trading-bot-clean/trading# 
