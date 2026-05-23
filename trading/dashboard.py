@@ -2038,6 +2038,28 @@ with st.container():
 
             _has_rsi = "rsi" in df_chart.columns
 
+            # ── Chart view window ───────────────────────────────────────────────
+            # Default to last 12h so old trade markers (yesterday's manual
+            # trades) cannot stretch the x-axis. User can pan/zoom freely;
+            # the "Reset view" button bumps the nonce → uirevision changes →
+            # Plotly redraws with the default 12h range.
+            CHART_WINDOW_HOURS = 12
+            _nonce_key = "chart_view_nonce"
+            if _nonce_key not in st.session_state:
+                st.session_state[_nonce_key] = 0
+            _rcol1, _rcol2 = st.columns([0.78, 0.22])
+            with _rcol2:
+                if st.button(f"⟲ Reset view to last {CHART_WINDOW_HOURS}h",
+                             key="chart_reset_view_btn", width="stretch"):
+                    st.session_state[_nonce_key] += 1
+                    st.rerun()
+            try:
+                _xtz = df_chart["open_time"].dt.tz
+            except Exception:
+                _xtz = None
+            _view_end   = pd.Timestamp.now(tz=_xtz) if _xtz is not None else pd.Timestamp.now()
+            _view_start = _view_end - pd.Timedelta(hours=CHART_WINDOW_HOURS)
+
             fig = make_subplots(
                 rows=3 if _has_rsi else 2, cols=1,
                 shared_xaxes=True,
@@ -2107,30 +2129,46 @@ with st.container():
                     line=dict(color=p_color, width=1, dash="dot"),
                 )
 
-            # ── Trade markers ──────────────────────────────────────────────────
+            # ── Trade markers (larger, clearer) ────────────────────────────────
             buckets = {
-                "mb": ([], [], "triangle-up",   "#58a6ff", 14, "Manual BUY"),
-                "ms": ([], [], "triangle-down", "#bc8cff", 14, "Manual SELL"),
-                "bb": ([], [], "triangle-up",   "#26a69a", 11, "Bot BUY"),
-                "bs": ([], [], "triangle-down", "#ef5350", 11, "Bot SELL"),
-                "mx": ([], [], "x-thin",        "#58a6ff", 10, "Manual Exit"),
-                "bx": ([], [], "x-thin",        "#e3b341", 10, "Bot Exit"),
+                "mb": ([], [], "triangle-up",   "#58a6ff", 17, "Manual BUY"),
+                "ms": ([], [], "triangle-down", "#bc8cff", 17, "Manual SELL"),
+                "bb": ([], [], "triangle-up",   "#26a69a", 14, "Bot BUY"),
+                "bs": ([], [], "triangle-down", "#ef5350", 14, "Bot SELL"),
+                "mx": ([], [], "x-thin",        "#58a6ff", 12, "Manual Exit"),
+                "bx": ([], [], "x-thin",        "#e3b341", 12, "Bot Exit"),
             }
+
+            def _to_xtz(ts):
+                """Coerce a trade timestamp to the chart's tz so range-clip works."""
+                ts = pd.to_datetime(ts)
+                if _xtz is None:
+                    return ts.tz_localize(None) if ts.tzinfo else ts
+                if ts.tzinfo is None:
+                    return ts.tz_localize("UTC").tz_convert(_xtz)
+                return ts.tz_convert(_xtz)
+
             for t in all_trades:
                 try:
-                    ts    = pd.to_datetime(t.get("open_time"))
+                    ts    = _to_xtz(t.get("open_time"))
                     ep    = t.get("entry_price")
                     ttype = t.get("type", "manual")
                     side  = t.get("side", "BUY")
                     if ep is None:
                         continue
+                    # Skip markers outside the default 12h window so they
+                    # never force Plotly's autorange to zoom out.
+                    if ts < _view_start or ts > _view_end:
+                        continue
                     k = ("mb" if side == "BUY" else "ms") if ttype == "manual" else ("bb" if side == "BUY" else "bs")
                     buckets[k][0].append(ts)
                     buckets[k][1].append(ep)
                     if t.get("exit_price") and t.get("close_time"):
-                        xk = "mx" if ttype == "manual" else "bx"
-                        buckets[xk][0].append(pd.to_datetime(t["close_time"]))
-                        buckets[xk][1].append(t["exit_price"])
+                        cts = _to_xtz(t["close_time"])
+                        if _view_start <= cts <= _view_end:
+                            xk = "mx" if ttype == "manual" else "bx"
+                            buckets[xk][0].append(cts)
+                            buckets[xk][1].append(t["exit_price"])
                 except Exception:
                     continue
 
@@ -2221,11 +2259,18 @@ with st.container():
                 hovermode="x unified",
                 hoverlabel=dict(bgcolor="#161b22", bordercolor="#30363d",
                                 font_color="#c9d1d9", font_size=11),
-                # Stable uirevision — Plotly preserves zoom/pan/selection across rerenders
-                uirevision="alphatrade-main-chart",
+                # uirevision: stable across reruns (preserves user zoom/pan) but
+                # tied to symbol+interval+reset-nonce so:
+                #   - switching symbol/interval → fresh view
+                #   - clicking "Reset view" button → fresh view
+                #   - normal auto-refresh → user's zoom is preserved
+                uirevision=f"alphatrade-main-chart-"
+                           f"{st.session_state.symbol}-"
+                           f"{st.session_state.interval}-"
+                           f"{st.session_state[_nonce_key]}",
             )
             for r in range(1, n_rows + 1):
-                fig.update_xaxes(
+                _xa_kwargs = dict(
                     gridcolor=G, gridwidth=1, zerolinecolor=G,
                     showspikes=True, spikecolor="#484f58", spikethickness=1,
                     tickfont=dict(size=10), row=r, col=1,
@@ -2233,6 +2278,10 @@ with st.container():
                     tickformat="%H:%M:%S",
                     hoverformat="%Y-%m-%d %H:%M:%S",
                 )
+                # Apply default 12h window to the shared x-axis. Plotly's
+                # uirevision will let the user pan/zoom freely after load.
+                _xa_kwargs["range"] = [_view_start, _view_end]
+                fig.update_xaxes(**_xa_kwargs)
             fig.update_yaxes(
                 gridcolor=G, gridwidth=1, zerolinecolor=G,
                 showspikes=True, spikecolor="#484f58",
