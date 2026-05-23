@@ -4,6 +4,10 @@
     "BTCUSDT"
   ],
   "bot_was_running": false,
+  "strategy": "Price Movement",
+  "interval": "1m",
+  "check_every": 15,
+  "threshold": 0.05,
   "initial_balance": 1000.0,
   "manual_amount": 100.0,
   "refresh_secs": 5,
