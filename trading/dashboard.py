@@ -2225,26 +2225,56 @@ with st.container():
             _has_rsi = "rsi" in df_chart.columns
 
             # ── Chart view window ───────────────────────────────────────────────
-            # Default to last 12h so old trade markers (yesterday's manual
-            # trades) cannot stretch the x-axis. User can pan/zoom freely;
-            # the "Reset view" button bumps the nonce → uirevision changes →
-            # Plotly redraws with the default 12h range.
-            CHART_WINDOW_HOURS = 12
+            # Default VIEW = last 12h (so old trades don't stretch x-axis),
+            # but the full DATA stays in the figure — user can scroll-zoom,
+            # drag-pan, or hit the toolbar buttons to explore any range.
+            # Buttons just change the initial range Plotly draws; once drawn,
+            # Plotly's native pan/zoom is fully unlocked.
+            DEFAULT_WINDOW_HOURS = 12
+            _win_key   = "chart_window_hours"
             _nonce_key = "chart_view_nonce"
-            if _nonce_key not in st.session_state:
-                st.session_state[_nonce_key] = 0
-            _rcol1, _rcol2 = st.columns([0.78, 0.22])
-            with _rcol2:
-                if st.button(f"⟲ Reset view to last {CHART_WINDOW_HOURS}h",
-                             key="chart_reset_view_btn", width="stretch"):
+            if _win_key   not in st.session_state: st.session_state[_win_key]   = DEFAULT_WINDOW_HOURS
+            if _nonce_key not in st.session_state: st.session_state[_nonce_key] = 0
+
+            _zi, _zo, _zr, _zspace = st.columns([0.16, 0.16, 0.22, 0.46])
+            with _zi:
+                if st.button("➕ Zoom in", key="chart_zoom_in_btn", width="stretch",
+                             help="Halve the visible window"):
+                    st.session_state[_win_key] = max(0.25, st.session_state[_win_key] / 2)
                     st.session_state[_nonce_key] += 1
                     st.rerun()
+            with _zo:
+                if st.button("➖ Zoom out", key="chart_zoom_out_btn", width="stretch",
+                             help="Double the visible window"):
+                    st.session_state[_win_key] = min(720, st.session_state[_win_key] * 2)
+                    st.session_state[_nonce_key] += 1
+                    st.rerun()
+            with _zr:
+                if st.button(f"⟲ Reset to last {DEFAULT_WINDOW_HOURS}h",
+                             key="chart_reset_view_btn", width="stretch"):
+                    st.session_state[_win_key]   = DEFAULT_WINDOW_HOURS
+                    st.session_state[_nonce_key] += 1
+                    st.rerun()
+            with _zspace:
+                _wh = st.session_state[_win_key]
+                _wh_lbl = (f"{_wh:.2f}h" if _wh < 1 else
+                           f"{int(_wh)}h"  if _wh < 48 else
+                           f"{_wh/24:.1f}d")
+                st.markdown(
+                    f'<div style="text-align:right;font-size:11px;color:#6e7681;'
+                    f'font-family:\'JetBrains Mono\',monospace;padding-top:8px;">'
+                    f'view window: <b style="color:#79b0ff;">{_wh_lbl}</b> · '
+                    f'scroll/drag to explore full history'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
             try:
                 _xtz = df_chart["open_time"].dt.tz
             except Exception:
                 _xtz = None
             _view_end   = pd.Timestamp.now(tz=_xtz) if _xtz is not None else pd.Timestamp.now()
-            _view_start = _view_end - pd.Timedelta(hours=CHART_WINDOW_HOURS)
+            _view_start = _view_end - pd.Timedelta(hours=float(st.session_state[_win_key]))
 
             fig = make_subplots(
                 rows=3 if _has_rsi else 2, cols=1,
@@ -2316,6 +2346,11 @@ with st.container():
                 )
 
             # ── Trade markers (larger, clearer) ────────────────────────────────
+            # ALL historical markers are added to the figure. They don't
+            # stretch the visible x-axis because we set an explicit `range`
+            # on the xaxis below — Plotly clips to that range on first paint
+            # but the markers stay in the dataset, so panning/scrolling back
+            # reveals every past BUY/SELL exit.
             buckets = {
                 "mb": ([], [], "triangle-up",   "#58a6ff", 17, "Manual BUY"),
                 "ms": ([], [], "triangle-down", "#bc8cff", 17, "Manual SELL"),
@@ -2326,7 +2361,7 @@ with st.container():
             }
 
             def _to_xtz(ts):
-                """Coerce a trade timestamp to the chart's tz so range-clip works."""
+                """Coerce a trade timestamp to the chart's tz."""
                 ts = pd.to_datetime(ts)
                 if _xtz is None:
                     return ts.tz_localize(None) if ts.tzinfo else ts
@@ -2342,19 +2377,14 @@ with st.container():
                     side  = t.get("side", "BUY")
                     if ep is None:
                         continue
-                    # Skip markers outside the default 12h window so they
-                    # never force Plotly's autorange to zoom out.
-                    if ts < _view_start or ts > _view_end:
-                        continue
                     k = ("mb" if side == "BUY" else "ms") if ttype == "manual" else ("bb" if side == "BUY" else "bs")
                     buckets[k][0].append(ts)
                     buckets[k][1].append(ep)
                     if t.get("exit_price") and t.get("close_time"):
                         cts = _to_xtz(t["close_time"])
-                        if _view_start <= cts <= _view_end:
-                            xk = "mx" if ttype == "manual" else "bx"
-                            buckets[xk][0].append(cts)
-                            buckets[xk][1].append(t["exit_price"])
+                        xk = "mx" if ttype == "manual" else "bx"
+                        buckets[xk][0].append(cts)
+                        buckets[xk][1].append(t["exit_price"])
                 except Exception:
                     continue
 
@@ -2445,43 +2475,49 @@ with st.container():
                 hovermode="x unified",
                 hoverlabel=dict(bgcolor="#161b22", bordercolor="#30363d",
                                 font_color="#c9d1d9", font_size=11),
+                # Drag = pan (TradingView-style). Wheel = zoom (config below).
+                # Box-select / lasso are removed from the modebar.
+                dragmode="pan",
                 # uirevision: stable across reruns (preserves user zoom/pan) but
                 # tied to symbol+interval+reset-nonce so:
                 #   - switching symbol/interval → fresh view
-                #   - clicking "Reset view" button → fresh view
-                #   - normal auto-refresh → user's zoom is preserved
+                #   - clicking any view button   → fresh view (nonce bumps)
+                #   - normal auto-refresh        → user's zoom is preserved
                 uirevision=f"alphatrade-main-chart-"
                            f"{st.session_state.symbol}-"
                            f"{st.session_state.interval}-"
                            f"{st.session_state[_nonce_key]}",
             )
             for r in range(1, n_rows + 1):
-                _xa_kwargs = dict(
+                fig.update_xaxes(
                     gridcolor=G, gridwidth=1, zerolinecolor=G,
                     showspikes=True, spikecolor="#484f58", spikethickness=1,
                     tickfont=dict(size=10), row=r, col=1,
                     # Exact HH:MM:SS Europe/London time (klines already tz-converted in binance_client)
                     tickformat="%H:%M:%S",
                     hoverformat="%Y-%m-%d %H:%M:%S",
+                    # Initial view = last N hours; user can pan/zoom past it.
+                    range=[_view_start, _view_end],
+                    # Explicitly allow pan + zoom on x-axis.
+                    fixedrange=False,
+                    autorange=False,
                 )
-                # Apply default 12h window to the shared x-axis. Plotly's
-                # uirevision will let the user pan/zoom freely after load.
-                _xa_kwargs["range"] = [_view_start, _view_end]
-                fig.update_xaxes(**_xa_kwargs)
             fig.update_yaxes(
                 gridcolor=G, gridwidth=1, zerolinecolor=G,
                 showspikes=True, spikecolor="#484f58",
                 tickfont=dict(size=10), tickprefix="$",
                 row=1, col=1,
+                # Let Y rescale as user pans through different price regions.
+                autorange=True, fixedrange=False,
             )
             fig.update_yaxes(
                 gridcolor=G, gridwidth=1, range=[0, 100],
-                tickfont=dict(size=10), row=2, col=1,
+                tickfont=dict(size=10), row=2, col=1, fixedrange=False,
             )
             if _has_rsi:
                 fig.update_yaxes(
                     gridcolor=G, gridwidth=1, range=[0, 100],
-                    tickfont=dict(size=10), row=3, col=1,
+                    tickfont=dict(size=10), row=3, col=1, fixedrange=False,
                 )
             # Subplot title styling
             for ann in fig.layout.annotations:
@@ -2489,9 +2525,18 @@ with st.container():
                 ann.font.size  = 9
 
             # Stable key → Streamlit reuses the same DOM node across reruns (no flicker / no remount)
-            st.plotly_chart(fig, width="stretch", key="main_candle_chart",
-                            config={"displayModeBar": True, "displaylogo": False,
-                                    "modeBarButtonsToRemove": ["select2d", "lasso2d", "toImage"]})
+            # scrollZoom=True lets the user wheel/pinch-zoom freely; doubleClick="reset"
+            # auto-restores the default 12h view; pan is the default drag.
+            st.plotly_chart(
+                fig, width="stretch", key="main_candle_chart",
+                config={
+                    "displayModeBar": True,
+                    "displaylogo":    False,
+                    "scrollZoom":     True,
+                    "doubleClick":    "reset",
+                    "modeBarButtonsToRemove": ["select2d", "lasso2d", "toImage"],
+                },
+            )
         else:
             with st.spinner("Loading chart data from Binance…"):
                 st.info("Chart will appear here once data loads. No API key required.")
