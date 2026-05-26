@@ -155,7 +155,10 @@ class SymbolWorker:
                 # AI overrides the strategy signal (it had it as a strong prior).
                 signal, reason, confidence = _ai.decision, _ai.reason, _ai.confidence
                 self._on_state(self.symbol, signal=signal, reason=reason,
-                               confidence=confidence)
+                               confidence=confidence,
+                               ai_decision=_ai.decision,
+                               ai_confidence=_ai.confidence,
+                               ai_reason=_ai.reason)
             except Exception as _e:
                 # AI engine must NEVER break trading. Fall back to strategy signal.
                 self._log("WARNING", f"{tag} AI engine error (falling back to "

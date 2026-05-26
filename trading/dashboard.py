@@ -1179,9 +1179,45 @@ _strat_html = (f'<span style="font-size:10px;color:#484f58;">STRATEGY</span> '
                f'<span style="font-size:11px;font-weight:700;color:#79b0ff;font-family:\'JetBrains Mono\',monospace;">'
                f'{st.session_state.strategy}</span>')
 
+# ── AI status pill — visible right next to BOT ON/OFF ────────────────────
+# Shows: AI: ON/OFF · profile · last decision/confidence for current symbol.
+# Pulled from session state (set by sidebar) + ai_engine's per-tick log.
+_ai_on   = bool(st.session_state.get("ai_assist"))
+_ai_prof = st.session_state.get("ai_aggressiveness", "Balanced")
+if _ai_on:
+    _ai_col = {"Conservative":"#7ce0c2","Balanced":"#79b0ff","Aggressive":"#f0883e"}.get(_ai_prof, "#79b0ff")
+    _ai_pill = (f'<span class="pill" style="background:{_ai_col}22;'
+                f'border:1px solid {_ai_col}66;color:{_ai_col};'
+                f'font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">'
+                f'🧠 AI: ON · {_ai_prof}</span>')
+else:
+    _ai_pill = ('<span class="pill" style="background:#1e2736;border:1px solid #30363d;'
+                'color:#6e7681;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">'
+                '🧠 AI: OFF</span>')
+
+# Last AI decision for the current symbol (from shared state set in tick())
+_ai_last = (_sig_meta.get("ai_decision") or "").upper() if _sig_meta else ""
+_ai_lconf = int((_sig_meta.get("ai_confidence") or 0)) if _sig_meta else 0
+_ai_lreason = ((_sig_meta.get("ai_reason") or "")[:80]) if _sig_meta else ""
+_ai_last_html = ""
+if _ai_on and _ai_last:
+    _alc = {"BUY":"#26a69a","SELL":"#ef5350","HOLD":"#6e7681"}.get(_ai_last, "#484f58")
+    _ai_last_html = (
+        f'<div style="display:flex;align-items:center;gap:6px;">'
+        f'<span style="font-size:10px;color:#484f58;">AI →</span>'
+        f'<span style="font-size:11px;font-weight:800;color:{_alc};'
+        f'font-family:\'JetBrains Mono\',monospace;">{_ai_last}</span>'
+        f'<span style="font-size:10px;color:#6e7681;">·</span>'
+        f'<span style="font-size:11px;color:{_alc};font-family:\'JetBrains Mono\',monospace;">'
+        f'{_ai_lconf}%</span>'
+        f'</div>'
+    )
+
 _bot_status_html = (
     f'<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">'
     f'<div style="display:flex;align-items:center;gap:6px;">{_bot_dot}{_bot_lbl}</div>'
+    f'<div>{_ai_pill}</div>'
+    f'{_ai_last_html}'
     f'<div>{_strat_html}</div>'
     f'<div style="display:flex;align-items:center;gap:6px;">'
     f'<span style="font-size:10px;color:#484f58;">SIGNAL</span>'
@@ -1253,6 +1289,31 @@ st.markdown(
     f'{_reason_html}',
     unsafe_allow_html=True,
 )
+
+# ── Sticky "last action" banner — survives st.rerun() so the user always
+# sees the result of the most recent button click (success or error).
+# Buttons set st.session_state.last_action = {"kind":"ok|err","msg":"..."}.
+# Cleared by the small ✕ button.
+_la = st.session_state.get("last_action")
+if _la and isinstance(_la, dict) and _la.get("msg"):
+    _kind = _la.get("kind", "ok")
+    _bg   = "#0d2a1a" if _kind == "ok" else "#2a0f0f"
+    _bd   = "#26a69a" if _kind == "ok" else "#ef5350"
+    _fg   = "#7ce0c2" if _kind == "ok" else "#ffb4b0"
+    _ico  = "✅" if _kind == "ok" else "❌"
+    _lcol1, _lcol2 = st.columns([0.97, 0.03])
+    with _lcol1:
+        st.markdown(
+            f'<div style="padding:8px 14px;background:{_bg};border:1px solid {_bd}66;'
+            f'border-radius:4px;color:{_fg};font-size:12px;font-weight:600;'
+            f'font-family:\'JetBrains Mono\',monospace;margin:6px 14px;'
+            f'word-break:break-word;">{_ico} {_la["msg"]}</div>',
+            unsafe_allow_html=True,
+        )
+    with _lcol2:
+        if st.button("✕", key="dismiss_last_action", help="Dismiss"):
+            st.session_state.last_action = None
+            st.rerun()
 
 # ── Multi-symbol bot overview + "BOT ACTIVE BUT WAITING" banner ──────────────
 # Shows per-symbol signal / last check / last order / block reason so the user
@@ -1600,6 +1661,7 @@ with st.sidebar:
                  width="stretch", key="aggressive_live_preset_btn", type="primary",
                  help="Maximum aggression: 5s · 0.03% · 90% USDT · SL 0.5% · TP 1.5%. "
                       "Respects global risk caps. Bot will enter on any micro-move."):
+        print("[CLICK] AGGRESSIVE LIVE preset button pressed", flush=True)
         st.session_state.check_every    = 5
         st.session_state.threshold      = 0.03
         # AGGRESSIVE preset also flips AI to its Aggressive profile so it
@@ -1636,9 +1698,23 @@ with st.sidebar:
                      f"threshold=0.03% · size=${_agg_size:.2f} (90% of "
                      f"${_free_now:.2f} free) · SL=0.5% · TP=1.5% · "
                      f"max_open=2")
-        st.success(f"🔥 AGGRESSIVE LIVE applied — size ${_agg_size:.2f} "
-                   f"(90% of ${_free_now:.2f} free USDT). "
-                   f"Restart the bot to pick up 5s tick.")
+        # Persist immediately so the values survive the rerun even if the
+        # bottom-of-script auto-save doesn't run first.
+        try:
+            from bot import save_settings as _save_settings
+            _save_settings({
+                "check_every": 5, "threshold": 0.03,
+                "manual_amount": _agg_size,
+                "ai_assist": True, "ai_aggressiveness": "Aggressive",
+            })
+        except Exception:
+            pass
+        _msg = (f"🔥 AGGRESSIVE LIVE applied · check=5s · threshold=0.03% · "
+                f"size=${_agg_size:.2f} (90% of ${_free_now:.2f} free) · "
+                f"SL=0.5% · TP=1.5% · AI=Aggressive. Restart the bot to "
+                f"pick up the 5s tick.")
+        st.session_state.last_action = {"kind": "ok", "msg": _msg}
+        st.toast("🔥 AGGRESSIVE LIVE applied", icon="✅")
         st.rerun()
 
     if st.button("🔄 Reset to scalping defaults",
@@ -2250,6 +2326,7 @@ with st.container():
             )
 
         if _force_test_buy:
+            print(f"[CLICK] FORCE TEST BUY pressed on {st.session_state.symbol}", flush=True)
             _ftb_sym  = st.session_state.symbol
             _FTB_USDT = 10.0          # spec: max 10 USDT
             _FTB_SL   = 0.005         # 0.5%
@@ -2388,12 +2465,13 @@ with st.container():
                                                 "Force test buy", mode="LIVE")
                                         except Exception:
                                             pass
-                                        st.success(
-                                            f"✅ FORCE TEST BUY filled — "
-                                            f"{_ftb_sym} ${_FTB_USDT:.2f} @ "
-                                            f"${_exec_price:.4f} · qty {_exec_qty:.6f} · "
-                                            f"SL ${_sl_px:.4f} · TP ${_tp_px:.4f} · "
-                                            f"order_id {_order_id}")
+                                        _msg = (f"🧪 FORCE TEST BUY filled · "
+                                                f"{_ftb_sym} ${_FTB_USDT:.2f} @ "
+                                                f"${_exec_price:.4f} · qty {_exec_qty:.6f} · "
+                                                f"SL ${_sl_px:.4f} · TP ${_tp_px:.4f} · "
+                                                f"order_id {_order_id}")
+                                        st.session_state.last_action = {"kind":"ok","msg":_msg}
+                                        st.toast("🧪 FORCE TEST BUY filled", icon="✅")
                                         st.rerun()
                                     except Exception as _e:
                                         st.error(f"❌ FORCE TEST BUY order failed "
@@ -2425,6 +2503,7 @@ with st.container():
             )
 
         if _buy_now_90:
+            print(f"[CLICK] BUY NOW 90% USDT pressed on {st.session_state.symbol}", flush=True)
             _bn_sym = st.session_state.symbol
             _BN_SL  = 0.005
             _BN_TP  = 0.015
@@ -2548,13 +2627,14 @@ with st.container():
                                                 "Buy now 90% USDT", mode="LIVE")
                                         except Exception:
                                             pass
-                                        st.success(
-                                            f"✅ BUY NOW filled — {_bn_sym} "
-                                            f"${_BN_USDT:.2f} (90% of "
-                                            f"${_bn_free:.2f}) @ ${_exec_price:.4f} · "
-                                            f"qty {_exec_qty:.6f} · "
-                                            f"SL ${_sl_px:.4f} · TP ${_tp_px:.4f} · "
-                                            f"order_id {_order_id}")
+                                        _msg = (f"💰 BUY NOW filled · {_bn_sym} "
+                                                f"${_BN_USDT:.2f} (90% of "
+                                                f"${_bn_free:.2f}) @ ${_exec_price:.4f} · "
+                                                f"qty {_exec_qty:.6f} · "
+                                                f"SL ${_sl_px:.4f} · TP ${_tp_px:.4f} · "
+                                                f"order_id {_order_id}")
+                                        st.session_state.last_action = {"kind":"ok","msg":_msg}
+                                        st.toast("💰 BUY NOW filled", icon="✅")
                                         st.rerun()
                                     except Exception as _e:
                                         st.error(f"❌ BUY NOW order failed "

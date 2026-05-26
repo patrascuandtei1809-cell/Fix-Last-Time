@@ -60,7 +60,8 @@ def _resolve_sym(sym: Optional[str]) -> Optional[str]:
 
 def _set_shared_for(symbol: str, *, df=None, price=None, tick=False,
                     signal=None, reason=None, confidence=None,
-                    block_reason=None, last_order=None):
+                    block_reason=None, last_order=None,
+                    ai_decision=None, ai_confidence=None, ai_reason=None):
     """Worker callback target. Writes to _shared_per_symbol[symbol]."""
     with _state_lock:
         s = _ensure_sym(symbol)
@@ -69,6 +70,11 @@ def _set_shared_for(symbol: str, *, df=None, price=None, tick=False,
         if signal     is not None: s["last_signal"]     = signal
         if reason     is not None: s["last_reason"]     = reason
         if confidence is not None: s["last_confidence"] = int(confidence)
+        # AI fields — shown by the dashboard's AI status pill so the user can
+        # see the live AI verdict for the currently-viewed symbol at a glance.
+        if ai_decision   is not None: s["ai_decision"]   = ai_decision
+        if ai_confidence is not None: s["ai_confidence"] = int(ai_confidence)
+        if ai_reason     is not None: s["ai_reason"]     = ai_reason
         if block_reason is not None:
             s["block_reason"]    = block_reason
             s["block_reason_at"] = datetime.now()
@@ -113,6 +119,10 @@ def get_bot_signal_meta(symbol: Optional[str] = None) -> dict:
             "signal":     s.get("last_signal"),
             "reason":     s.get("last_reason"),
             "confidence": int(s.get("last_confidence") or 0),
+            # AI fields — surfaced by the dashboard's AI pill.
+            "ai_decision":   s.get("ai_decision"),
+            "ai_confidence": int(s.get("ai_confidence") or 0),
+            "ai_reason":     s.get("ai_reason"),
         }
 
 
