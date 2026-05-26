@@ -1532,19 +1532,58 @@ with st.sidebar:
     st.markdown('<div class="sec-lbl">Bot</div>', unsafe_allow_html=True)
     st.caption("⚡ Bot places **real** Binance Mainnet orders on every signal.")
 
-    ck_val = st.slider("Check interval (s)", 10, 300, st.session_state.check_every, 10)
+    ck_val = st.slider("Check interval (s)", 5, 300, st.session_state.check_every, 5)
     st.session_state.check_every = ck_val
 
     thr_val = st.slider("Price threshold %", 0.01, 2.0, st.session_state.threshold, 0.01,
                          help="Trigger % for Price Movement. 0.05% = aggressive scalping, 0.30%+ = conservative.")
     st.session_state.threshold = thr_val
 
-    # ── 🔄 Reset to scalping defaults ─────────────────────────────────────────
-    # Existing settings.json overrides hardcoded defaults — if the user
-    # previously saved a conservative setup, the new aggressive defaults
-    # (10s / 0.05% / $10) won't take effect on their own. This button
-    # snaps the four scalping knobs back without touching API keys, active
-    # symbols, per-symbol risk overrides, or global caps.
+    # ── 🔥 AGGRESSIVE LIVE preset ─────────────────────────────────────────────
+    # Maximum-aggression scalping: 5s ticks, 0.03% threshold, 90% of free USDT
+    # per trade, max 2 open. Still respects global risk caps. Use when you
+    # want the bot to enter on any micro-move.
+    if st.button("🔥 AGGRESSIVE LIVE preset",
+                 width="stretch", key="aggressive_live_preset_btn", type="primary",
+                 help="Maximum aggression: 5s · 0.03% · 90% USDT · SL 0.5% · TP 1.5%. "
+                      "Respects global risk caps. Bot will enter on any micro-move."):
+        st.session_state.check_every    = 5
+        st.session_state.threshold      = 0.03
+        # Size: 90% of free USDT (computed live; persisted as the dollar amount)
+        _free_now = 0.0
+        try:
+            _c = _cl()
+            if _c is not None:
+                _free_now = float(_c.get_account_balance("USDT").get("free", 0.0))
+        except Exception:
+            _free_now = 0.0
+        _agg_size = round(_free_now * 0.90, 2) if _free_now > 0 else 10.0
+        st.session_state.manual_amount  = _agg_size
+        try:
+            st.session_state.risk.invest_per_trade = _agg_size
+            st.session_state.risk.stop_loss_pct    = 0.5
+            st.session_state.risk.take_profit_pct  = 1.5
+            st.session_state.risk.max_open_trades  = 2
+        except Exception:
+            pass
+        for _sym, _rs in (st.session_state.get("per_symbol_risk") or {}).items():
+            try:
+                _rs.invest_per_trade = _agg_size
+                _rs.stop_loss_pct    = 0.5
+                _rs.take_profit_pct  = 1.5
+                _rs.max_open_trades  = 2
+            except Exception:
+                pass
+        log_activity("INFO",
+                     f"🔥 AGGRESSIVE LIVE preset applied — check=5s · "
+                     f"threshold=0.03% · size=${_agg_size:.2f} (90% of "
+                     f"${_free_now:.2f} free) · SL=0.5% · TP=1.5% · "
+                     f"max_open=2")
+        st.success(f"🔥 AGGRESSIVE LIVE applied — size ${_agg_size:.2f} "
+                   f"(90% of ${_free_now:.2f} free USDT). "
+                   f"Restart the bot to pick up 5s tick.")
+        st.rerun()
+
     if st.button("🔄 Reset to scalping defaults",
                  width="stretch", key="reset_scalp_defaults_btn",
                  help="Snap check=10s, threshold=0.05%, size=$10, "
@@ -2298,6 +2337,167 @@ with st.container():
                                             f"[FORCE BUY] {_ftb_sym} order "
                                             f"FAILED: {_e}")
 
+        # ── 💰 BUY NOW 90% USDT — fire a real LIVE BUY using 90% of free USDT ──
+        # Same risk gates as FORCE TEST BUY but uses 90% of free USDT for size
+        # (capped at the symbol's per-symbol exposure cap via global gate).
+        _bnf_col, _bnf_info = st.columns([0.32, 0.68])
+        with _bnf_col:
+            _buy_now_90 = st.button(
+                "💰 BUY NOW 90% USDT", width="stretch", type="primary",
+                help=f"LIVE market BUY on {st.session_state.symbol} using 90% "
+                     f"of your free USDT, SL 0.5% / TP 1.5%. Respects all risk caps.",
+            )
+        with _bnf_info:
+            st.markdown(
+                '<div style="font-size:10px;color:#6e7681;'
+                'font-family:\'JetBrains Mono\',monospace;padding-top:10px;">'
+                'sends a real <b style="color:#f0883e;">90% USDT</b> LIVE BUY on '
+                f'<b style="color:#c9d1d9;">{st.session_state.symbol}</b> · '
+                'SL <b style="color:#ef5350;">−0.5%</b> · '
+                'TP <b style="color:#26a69a;">+1.5%</b> · '
+                'risk caps enforced</div>',
+                unsafe_allow_html=True,
+            )
+
+        if _buy_now_90:
+            _bn_sym = st.session_state.symbol
+            _BN_SL  = 0.005
+            _BN_TP  = 0.015
+            c = _cl()
+            if c is None:
+                st.error("❌ BUY NOW refused — not connected to Binance "
+                         "(no API key). Connect first.")
+            else:
+                try:
+                    _bn_price = c.get_symbol_price(_bn_sym)
+                except Exception as _e:
+                    _bn_price = None
+                    st.error(f"❌ BUY NOW refused — could not fetch live "
+                             f"price for {_bn_sym}: {_e}")
+                if _bn_price:
+                    try:
+                        _bn_bal  = c.get_account_balance("USDT")
+                        _bn_free = float(_bn_bal.get("free", 0.0))
+                    except Exception as _e:
+                        _bn_free = None
+                        st.error(f"❌ BUY NOW refused — could not read USDT "
+                                 f"balance: {_e}")
+                    if _bn_free is not None:
+                        _BN_USDT = round(_bn_free * 0.90, 2)
+                        if _BN_USDT < 10.0:
+                            st.error(
+                                f"❌ BUY NOW refused — 90% of free USDT is "
+                                f"${_BN_USDT:.2f} (need ≥ $10 for Binance "
+                                f"min notional). Free USDT: ${_bn_free:.4f}.")
+                            log_activity("WARNING",
+                                f"[BUY NOW 90%] {_bn_sym} REFUSED — size too "
+                                f"small (free=${_bn_free:.4f} · 90%="
+                                f"${_BN_USDT:.2f} < $10 min notional)")
+                        else:
+                            _g_rm = GlobalRiskManager(st.session_state.global_risk)
+                            _g_ok, _g_reason = _g_rm.check_global(
+                                all_open_trades=open_trades,
+                                new_invest_usdt=_BN_USDT,
+                                new_symbol=_bn_sym,
+                                daily_loss_pct=0.0,
+                            )
+                            if not _g_ok:
+                                st.error(f"❌ BUY NOW blocked by GLOBAL risk "
+                                         f"cap — {_g_reason}")
+                                log_activity("WARNING",
+                                    f"[BUY NOW 90%] {_bn_sym} REFUSED — "
+                                    f"global cap: {_g_reason}")
+                            else:
+                                _per_rm = (
+                                    RiskManager(st.session_state.per_symbol_risk[_bn_sym])
+                                    if st.session_state.per_symbol_risk.get(_bn_sym)
+                                    else st.session_state.risk_manager
+                                )
+                                _open_for_sym = [t for t in open_trades
+                                                 if t.get("coin") == _bn_sym]
+                                _s_ok, _s_reason = _per_rm.can_open_trade(
+                                    open_trades_for_symbol=_open_for_sym,
+                                    symbol=_bn_sym, new_signal="BUY",
+                                )
+                                if not _s_ok:
+                                    st.error(f"❌ BUY NOW blocked by PER-SYMBOL "
+                                             f"cap — {_s_reason}")
+                                    log_activity("WARNING",
+                                        f"[BUY NOW 90%] {_bn_sym} REFUSED — "
+                                        f"per-symbol: {_s_reason}")
+                                else:
+                                    _qty_raw = _BN_USDT / _bn_price
+                                    try:
+                                        _qty = c.round_quantity(_bn_sym, _qty_raw)
+                                    except Exception:
+                                        _qty = round(_qty_raw, 6)
+                                    try:
+                                        from binance_client import extract_fill as _extract_fill
+                                        _order = c.place_market_order(
+                                            _bn_sym, "BUY", _qty)
+                                        _exec_qty, _exec_price = _extract_fill(_order)
+                                        if not _exec_price: _exec_price = _bn_price
+                                        if not _exec_qty:   _exec_qty   = _qty
+                                        _order_id = (_order or {}).get("orderId", "?")
+                                        _sl_px = round(_exec_price * (1 - _BN_SL), 8)
+                                        _tp_px = round(_exec_price * (1 + _BN_TP), 8)
+                                        _t = {
+                                            "coin":            _bn_sym,
+                                            "exchange":        "binance",
+                                            "type":            "manual",
+                                            "strategy":        "BuyNow90",
+                                            "side":            "BUY",
+                                            "entry_price":     _exec_price,
+                                            "exit_price":      None,
+                                            "quantity":        _exec_qty,
+                                            "invested":        _BN_USDT,
+                                            "profit_loss":     None,
+                                            "profit_loss_pct": None,
+                                            "open_time":       datetime.now(_TZ).isoformat(),
+                                            "close_time":      None,
+                                            "reason":          (f"💰 BUY NOW 90% USDT "
+                                                                f"${_BN_USDT:.2f} @ "
+                                                                f"${_exec_price:.4f} · "
+                                                                f"SL {_BN_SL*100:.1f}% / "
+                                                                f"TP {_BN_TP*100:.1f}%"),
+                                            "close_reason":    None,
+                                            "stop_loss":       _sl_px,
+                                            "take_profit":     _tp_px,
+                                            "order_id":        _order_id,
+                                            "status":          "open",
+                                        }
+                                        add_trade(_t)
+                                        print(f"[BUY NOW 90%] {_bn_sym} "
+                                              f"{_BN_USDT:.2f} {_exec_price:.4f} "
+                                              f"{_order_id}", flush=True)
+                                        log_activity("ORDER",
+                                            f"💰 [BUY NOW 90%] {_bn_sym} "
+                                            f"${_BN_USDT:.2f} @ ${_exec_price:.4f} "
+                                            f"qty={_exec_qty:.6f} "
+                                            f"SL=${_sl_px:.4f} TP=${_tp_px:.4f} "
+                                            f"order_id={_order_id}")
+                                        try:
+                                            tg.trade_open(
+                                                _bn_sym, "BUY",
+                                                _exec_price, _BN_USDT,
+                                                "Buy now 90% USDT", mode="LIVE")
+                                        except Exception:
+                                            pass
+                                        st.success(
+                                            f"✅ BUY NOW filled — {_bn_sym} "
+                                            f"${_BN_USDT:.2f} (90% of "
+                                            f"${_bn_free:.2f}) @ ${_exec_price:.4f} · "
+                                            f"qty {_exec_qty:.6f} · "
+                                            f"SL ${_sl_px:.4f} · TP ${_tp_px:.4f} · "
+                                            f"order_id {_order_id}")
+                                        st.rerun()
+                                    except Exception as _e:
+                                        st.error(f"❌ BUY NOW order failed "
+                                                 f"(NOT recorded — no execution): {_e}")
+                                        log_activity("ERROR",
+                                            f"[BUY NOW 90%] {_bn_sym} order "
+                                            f"FAILED: {_e}")
+
         # ── Live-trade confirmation dialog ────────────────────────────────────
         _plt = st.session_state.pending_live_trade
         if _plt:
@@ -2467,18 +2667,19 @@ with st.container():
 
             # ── Indicator toggles + view controls ───────────────────────────────
             _ind_defaults = {"show_volume": True, "show_ema": True,
-                             "show_rsi": True, "show_macd": False, "show_stoch": False}
+                             "show_rsi": False, "show_macd": False, "show_stoch": False,
+                             "show_old_trades": False, "show_sl_tp": False}
             for _k,_v in _ind_defaults.items():
                 if _k not in st.session_state: st.session_state[_k] = _v
 
-            DEFAULT_WINDOW_HOURS = 4
+            DEFAULT_WINDOW_HOURS = 1
             _win_key   = "chart_window_hours"
             _nonce_key = "chart_view_nonce"
             if _win_key   not in st.session_state: st.session_state[_win_key]   = DEFAULT_WINDOW_HOURS
             if _nonce_key not in st.session_state: st.session_state[_nonce_key] = 0
 
-            _c1,_c2,_c3,_c4,_c5,_csp,_zi,_zo,_zr = st.columns(
-                [0.09,0.08,0.08,0.09,0.09, 0.10, 0.13,0.13,0.21]
+            _c1,_c2,_c3,_c4,_c5,_c6,_c7,_csp,_zi,_zo,_zr = st.columns(
+                [0.07,0.07,0.07,0.07,0.07,0.09,0.09, 0.05, 0.12,0.12,0.18]
             )
             with _c1:
                 st.session_state.show_ema = st.checkbox(
@@ -2500,6 +2701,14 @@ with st.container():
                 st.session_state.show_stoch = st.checkbox(
                     "Stoch", value=st.session_state.show_stoch, key="cb_stoch",
                     help="Stochastic %K/%D sub-panel")
+            with _c6:
+                st.session_state.show_old_trades = st.checkbox(
+                    "Trades", value=st.session_state.show_old_trades, key="cb_old_tr",
+                    help="Show historical BUY/SELL/EXIT markers from past trades")
+            with _c7:
+                st.session_state.show_sl_tp = st.checkbox(
+                    "SL/TP", value=st.session_state.show_sl_tp, key="cb_sltp",
+                    help="Show stop-loss / take-profit dashed lines for OPEN positions")
             with _zi:
                 if st.button("➕ Zoom in", key="chart_zoom_in_btn", width="stretch",
                              help="Halve the visible window"):
@@ -2515,7 +2724,7 @@ with st.container():
             with _zr:
                 if st.button(f"⟲ Reset {DEFAULT_WINDOW_HOURS}h",
                              key="chart_reset_view_btn", width="stretch",
-                             help=f"Reset view to last {DEFAULT_WINDOW_HOURS} hours"):
+                             help=f"Reset view to last {DEFAULT_WINDOW_HOURS} hour(s)"):
                     st.session_state[_win_key]   = DEFAULT_WINDOW_HOURS
                     st.session_state[_nonce_key] += 1
                     st.rerun()
@@ -2533,7 +2742,8 @@ with st.container():
             if st.session_state.show_macd  and _has_macd:  _panels.append("macd")
             if st.session_state.show_stoch and _has_stoch: _panels.append("stoch")
             n_rows = len(_panels)
-            _sub_h = {1:[1.0], 2:[0.75,0.25], 3:[0.62,0.19,0.19], 4:[0.55,0.15,0.15,0.15]}[n_rows]
+            # Price panel takes ≥70% of vertical so candles are large + readable.
+            _sub_h = {1:[1.0], 2:[0.78,0.22], 3:[0.72,0.14,0.14], 4:[0.70,0.10,0.10,0.10]}[n_rows]
             fig = make_subplots(
                 rows=n_rows, cols=1, shared_xaxes=True,
                 row_heights=_sub_h, vertical_spacing=0.02,
@@ -2672,8 +2882,10 @@ with st.container():
                 except Exception:
                     continue
 
+            # Trade markers are gated behind `show_old_trades` so the default
+            # view is clean candles only — toggle on to see history.
             for bk, (bx, by, bsym, bcol, bsz, blbl) in buckets.items():
-                if bx:
+                if bx and st.session_state.show_old_trades:
                     fig.add_trace(go.Scatter(
                         x=bx, y=by, mode="markers",
                         marker=dict(symbol=bsym, size=bsz, color=bcol,
@@ -2682,16 +2894,17 @@ with st.container():
                         hovertemplate=f"{blbl}<br>%{{x}}<br>%{{y:.4f}}<extra></extra>",
                     ), row=_pr, col=1)
 
-            # ── SL / TP lines for every open position ─────────────────────────
-            for _op in open_trades:
-                _sl  = _op.get("stop_loss")
-                _tp  = _op.get("take_profit")
-                if _sl:
-                    fig.add_hline(y=_sl, row=_pr, col=1,
-                        line=dict(color="rgba(239,83,80,0.55)", width=1, dash="dash"))
-                if _tp:
-                    fig.add_hline(y=_tp, row=_pr, col=1,
-                        line=dict(color="rgba(38,166,154,0.55)", width=1, dash="dash"))
+            # ── SL / TP lines for every open position (toggle) ────────────────
+            if st.session_state.show_sl_tp:
+                for _op in open_trades:
+                    _sl  = _op.get("stop_loss")
+                    _tp  = _op.get("take_profit")
+                    if _sl:
+                        fig.add_hline(y=_sl, row=_pr, col=1,
+                            line=dict(color="rgba(239,83,80,0.55)", width=1, dash="dash"))
+                    if _tp:
+                        fig.add_hline(y=_tp, row=_pr, col=1,
+                            line=dict(color="rgba(38,166,154,0.55)", width=1, dash="dash"))
 
             # ── RSI panel ───────────────────────────────────────────────────────
             if "rsi" in _row:
