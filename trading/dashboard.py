@@ -2089,6 +2089,182 @@ with st.container():
             if st.button("↺", width="stretch", help="Refresh"):
                 st.rerun()
 
+        # ── 🧪 FORCE TEST BUY — emergency $10 LIVE market BUY, respects caps ──
+        # Bypasses the confirmation dialog (it IS the test button) but does
+        # NOT bypass risk caps: balance, GlobalRiskManager.check_global, and
+        # per-symbol RiskManager.can_open_trade all run before the order.
+        _ftb_col, _ftb_info = st.columns([0.32, 0.68])
+        with _ftb_col:
+            _force_test_buy = st.button(
+                "🧪 FORCE TEST BUY ($10)", width="stretch", type="secondary",
+                help="Emergency LIVE market BUY of $10 on the selected symbol "
+                     "with SL 0.5% / TP 1.5%. Respects risk caps.",
+            )
+        with _ftb_info:
+            st.markdown(
+                '<div style="font-size:10px;color:#6e7681;'
+                'font-family:\'JetBrains Mono\',monospace;padding-top:10px;">'
+                'sends a real $10 LIVE BUY on '
+                f'<b style="color:#c9d1d9;">{st.session_state.symbol}</b> · '
+                'SL <b style="color:#ef5350;">−0.5%</b> · '
+                'TP <b style="color:#26a69a;">+1.5%</b> · '
+                'risk caps enforced</div>',
+                unsafe_allow_html=True,
+            )
+
+        if _force_test_buy:
+            _ftb_sym  = st.session_state.symbol
+            _FTB_USDT = 10.0          # spec: max 10 USDT
+            _FTB_SL   = 0.005         # 0.5%
+            _FTB_TP   = 0.015         # 1.5%
+
+            c = _cl()
+            if c is None:
+                st.error("❌ FORCE TEST BUY refused — not connected to Binance "
+                         "(no API key). Connect first.")
+            else:
+                # 1) Live price
+                try:
+                    _ftb_price = c.get_symbol_price(_ftb_sym)
+                except Exception as _e:
+                    _ftb_price = None
+                    st.error(f"❌ FORCE TEST BUY refused — could not fetch live "
+                             f"price for {_ftb_sym}: {_e}")
+
+                if _ftb_price:
+                    # 2) Balance check — exact reason on shortfall
+                    try:
+                        _bal = c.get_account_balance("USDT")
+                        _free_usdt = float(_bal.get("free", 0.0))
+                    except Exception as _e:
+                        _free_usdt = None
+                        st.error(f"❌ FORCE TEST BUY refused — could not read "
+                                 f"USDT balance: {_e}")
+
+                    if _free_usdt is not None:
+                        if _free_usdt < _FTB_USDT:
+                            st.error(
+                                f"❌ FORCE TEST BUY refused — insufficient USDT. "
+                                f"Need ${_FTB_USDT:.2f} free · have "
+                                f"${_free_usdt:.4f} free "
+                                f"(short ${_FTB_USDT - _free_usdt:.4f}).")
+                            log_activity("WARNING",
+                                f"[FORCE BUY] {_ftb_sym} REFUSED — low USDT "
+                                f"(free=${_free_usdt:.4f} need=${_FTB_USDT:.2f})")
+                        else:
+                            # 3) Global risk gate (exposure / open / daily loss)
+                            _g_rm = GlobalRiskManager(st.session_state.global_risk)
+                            _g_ok, _g_reason = _g_rm.check_global(
+                                all_open_trades=open_trades,
+                                new_invest_usdt=_FTB_USDT,
+                                new_symbol=_ftb_sym,
+                                daily_loss_pct=0.0,
+                            )
+                            if not _g_ok:
+                                st.error(f"❌ FORCE TEST BUY blocked by GLOBAL "
+                                         f"risk cap — {_g_reason}")
+                                log_activity("WARNING",
+                                    f"[FORCE BUY] {_ftb_sym} REFUSED — global "
+                                    f"cap: {_g_reason}")
+                            else:
+                                # 4) Per-symbol gate (max_per_symbol etc.)
+                                _per_rm = (
+                                    RiskManager(st.session_state.per_symbol_risk[_ftb_sym])
+                                    if st.session_state.per_symbol_risk.get(_ftb_sym)
+                                    else st.session_state.risk_manager
+                                )
+                                _open_for_sym = [
+                                    t for t in open_trades
+                                    if t.get("coin") == _ftb_sym
+                                ]
+                                _s_ok, _s_reason = _per_rm.can_open_trade(
+                                    open_trades_for_symbol=_open_for_sym,
+                                    symbol=_ftb_sym,
+                                    new_signal="BUY",
+                                )
+                                if not _s_ok:
+                                    st.error(f"❌ FORCE TEST BUY blocked by "
+                                             f"PER-SYMBOL cap — {_s_reason}")
+                                    log_activity("WARNING",
+                                        f"[FORCE BUY] {_ftb_sym} REFUSED — "
+                                        f"per-symbol: {_s_reason}")
+                                else:
+                                    # 5) Size + place real LIVE market BUY
+                                    _qty_raw = _FTB_USDT / _ftb_price
+                                    try:
+                                        _qty = c.round_quantity(_ftb_sym, _qty_raw)
+                                    except Exception:
+                                        _qty = round(_qty_raw, 6)
+                                    try:
+                                        from binance_client import extract_fill as _extract_fill
+                                        _order = c.place_market_order(
+                                            _ftb_sym, "BUY", _qty)
+                                        _exec_qty, _exec_price = _extract_fill(_order)
+                                        if not _exec_price:
+                                            _exec_price = _ftb_price
+                                        if not _exec_qty:
+                                            _exec_qty = _qty
+                                        _order_id = (_order or {}).get("orderId", "?")
+                                        # 6) Attach SL / TP (overrides per-symbol settings)
+                                        _sl_px = round(_exec_price * (1 - _FTB_SL), 8)
+                                        _tp_px = round(_exec_price * (1 + _FTB_TP), 8)
+                                        _t = {
+                                            "coin":            _ftb_sym,
+                                            "exchange":        "binance",
+                                            "type":            "manual",
+                                            "strategy":        "ForceTestBuy",
+                                            "side":            "BUY",
+                                            "entry_price":     _exec_price,
+                                            "exit_price":      None,
+                                            "quantity":        _exec_qty,
+                                            "invested":        _FTB_USDT,
+                                            "profit_loss":     None,
+                                            "profit_loss_pct": None,
+                                            "open_time":       datetime.now(_TZ).isoformat(),
+                                            "close_time":      None,
+                                            "reason":          (f"🧪 FORCE TEST BUY ${_FTB_USDT:.2f} "
+                                                                f"@ ${_exec_price:.4f} · "
+                                                                f"SL {_FTB_SL*100:.1f}% / "
+                                                                f"TP {_FTB_TP*100:.1f}%"),
+                                            "close_reason":    None,
+                                            "stop_loss":       _sl_px,
+                                            "take_profit":     _tp_px,
+                                            "order_id":        _order_id,
+                                            "status":          "open",
+                                        }
+                                        add_trade(_t)
+                                        # 7) Required log line — exact format
+                                        print(f"[FORCE BUY] {_ftb_sym} "
+                                              f"{_FTB_USDT:.2f} "
+                                              f"{_exec_price:.4f} "
+                                              f"{_order_id}", flush=True)
+                                        log_activity("ORDER",
+                                            f"🧪 [FORCE BUY] {_ftb_sym} "
+                                            f"${_FTB_USDT:.2f} @ ${_exec_price:.4f} "
+                                            f"qty={_exec_qty:.6f} "
+                                            f"SL=${_sl_px:.4f} TP=${_tp_px:.4f} "
+                                            f"order_id={_order_id}")
+                                        try:
+                                            tg.trade_open(
+                                                _ftb_sym, "BUY",
+                                                _exec_price, _FTB_USDT,
+                                                "Force test buy", mode="LIVE")
+                                        except Exception:
+                                            pass
+                                        st.success(
+                                            f"✅ FORCE TEST BUY filled — "
+                                            f"{_ftb_sym} ${_FTB_USDT:.2f} @ "
+                                            f"${_exec_price:.4f} · qty {_exec_qty:.6f} · "
+                                            f"SL ${_sl_px:.4f} · TP ${_tp_px:.4f} · "
+                                            f"order_id {_order_id}")
+                                        st.rerun()
+                                    except Exception as _e:
+                                        st.error(f"❌ FORCE TEST BUY order failed "
+                                                 f"(NOT recorded — no execution): {_e}")
+                                        log_activity("ERROR",
+                                            f"[FORCE BUY] {_ftb_sym} order "
+                                            f"FAILED: {_e}")
+
         # ── Live-trade confirmation dialog ────────────────────────────────────
         _plt = st.session_state.pending_live_trade
         if _plt:
