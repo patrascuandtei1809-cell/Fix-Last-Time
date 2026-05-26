@@ -1443,6 +1443,25 @@ with st.sidebar:
                         # when pasting keys (especially api_secret) from email/notes.
                         api_key    = (api_key    or "").strip()
                         api_secret = (api_secret or "").strip()
+                        # Guard: HTTP headers must be Latin-1. Cyrillic К (U+041A)
+                        # looks identical to Latin K and sneaks in when keys are
+                        # copied from chat apps — detect and refuse with a clear
+                        # error instead of letting urllib3 crash with a codec
+                        # exception deep inside requests.
+                        def _bad_chars(label, s):
+                            bad = [(i, ch, hex(ord(ch))) for i, ch in enumerate(s)
+                                   if ord(ch) > 127]
+                            if bad:
+                                preview = ", ".join(f"pos {i}: '{ch}' ({h})"
+                                                    for i, ch, h in bad[:3])
+                                raise ValueError(
+                                    f"{label} contains non-ASCII characters "
+                                    f"({preview}). Likely a Cyrillic letter that "
+                                    f"looks like a Latin one — re-copy the "
+                                    f"{label.lower()} DIRECTLY from binance.com "
+                                    f"(not from chat/email/notes) and try again.")
+                        _bad_chars("API Key",    api_key)
+                        _bad_chars("API Secret", api_secret)
                         st.session_state.manual_disconnect = False  # re-enable auto-load
                         st.session_state.api_key    = api_key
                         st.session_state.api_secret = api_secret
