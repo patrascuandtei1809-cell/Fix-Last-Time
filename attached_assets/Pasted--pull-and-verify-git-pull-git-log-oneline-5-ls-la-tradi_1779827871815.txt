@@ -1,0 +1,56 @@
+ pull and verify
+git pull
+git log --oneline -5
+ls -la trading/ai_engine.py
+ 495478remote: Enumerating objects: 86, done.
+remote: Counting objects: 100% (86/86), done.
+remote: Compressing objects: 100% (37/37), done.
+remote: Total 78 (delta 66), reused 53 (delta 41), pack-reused 0 (from 0)
+Unpacking objects: 100% (78/78), 3.11 MiB | 10.76 MiB/s, done.
+From https://github.com/patrascuandtei1809-cell/Fix-Last-Time
+   10fdc2d..a34ab1f  main       -> origin/main
+a34ab1f (origin/main, origin/HEAD) Fix chart to correctly display trades and stop-loss levels
+914ccd6 Improve error handling for invalid API keys during connection
+a6b11bc Add image to documentation for clarity
+8ee07d0 Add AI trading assistant and aggressiveness settings to the bot
+f53c227 Enhance trading bot with aggressive preset and quick buy options
+origin  https://github.com/patrascuandtei1809-cell/Fix-Last-Time.git (fetch)
+origin  https://github.com/patrascuandtei1809-cell/Fix-Last-Time.git (push)
+Updating 10fdc2d..a34ab1f
+Fast-forward
+ attached_assets/Pasted--3-Stash-YOUR-settings-json-pull-then-restore-it-git-st_1779558910413.txt |   72 +++++++
+ attached_assets/Pasted--rw-1-root-root-159-May-23-19-19-root-trading-bot-clean_1779560408180.txt |   23 +++
+ attached_assets/Pasted--rw-1-root-root-159-May-23-19-19-root-trading-bot-clean_1779560511957.txt |   23 +++
+ attached_assets/Pasted-We-need-to-fix-BOTH-trading-logic-and-chart-UX-Current-_1779825053779.txt |  115 +++++++++++
+ attached_assets/image_1779560442445.png                                                          |  Bin 0 -> 494425 bytes
+ attached_assets/image_1779560462643.png                                                          |  Bin 0 -> 450239 bytes
+ attached_assets/image_1779560481936.png                                                          |  Bin 0 -> 469699 bytes
+ attached_assets/image_1779560495840.png                                                          |  Bin 0 -> 458940 bytes
+ attached_assets/image_1779560653003.png                                                          |  Bin 0 -> 357612 bytes
+ attached_assets/image_1779826229320.png                                                          |  Bin 0 -> 639253 bytes
+ attached_assets/image_1779827649757.png                                                          |  Bin 0 -> 463619 bytes
+ trading/ai_engine.py                                                                             |  298 +++++++++++++++++++++++++++
+ trading/bot.py                                                                                   |   27 ++-
+ trading/dashboard.py                                                                             | 1160 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++------------
+ trading/risk.py                                                                                  |   11 +-
+ trading/strategy.py                                                                              |   60 +++++-
+ trading/symbol_worker.py                                                                         |   50 +++++
+ 17 files changed, 1687 insertions(+), 152 deletions(-)
+ create mode 100644 attached_assets/Pasted--3-Stash-YOUR-settings-json-pull-then-restore-it-git-st_1779558910413.txt
+ create mode 100644 attached_assets/Pasted--rw-1-root-root-159-May-23-19-19-root-trading-bot-clean_1779560408180.txt
+ create mode 100644 attached_assets/Pasted--rw-1-root-root-159-May-23-19-19-root-trading-bot-clean_1779560511957.txt
+ create mode 100644 attached_assets/Pasted-We-need-to-fix-BOTH-trading-logic-and-chart-UX-Current-_1779825053779.txt
+ create mode 100644 attached_assets/image_1779560442445.png
+ create mode 100644 attached_assets/image_1779560462643.png
+ create mode 100644 attached_assets/image_1779560481936.png
+ create mode 100644 attached_assets/image_1779560495840.png
+ create mode 100644 attached_assets/image_1779560653003.png
+ create mode 100644 attached_assets/image_1779826229320.png
+ create mode 100644 attached_assets/image_1779827649757.png
+ create mode 100644 trading/ai_engine.py
+a34ab1f (HEAD -> main, origin/main, origin/HEAD) Fix chart to correctly display trades and stop-loss levels
+914ccd6 Improve error handling for invalid API keys during connection
+a6b11bc Add image to documentation for clarity
+8ee07d0 Add AI trading assistant and aggressiveness settings to the bot
+f53c227 Enhance trading bot with aggressive preset and quick buy options
+-rw-r--r-- 1 root root 12960 May 26 21:37 trading/ai_engine.py
