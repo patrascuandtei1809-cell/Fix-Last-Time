@@ -28,7 +28,7 @@ class SymbolRiskSettings:
 
     # ── Position sizing (FIXED USDT) ──────────────────────────────────────────
     # Small fixed size for scalping — many small trades, controlled risk.
-    invest_per_trade:      float = 12.0
+    invest_per_trade:      float = 10.0
     max_trade_usdt:        float = 15.0
     max_trades_per_session: int  = 0     # 0 = unlimited
 

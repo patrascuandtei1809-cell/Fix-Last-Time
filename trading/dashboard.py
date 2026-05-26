@@ -493,12 +493,12 @@ def _init():
         "global_risk":      None,        # GlobalRiskSettings (built lazily below)
         "strategy":         "Price Movement",   # scalping by default
         "interval":         "1m",                # 1-minute candles → faster signals
-        "check_every":      15,                  # tick twice as fast
-        "threshold":        0.07,                # 0.07% — aggressive scalping (range 0.05–0.10)
+        "check_every":      10,                  # tick every 10s — aggressive scalping
+        "threshold":        0.05,                # 0.05% — aggressive scalping (range 0.05–0.10)
         "risk":             RiskSettings(),
         "risk_manager":     RiskManager(),
         "initial_balance":  1000.0,
-        "manual_amount":    12.0,                # fixed small size for scalping
+        "manual_amount":    10.0,                # fixed $10 per trade (scalping)
         "refresh_secs":     5,
         "alert_open_ids":      [],
         "alert_closed_ids":    [],
@@ -1539,6 +1539,39 @@ with st.sidebar:
                          help="Trigger % for Price Movement. 0.05% = aggressive scalping, 0.30%+ = conservative.")
     st.session_state.threshold = thr_val
 
+    # ── 🔄 Reset to scalping defaults ─────────────────────────────────────────
+    # Existing settings.json overrides hardcoded defaults — if the user
+    # previously saved a conservative setup, the new aggressive defaults
+    # (10s / 0.05% / $10) won't take effect on their own. This button
+    # snaps the four scalping knobs back without touching API keys, active
+    # symbols, per-symbol risk overrides, or global caps.
+    if st.button("🔄 Reset to scalping defaults",
+                 width="stretch", key="reset_scalp_defaults_btn",
+                 help="Snap check=10s, threshold=0.05%, size=$10, "
+                      "SL=0.5%, TP=1.5%. Keeps API keys + risk caps."):
+        st.session_state.check_every    = 10
+        st.session_state.threshold      = 0.05
+        st.session_state.manual_amount  = 10.0
+        try:
+            st.session_state.risk.invest_per_trade = 10.0
+            st.session_state.risk.stop_loss_pct    = 0.5
+            st.session_state.risk.take_profit_pct  = 1.5
+        except Exception:
+            pass
+        for _sym, _rs in (st.session_state.get("per_symbol_risk") or {}).items():
+            try:
+                _rs.invest_per_trade = 10.0
+                _rs.stop_loss_pct    = 0.5
+                _rs.take_profit_pct  = 1.5
+            except Exception:
+                pass
+        log_activity("INFO",
+                     "🔄 Reset to scalping defaults — check=10s · "
+                     "threshold=0.05% · size=$10 · SL=0.5% · TP=1.5%")
+        st.success("✅ Scalping defaults applied. Restart the bot for the "
+                   "new check interval to take effect.")
+        st.rerun()
+
     bc1, bc2 = st.columns(2)
     with bc1:
         if st.button("▶ Start", width="stretch", disabled=bot_running):
@@ -2438,7 +2471,7 @@ with st.container():
             for _k,_v in _ind_defaults.items():
                 if _k not in st.session_state: st.session_state[_k] = _v
 
-            DEFAULT_WINDOW_HOURS = 12
+            DEFAULT_WINDOW_HOURS = 4
             _win_key   = "chart_window_hours"
             _nonce_key = "chart_view_nonce"
             if _win_key   not in st.session_state: st.session_state[_win_key]   = DEFAULT_WINDOW_HOURS
@@ -2482,7 +2515,7 @@ with st.container():
             with _zr:
                 if st.button(f"⟲ Reset {DEFAULT_WINDOW_HOURS}h",
                              key="chart_reset_view_btn", width="stretch",
-                             help="Reset view to last 12 hours"):
+                             help=f"Reset view to last {DEFAULT_WINDOW_HOURS} hours"):
                     st.session_state[_win_key]   = DEFAULT_WINDOW_HOURS
                     st.session_state[_nonce_key] += 1
                     st.rerun()
@@ -2756,7 +2789,7 @@ with st.container():
                            f"{st.session_state.interval}-"
                            f"{st.session_state[_nonce_key]}",
             )
-            # X-axis: shared, sparse grid, scroll/pan unlocked, default 12h window
+            # X-axis: shared, sparse grid, scroll/pan unlocked, default 4h window
             for r in range(1, n_rows + 1):
                 fig.update_xaxes(
                     gridcolor=G, gridwidth=1, zerolinecolor=G_ZERO,
@@ -2770,16 +2803,43 @@ with st.container():
                     nticks=8,
                     row=r, col=1,
                 )
-            # Price Y-axis
-            fig.update_yaxes(
+            # Price Y-axis — auto-fit to VISIBLE candles only (not full history),
+            # with 3% padding above/below so wicks don't kiss the frame.
+            try:
+                # df_chart["open_time"] is tz-naive (Europe/London wall clock,
+                # tz stripped at load). _view_start/_view_end may be tz-aware
+                # if _xtz was set — coerce both sides to naive so the mask
+                # never raises TypeError on mixed tz comparisons.
+                _ot = df_chart["open_time"]
+                if getattr(_ot.dt, "tz", None) is not None:
+                    _ot = _ot.dt.tz_convert(None) if _ot.dt.tz else _ot
+                _vs = _view_start.tz_localize(None) if getattr(_view_start, "tzinfo", None) else _view_start
+                _ve = _view_end.tz_localize(None)   if getattr(_view_end,   "tzinfo", None) else _view_end
+                _vis = df_chart[(_ot >= _vs) & (_ot <= _ve)]
+                if len(_vis) >= 2:
+                    _y_lo = float(_vis["low"].min())
+                    _y_hi = float(_vis["high"].max())
+                    _pad  = max((_y_hi - _y_lo) * 0.03, _y_hi * 0.0005)
+                    _y_range = [_y_lo - _pad, _y_hi + _pad]
+                else:
+                    _y_range = None
+            except Exception:
+                _y_range = None
+            _price_yaxis_kwargs = dict(
                 gridcolor=G, gridwidth=1, zerolinecolor=G_ZERO,
                 showspikes=True, spikecolor="#484f58",
                 spikethickness=1, spikedash="dot",
                 tickfont=dict(size=10, color="#9ba3ad"),
                 tickprefix="$", side="right", nticks=8,
-                autorange=True, fixedrange=False,
+                fixedrange=False,
                 row=_row["price"], col=1,
             )
+            if _y_range is not None:
+                _price_yaxis_kwargs["range"]     = _y_range
+                _price_yaxis_kwargs["autorange"] = False
+            else:
+                _price_yaxis_kwargs["autorange"] = True
+            fig.update_yaxes(**_price_yaxis_kwargs)
             # RSI / Stoch Y-axes: pinned 0–100, sparse ticks
             for _p in ("rsi", "stoch"):
                 if _p in _row:
@@ -2802,7 +2862,7 @@ with st.container():
 
             # Stable key → Streamlit reuses the same DOM node across reruns (no flicker / no remount)
             # scrollZoom=True lets the user wheel/pinch-zoom freely; doubleClick="reset"
-            # auto-restores the default 12h view; pan is the default drag.
+            # auto-restores the default 4h view; pan is the default drag.
             st.plotly_chart(
                 fig, width="stretch", key="main_candle_chart",
                 config={

@@ -1,0 +1,115 @@
+We need to fix BOTH trading logic and chart UX. Current system is not usable.
+
+1. TRADING LOGIC (CRITICAL)
+
+Problem: Bot stays on HOLD too much (no trades).
+
+Make it aggressive but controlled:
+
+Strategy:
+- Mode: Price Movement (scalping)
+
+Parameters:
+- Interval: 1m
+- Check interval: 10 seconds
+- Price threshold: 0.05% (not higher)
+
+Risk:
+- Stop Loss: 0.5%
+- Take Profit: 1.5%
+- Always applied automatically
+
+Position sizing:
+- Fixed: 10 USDT per trade
+- Max open trades: 2–3
+
+Filters:
+- Skip ONLY if:
+  - extreme spike (too volatile)
+  - no movement at all
+- Otherwise allow trades
+
+IMPORTANT:
+Bot should generate multiple trades per hour when market moves.
+Current behavior (1 trade / many hours) is unacceptable.
+
+Add logging:
+- Log EXACT reason for HOLD
+(e.g. "movement too small: 0.02% < 0.05%")
+
+---
+
+2. FORCE BUY (TEST BUTTON)
+
+Add button:
+"FORCE TEST BUY"
+
+Behavior:
+- Uses LIVE Binance
+- Market BUY immediately (10 USDT)
+- Attach:
+  SL = -0.5%
+  TP = +1.5%
+
+Log:
+[FORCE BUY] symbol amount price order_id
+
+Do NOT bypass risk limits.
+
+---
+
+3. CHART FIX (VERY IMPORTANT)
+
+Current chart is unusable.
+
+Fix:
+
+- Use CANDLESTICK chart (NOT line)
+- Default view: last 2–6 hours (NOT full history)
+- Auto-scale Y axis based on visible candles
+- Remove empty space
+
+Add:
+- Volume below price
+- RSI in separate panel (0–100 clear)
+- Optional MACD
+
+UX:
+- Scroll = zoom
+- Drag = move in time
+- Double click = reset
+
+Add timeframe buttons:
+1m / 5m / 15m / 1h / 4h
+
+Style:
+- Clean like TradingView / CoinMarketCap
+- Reduce grid lines
+- Make current price clearly visible
+
+Goal:
+User must understand market direction in 2 seconds.
+
+---
+
+4. MOBILE FIX
+
+Problem:
+Mobile UI is broken / missing controls.
+
+Fix:
+- Single column layout on mobile
+- Always show:
+  - balance
+  - bot status
+  - connection status
+- Move sidebar into main view on mobile
+
+No hidden elements.
+
+---
+
+FINAL GOAL:
+- Frequent trades (10–30/day when active)
+- Clear, clean chart
+- Full control from phone
