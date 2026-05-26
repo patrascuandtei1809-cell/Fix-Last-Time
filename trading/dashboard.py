@@ -1814,8 +1814,12 @@ with st.sidebar:
             f"({st.session_state.invest_pct:.1f}% of ${_avail_for_calc:,.2f} available)"
         )
 
+    # Clamp persisted value to current widget bounds — older settings.json
+    # may hold values below the current min (e.g. 5.0 when min was raised
+    # to 10.0), which would crash with StreamlitValueBelowMinError.
+    _ma_default = max(10.0, min(100_000.0, float(st.session_state.manual_amount or 10.0)))
     ma = st.number_input("Manual order (USDT)", 10.0, 100_000.0,
-                          st.session_state.manual_amount, 10.0)
+                          _ma_default, 10.0)
     st.session_state.manual_amount = ma
 
     st.markdown('<hr class="s-div"/>', unsafe_allow_html=True)
