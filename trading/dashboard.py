@@ -312,6 +312,169 @@ section[data-testid="stSidebar"] * { color: #c9d1d9 !important; }
 .cd-row { display:flex; justify-content:space-between; font-size:9px; color:#484f58; margin:8px 0 3px; }
 .cd-bar  { height:3px; background:#1e2736; border-radius:2px; overflow:hidden; }
 .cd-fill { height:100%; background:#2962ff; border-radius:2px; transition:width .8s linear; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   MOBILE LAYOUT (≤ 768px)
+   Goals:
+   - Header pills (CONNECTED, BOT ON, LIVE, balance) always visible & legible
+   - Sidebar (API connect, strategy, risk) wide enough to use one-handed
+   - No horizontal overflow; single-column card grid
+   - Bigger tap targets for buttons / sliders / inputs
+   - Charts, log, position cards fit phone width without clipping
+   ════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+  /* Base — slightly larger body text on phone */
+  html, body { font-size: 15px !important; }
+  [data-testid="stAppViewContainer"] { overflow-x: hidden !important; }
+  .main .block-container { padding: 0 6px !important; }
+
+  /* ── Header: stack into 2 rows (logo+ticker, then pills) ──────────────── */
+  .at-header {
+    height: auto !important;
+    padding: 8px 10px !important;
+    gap: 6px !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .at-logo { font-size: 16px !important; }
+  .at-ticker-wrap {
+    justify-content: space-between !important;
+    width: 100% !important;
+    gap: 8px !important;
+  }
+  .at-price { font-size: 18px !important; }
+  .at-stat  { font-size: 10px !important; }
+  /* Pills row: horizontally scrollable so they never clip but always all
+     visible (CONNECTED / BOT ON / LIVE / MAINNET / refresh badge) */
+  .pills {
+    width: 100% !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    padding-bottom: 2px !important;
+    scrollbar-width: none !important;
+  }
+  .pills::-webkit-scrollbar { display: none !important; }
+  .pill {
+    font-size: 11px !important;
+    padding: 4px 9px !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* ── Market overview strip ── */
+  .mkt-strip  { padding: 6px 8px !important; }
+  .mkt-tile   { min-width: 96px !important; padding: 6px 10px !important; }
+
+  /* ── Cards: single column on phone ── */
+  .cards { grid-template-columns: 1fr !important; gap: 8px !important; }
+  .card  { padding: 12px 14px !important; }
+  .c-val { font-size: 18px !important; }
+
+  /* ── Chart toolbar wraps cleanly ── */
+  .chart-bar { flex-direction: column !important; align-items: flex-start !important; }
+
+  /* ── Open position cards: stack pieces vertically ── */
+  .pos-card {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    font-size: 12.5px !important;
+    padding: 10px 12px !important;
+  }
+
+  /* ── Activity log: taller, easier to scroll on phone ── */
+  .log-wrap  { height: 280px !important; font-size: 12px !important; }
+  .log-line  { padding: 6px 10px !important; line-height: 1.5 !important; }
+  .l-ts      { min-width: 60px !important; }
+  .l-lvl     { min-width: 48px !important; }
+
+  /* ── Bot stat grid (sidebar) ── */
+  .bot-stat-grid { gap: 6px !important; }
+  .bsc-val       { font-size: 15px !important; }
+
+  /* ── Sidebar: wider on phone so inputs are usable ──────────────────────
+     Streamlit's default mobile sidebar is ~21rem; bump to 88vw so
+     sliders, API key inputs, and risk controls all fit on a phone.
+     Critical: this is where the user connects Binance and tunes risk. */
+  section[data-testid="stSidebar"] {
+    width: 88vw !important;
+    min-width: 88vw !important;
+    max-width: 92vw !important;
+  }
+  section[data-testid="stSidebar"] > div { padding: 8px 12px !important; }
+
+  /* ── Larger tap targets for ALL controls ── */
+  .stButton > button {
+    min-height: 44px !important;
+    font-size: 14px !important;
+    padding: 10px 14px !important;
+  }
+  .stTextInput input, .stNumberInput input, .stTextArea textarea {
+    font-size: 15px !important;
+    min-height: 42px !important;
+  }
+  .stSelectbox div[data-baseweb="select"] > div { min-height: 42px !important; }
+  [data-testid="stSlider"] { padding: 6px 0 !important; }
+  [data-testid="stSlider"] [role="slider"] {
+    width: 22px !important; height: 22px !important;
+  }
+
+  /* ── Section labels a touch bigger ── */
+  .sec-lbl { font-size: 11px !important; margin: 14px 0 6px !important; }
+
+  /* ── Multiselect / radio chips: wrap and breathe ── */
+  [data-baseweb="tag"] { font-size: 12px !important; }
+
+  /* ── Plotly chart: prevent it from forcing horizontal scroll ── */
+  .js-plotly-plot, .plot-container, .svg-container {
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  /* ── Hint banner shown only on phones: tells user where the controls are ── */
+  .mob-hint {
+    display: flex !important;
+    align-items: center; gap: 8px;
+    background: #0d1a2a; border: 1px solid #2962ff44; border-radius: 6px;
+    padding: 8px 12px; margin: 6px 0;
+    font-size: 12px; color: #79b0ff;
+  }
+}
+
+/* Hide the mobile-only hint banner on desktop */
+.mob-hint    { display: none; }
+.mob-summary { display: none; }
+
+/* ── Mobile-only always-visible summary strip ─────────────────────────────── */
+@media (max-width: 768px) {
+  .mob-summary {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    padding: 8px 10px;
+    background: #0d1117;
+    border-bottom: 1px solid #1e2736;
+  }
+  .mob-cell {
+    background: #161b22;
+    border: 1px solid #1e2736;
+    border-radius: 6px;
+    padding: 6px 9px;
+    min-width: 0;
+  }
+  .mob-lbl {
+    font-size: 9px; color: #6e7681; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .1em;
+    margin-bottom: 2px;
+  }
+  .mob-val {
+    font-size: 13px; font-weight: 700; color: #f0f6fc;
+    font-family: 'JetBrains Mono', monospace;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .mob-val.up   { color: #26a69a; }
+  .mob-val.dn   { color: #ef5350; }
+  .mob-val.gray { color: #8b949e; }
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -785,6 +948,29 @@ st.markdown(f"""
     {live_pill}{net_pill}{mode_pill}{conn_pill}{bot_pill}
   </div>
 </div>
+""", unsafe_allow_html=True)
+
+# ── MOBILE always-visible summary (hidden on desktop via CSS) ────────────────
+# Phones can clip the header pills or hide the sidebar — this strip guarantees
+# the four critical pieces of info are ALWAYS on screen on small viewports:
+#   CONNECTED status · USDT balance · Bot ON/OFF · Active symbols
+_mob_conn_val = "CONNECTED" if (st.session_state.connected and _cl()) else "NOT CONNECTED"
+_mob_conn_cls = "up" if (st.session_state.connected and _cl()) else "dn"
+try:
+    _mob_bal = f"${_cl().get_account_balance('USDT')['total']:,.2f}" if (st.session_state.connected and _cl()) else "—"
+except Exception:
+    _mob_bal = "ERR"
+_mob_bot_val = "ON" if bot_running else "OFF"
+_mob_bot_cls = "up" if bot_running else "gray"
+_mob_syms = ",".join(s.replace("USDT", "") for s in st.session_state.active_symbols) or "—"
+st.markdown(f"""
+<div class="mob-summary">
+  <div class="mob-cell"><div class="mob-lbl">Binance</div><div class="mob-val {_mob_conn_cls}">{_mob_conn_val}</div></div>
+  <div class="mob-cell"><div class="mob-lbl">Balance</div><div class="mob-val">{_mob_bal}</div></div>
+  <div class="mob-cell"><div class="mob-lbl">Bot</div><div class="mob-val {_mob_bot_cls}">{_mob_bot_val}</div></div>
+  <div class="mob-cell"><div class="mob-lbl">Symbols</div><div class="mob-val gray">{_mob_syms}</div></div>
+</div>
+<div class="mob-hint">☰ Tap top-left to open Connection · Strategy · Risk controls</div>
 """, unsafe_allow_html=True)
 
 # ── Alert toasts + audio (injected into browser, height=0 so invisible) ───────
