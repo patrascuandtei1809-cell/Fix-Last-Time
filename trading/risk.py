@@ -17,16 +17,19 @@ from datetime import datetime
 @dataclass
 class SymbolRiskSettings:
     # ── Stop / Take-profit ────────────────────────────────────────────────────
-    stop_loss_pct:    float = 2.0
-    take_profit_pct:  float = 4.0
+    # Defaults tuned for 1m scalping on BTC/ETH/SOL: tight SL, modest TP that
+    # still clears Binance Spot round-trip fees (~0.2%) with margin.
+    stop_loss_pct:    float = 0.5
+    take_profit_pct:  float = 1.5
     max_open_trades:  int   = 2          # max open trades for THIS symbol
     max_per_symbol:   int   = 1          # 1 trade per symbol at a time (no stacking)
     cooldown_seconds: int   = 180        # min seconds between bot trades on this symbol
     emergency_stop:   bool  = False      # per-symbol kill switch
 
     # ── Position sizing (FIXED USDT) ──────────────────────────────────────────
-    invest_per_trade:      float = 50.0
-    max_trade_usdt:        float = 100.0
+    # Small fixed size for scalping — many small trades, controlled risk.
+    invest_per_trade:      float = 12.0
+    max_trade_usdt:        float = 15.0
     max_trades_per_session: int  = 0     # 0 = unlimited
 
     # ── Legacy (kept for backwards compat with old settings.json) ─────────────

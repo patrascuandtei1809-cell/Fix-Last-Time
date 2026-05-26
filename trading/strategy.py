@@ -109,23 +109,67 @@ def ema_crossover_signal(df: pd.DataFrame) -> Tuple[str, str, int]:
     return side, f"{side} confirmed ({passed}/4): {full}", confidence
 
 
-# ── Strategy: Price Movement ──────────────────────────────────────────────────
+# ── Strategy: Price Movement (scalping, ATR-gated) ────────────────────────────
 
-def price_movement_signal(df: pd.DataFrame, threshold: float = 0.0003) -> Tuple[str, str, int]:
-    if len(df) < 3:
-        return "HOLD", "Not enough data for price movement check", 0
+# Volatility band for the Price Movement scalping strategy. Measured as
+# ATR(14) / price. Skip both dead markets (no opportunity, fees eat the move)
+# and spike markets (slippage + unreliable signals).
+PRICE_MOVE_MIN_VOL_PCT = 0.0003   # 0.03% — below this is a flatline
+PRICE_MOVE_MAX_VOL_PCT = 0.0050   # 0.50% — above this is a spike/news event
+
+# Binance Spot round-trip fee (taker BUY + taker SELL). Used to annotate
+# whether a signal's expected move clears fees with margin.
+ROUNDTRIP_FEE_PCT = 0.0020        # 0.20%
+
+def price_movement_signal(
+    df: pd.DataFrame,
+    threshold: float = 0.0003,
+    min_vol_pct: float = PRICE_MOVE_MIN_VOL_PCT,
+    max_vol_pct: float = PRICE_MOVE_MAX_VOL_PCT,
+) -> Tuple[str, str, int]:
+    if len(df) < 16:
+        return "HOLD", "Not enough data for price movement check (need 16+ candles)", 0
 
     prev = df["close"].iloc[-2]
     curr = df["close"].iloc[-1]
     pct  = (curr - prev) / prev
     mag  = abs(pct)
+
+    # ── Volatility filter (ATR-based) ────────────────────────────────────────
+    atr_v   = calculate_atr(df, 14).iloc[-1]
+    vol_pct = (atr_v / curr) if (curr and pd.notna(atr_v)) else 0.0
+    if pd.notna(atr_v):
+        if vol_pct < min_vol_pct:
+            return "HOLD", (
+                f"Vol too LOW — ATR%={vol_pct*100:.4f}% < {min_vol_pct*100:.3f}% "
+                f"(dead market) | move {pct*100:+.4f}%"
+            ), 0
+        if vol_pct > max_vol_pct:
+            return "HOLD", (
+                f"Vol too HIGH — ATR%={vol_pct*100:.4f}% > {max_vol_pct*100:.3f}% "
+                f"(spike — too risky) | move {pct*100:+.4f}%"
+            ), 0
+
     conf = int(min(100, (mag / threshold) * 30 + 40)) if threshold > 0 else 50
 
+    # Fees-aware tag so the log makes clear whether the move alone clears fees.
+    fees_pct = ROUNDTRIP_FEE_PCT * 100
+    fee_tag  = "fees✓" if mag * 100 >= fees_pct else f"fees✗(need TP>{fees_pct:.2f}%)"
+
     if pct >= threshold:
-        return "BUY",  f"Price +{pct*100:.4f}% ≥ +{threshold*100:.4f}% | {prev:.4f}→{curr:.4f}", conf
+        return "BUY",  (
+            f"Price +{pct*100:.4f}% ≥ +{threshold*100:.4f}% | {prev:.4f}→{curr:.4f} | "
+            f"ATR%={vol_pct*100:.3f}% | {fee_tag}"
+        ), conf
     if pct <= -threshold:
-        return "SELL", f"Price {pct*100:.4f}% ≤ -{threshold*100:.4f}% | {prev:.4f}→{curr:.4f}", conf
-    return "HOLD", f"Move {pct*100:.4f}% within ±{threshold*100:.4f}% | {curr:.4f}", 0
+        return "SELL", (
+            f"Price {pct*100:.4f}% ≤ -{threshold*100:.4f}% | {prev:.4f}→{curr:.4f} | "
+            f"ATR%={vol_pct*100:.3f}% | {fee_tag}"
+        ), conf
+    return "HOLD", (
+        f"Move {pct*100:+.4f}% within ±{threshold*100:.4f}% | {curr:.4f} | "
+        f"ATR%={vol_pct*100:.3f}%"
+    ), 0
 
 
 # ── Strategy: Momentum (RSI) ──────────────────────────────────────────────────

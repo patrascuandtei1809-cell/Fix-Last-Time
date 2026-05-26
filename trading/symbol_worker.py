@@ -45,6 +45,17 @@ class SymbolWorker:
         self._session_trades: int = 0
         self._last_block_reason: str = ""
 
+        # Fees-vs-TP sanity check at construction (Binance Spot ~0.2% round-trip).
+        # Warn once if the configured take-profit barely clears fees.
+        _tp = float(getattr(self.risk.settings, "take_profit_pct", 0) or 0)
+        _sl = float(getattr(self.risk.settings, "stop_loss_pct",   0) or 0)
+        if _tp > 0 and _tp < 0.30:
+            print(f"[BOT] {self.symbol} ⚠️ TP={_tp:.2f}% barely clears Binance "
+                  f"round-trip fees (~0.20%) — consider TP ≥ 0.30%", flush=True)
+        if _sl > 0 and _tp > 0 and _tp < _sl:
+            print(f"[BOT] {self.symbol} ⚠️ TP={_tp:.2f}% < SL={_sl:.2f}% — "
+                  f"negative expectancy risk/reward", flush=True)
+
     # ── Public API used by orchestrator ──────────────────────────────────────
     def tick(self, all_open_trades: List[Dict],
              global_gate_fn: Callable[[float, str], tuple]) -> None:

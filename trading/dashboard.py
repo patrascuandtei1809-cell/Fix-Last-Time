@@ -331,11 +331,11 @@ def _init():
         "strategy":         "Price Movement",   # scalping by default
         "interval":         "1m",                # 1-minute candles → faster signals
         "check_every":      15,                  # tick twice as fast
-        "threshold":        0.05,                # 0.05% — aggressive scalping
+        "threshold":        0.07,                # 0.07% — aggressive scalping (range 0.05–0.10)
         "risk":             RiskSettings(),
         "risk_manager":     RiskManager(),
         "initial_balance":  1000.0,
-        "manual_amount":    100.0,
+        "manual_amount":    12.0,                # fixed small size for scalping
         "refresh_secs":     5,
         "alert_open_ids":      [],
         "alert_closed_ids":    [],
