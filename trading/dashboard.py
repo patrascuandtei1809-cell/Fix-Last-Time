@@ -2224,19 +2224,73 @@ with st.container():
 
             _has_rsi = "rsi" in df_chart.columns
 
-            # ── Chart view window ───────────────────────────────────────────────
-            # Default VIEW = last 12h (so old trades don't stretch x-axis),
-            # but the full DATA stays in the figure — user can scroll-zoom,
-            # drag-pan, or hit the toolbar buttons to explore any range.
-            # Buttons just change the initial range Plotly draws; once drawn,
-            # Plotly's native pan/zoom is fully unlocked.
+            # ── Compute MACD inline (12/26/9) so the chart can show it ──────────
+            if "macd" not in df_chart.columns and len(df_chart) >= 26:
+                _ema12 = df_chart["close"].ewm(span=12, adjust=False).mean()
+                _ema26 = df_chart["close"].ewm(span=26, adjust=False).mean()
+                df_chart["macd"]        = _ema12 - _ema26
+                df_chart["macd_signal"] = df_chart["macd"].ewm(span=9, adjust=False).mean()
+                df_chart["macd_hist"]   = df_chart["macd"] - df_chart["macd_signal"]
+            _has_macd  = "macd" in df_chart.columns
+            _has_stoch = "stoch_k" in df_chart.columns
+
+            # ── Timeframe pills (TradingView-style) ─────────────────────────────
+            TF_PILLS = [("1m","1m"),("5m","5m"),("15m","15m"),("1h","1h"),("4h","4h")]
+            _tfcols = st.columns([0.07]*len(TF_PILLS) + [0.65])
+            for _i,(_lbl,_val) in enumerate(TF_PILLS):
+                _active = (st.session_state.interval == _val)
+                with _tfcols[_i]:
+                    if st.button(("● " if _active else "") + _lbl,
+                                 key=f"tf_pill_{_val}",
+                                 type="primary" if _active else "secondary",
+                                 width="stretch"):
+                        st.session_state.interval = _val
+                        st.rerun()
+            with _tfcols[-1]:
+                st.markdown(
+                    f'<div style="text-align:right;font-size:11px;color:#6e7681;'
+                    f'font-family:\'JetBrains Mono\',monospace;padding-top:9px;">'
+                    f'<b style="color:#c9d1d9;">{st.session_state.symbol}</b> · '
+                    f'<b style="color:#79b0ff;">{st.session_state.interval}</b> · '
+                    f'{len(df_chart)} candles</div>',
+                    unsafe_allow_html=True,
+                )
+
+            # ── Indicator toggles + view controls ───────────────────────────────
+            _ind_defaults = {"show_volume": True, "show_ema": True,
+                             "show_rsi": True, "show_macd": False, "show_stoch": False}
+            for _k,_v in _ind_defaults.items():
+                if _k not in st.session_state: st.session_state[_k] = _v
+
             DEFAULT_WINDOW_HOURS = 12
             _win_key   = "chart_window_hours"
             _nonce_key = "chart_view_nonce"
             if _win_key   not in st.session_state: st.session_state[_win_key]   = DEFAULT_WINDOW_HOURS
             if _nonce_key not in st.session_state: st.session_state[_nonce_key] = 0
 
-            _zi, _zo, _zr, _zspace = st.columns([0.16, 0.16, 0.22, 0.46])
+            _c1,_c2,_c3,_c4,_c5,_csp,_zi,_zo,_zr = st.columns(
+                [0.09,0.08,0.08,0.09,0.09, 0.10, 0.13,0.13,0.21]
+            )
+            with _c1:
+                st.session_state.show_ema = st.checkbox(
+                    "EMA", value=st.session_state.show_ema, key="cb_ema",
+                    help="EMA 9 + EMA 21 overlay")
+            with _c2:
+                st.session_state.show_volume = st.checkbox(
+                    "Vol", value=st.session_state.show_volume, key="cb_vol",
+                    help="Volume bars at bottom of price panel")
+            with _c3:
+                st.session_state.show_rsi = st.checkbox(
+                    "RSI", value=st.session_state.show_rsi, key="cb_rsi",
+                    help="RSI 14 sub-panel")
+            with _c4:
+                st.session_state.show_macd = st.checkbox(
+                    "MACD", value=st.session_state.show_macd, key="cb_macd",
+                    help="MACD 12/26/9 sub-panel")
+            with _c5:
+                st.session_state.show_stoch = st.checkbox(
+                    "Stoch", value=st.session_state.show_stoch, key="cb_stoch",
+                    help="Stochastic %K/%D sub-panel")
             with _zi:
                 if st.button("➕ Zoom in", key="chart_zoom_in_btn", width="stretch",
                              help="Halve the visible window"):
@@ -2250,24 +2304,12 @@ with st.container():
                     st.session_state[_nonce_key] += 1
                     st.rerun()
             with _zr:
-                if st.button(f"⟲ Reset to last {DEFAULT_WINDOW_HOURS}h",
-                             key="chart_reset_view_btn", width="stretch"):
+                if st.button(f"⟲ Reset {DEFAULT_WINDOW_HOURS}h",
+                             key="chart_reset_view_btn", width="stretch",
+                             help="Reset view to last 12 hours"):
                     st.session_state[_win_key]   = DEFAULT_WINDOW_HOURS
                     st.session_state[_nonce_key] += 1
                     st.rerun()
-            with _zspace:
-                _wh = st.session_state[_win_key]
-                _wh_lbl = (f"{_wh:.2f}h" if _wh < 1 else
-                           f"{int(_wh)}h"  if _wh < 48 else
-                           f"{_wh/24:.1f}d")
-                st.markdown(
-                    f'<div style="text-align:right;font-size:11px;color:#6e7681;'
-                    f'font-family:\'JetBrains Mono\',monospace;padding-top:8px;">'
-                    f'view window: <b style="color:#79b0ff;">{_wh_lbl}</b> · '
-                    f'scroll/drag to explore full history'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
 
             try:
                 _xtz = df_chart["open_time"].dt.tz
@@ -2276,13 +2318,18 @@ with st.container():
             _view_end   = pd.Timestamp.now(tz=_xtz) if _xtz is not None else pd.Timestamp.now()
             _view_start = _view_end - pd.Timedelta(hours=float(st.session_state[_win_key]))
 
+            # ── Dynamic subplot layout based on enabled indicators ──────────────
+            _panels = ["price"]
+            if st.session_state.show_rsi   and _has_rsi:   _panels.append("rsi")
+            if st.session_state.show_macd  and _has_macd:  _panels.append("macd")
+            if st.session_state.show_stoch and _has_stoch: _panels.append("stoch")
+            n_rows = len(_panels)
+            _sub_h = {1:[1.0], 2:[0.75,0.25], 3:[0.62,0.19,0.19], 4:[0.55,0.15,0.15,0.15]}[n_rows]
             fig = make_subplots(
-                rows=3 if _has_rsi else 2, cols=1,
-                shared_xaxes=True,
-                row_heights=[0.60, 0.20, 0.20] if _has_rsi else [0.72, 0.28],
-                vertical_spacing=0.015,
-                subplot_titles=("", "Stochastic", "RSI 14") if _has_rsi else ("", "Stochastic"),
+                rows=n_rows, cols=1, shared_xaxes=True,
+                row_heights=_sub_h, vertical_spacing=0.02,
             )
+            _row = {p:(i+1) for i,p in enumerate(_panels)}
 
             # ── Candlestick ────────────────────────────────────────────────────
             fig.add_trace(go.Candlestick(
@@ -2295,34 +2342,34 @@ with st.container():
                 line=dict(width=1), whiskerwidth=0,
             ), row=1, col=1)
 
-            # ── EMA 9 ──────────────────────────────────────────────────────────
-            if "ema9" in df_chart.columns:
+            _pr = _row["price"]
+
+            # ── EMA 9 / 21 (subdued, toggleable) ───────────────────────────────
+            if st.session_state.show_ema and "ema9" in df_chart.columns:
                 fig.add_trace(go.Scatter(
                     x=df_chart["open_time"], y=df_chart["ema9"],
-                    line=dict(color="#ef5350", width=1.5),
+                    line=dict(color="rgba(239,83,80,0.85)", width=1.2),
                     name="EMA 9",
                     hovertemplate="EMA9: %{y:.4f}<extra></extra>",
-                ), row=1, col=1)
-
-            # ── EMA 21 ─────────────────────────────────────────────────────────
-            if "ema21" in df_chart.columns:
+                ), row=_pr, col=1)
+            if st.session_state.show_ema and "ema21" in df_chart.columns:
                 fig.add_trace(go.Scatter(
                     x=df_chart["open_time"], y=df_chart["ema21"],
-                    line=dict(color="#e3b341", width=1.5),
+                    line=dict(color="rgba(227,179,65,0.85)", width=1.2),
                     name="EMA 21",
                     hovertemplate="EMA21: %{y:.4f}<extra></extra>",
-                ), row=1, col=1)
+                ), row=_pr, col=1)
 
             # ── Volume histogram (scaled to bottom 18% of price panel) ──────────
-            if "volume" in df_chart.columns:
+            if st.session_state.show_volume and "volume" in df_chart.columns:
                 _prange = df_chart["high"].max() - df_chart["low"].min()
                 _vmax   = df_chart["volume"].max()
                 if _prange > 0 and _vmax > 0:
                     _vscaled = df_chart["volume"] / _vmax * _prange * 0.18
                     _vbase   = df_chart["low"].min() - _prange * 0.02
                     _vcols   = [
-                        "rgba(38,166,154,0.40)" if df_chart["close"].iloc[i] >= df_chart["open"].iloc[i]
-                        else "rgba(239,83,80,0.40)"
+                        "rgba(38,166,154,0.35)" if df_chart["close"].iloc[i] >= df_chart["open"].iloc[i]
+                        else "rgba(239,83,80,0.35)"
                         for i in range(len(df_chart))
                     ]
                     fig.add_trace(go.Bar(
@@ -2335,15 +2382,43 @@ with st.container():
                         showlegend=False,
                         customdata=df_chart["volume"],
                         hovertemplate="Vol: %{customdata:,.0f}<extra></extra>",
-                    ), row=1, col=1)
+                    ), row=_pr, col=1)
 
-            # ── Live price line (NO inline text — info shown in strip above chart) ─
+            # ── Live price line + right-edge price pill ────────────────────────
             if live_price:
                 p_color = "#26a69a" if change_pct >= 0 else "#ef5350"
                 fig.add_hline(
-                    y=live_price, row=1, col=1,
+                    y=live_price, row=_pr, col=1,
                     line=dict(color=p_color, width=1, dash="dot"),
                 )
+                # Pill on the right axis — exact live price, always visible
+                fig.add_annotation(
+                    xref=f"x{_pr} domain" if _pr > 1 else "x domain",
+                    yref=f"y{_pr}" if _pr > 1 else "y",
+                    x=1.0, y=live_price,
+                    text=f" ${live_price:,.4f} ",
+                    showarrow=False,
+                    font=dict(color="#0a0c10", size=11,
+                              family="'JetBrains Mono',monospace"),
+                    bgcolor=p_color, bordercolor=p_color, borderwidth=1,
+                    xanchor="left", yanchor="middle",
+                    row=_pr, col=1,
+                )
+
+            # ── Last candle emphasis (thin marker dot at close) ────────────────
+            try:
+                _lc_x = df_chart["open_time"].iloc[-1]
+                _lc_y = df_chart["close"].iloc[-1]
+                _lc_col = ("#26a69a" if df_chart["close"].iloc[-1] >= df_chart["open"].iloc[-1]
+                           else "#ef5350")
+                fig.add_trace(go.Scatter(
+                    x=[_lc_x], y=[_lc_y], mode="markers",
+                    marker=dict(symbol="circle", size=8, color=_lc_col,
+                                line=dict(color="#0a0c10", width=2)),
+                    showlegend=False, hoverinfo="skip",
+                ), row=_pr, col=1)
+            except Exception:
+                pass
 
             # ── Trade markers (larger, clearer) ────────────────────────────────
             # ALL historical markers are added to the figure. They don't
@@ -2396,133 +2471,158 @@ with st.container():
                                     line=dict(color="rgba(255,255,255,0.5)", width=1)),
                         name=blbl,
                         hovertemplate=f"{blbl}<br>%{{x}}<br>%{{y:.4f}}<extra></extra>",
-                    ), row=1, col=1)
+                    ), row=_pr, col=1)
 
             # ── SL / TP lines for every open position ─────────────────────────
             for _op in open_trades:
-                _ep  = _op.get("entry_price")
                 _sl  = _op.get("stop_loss")
                 _tp  = _op.get("take_profit")
-                _sid = _op.get("side","BUY")
-                _tid = _op.get("id","?")
                 if _sl:
-                    fig.add_hline(
-                        y=_sl, row=1, col=1,
-                        line=dict(color="rgba(239,83,80,0.55)", width=1, dash="dash"),
-                    )
+                    fig.add_hline(y=_sl, row=_pr, col=1,
+                        line=dict(color="rgba(239,83,80,0.55)", width=1, dash="dash"))
                 if _tp:
-                    fig.add_hline(
-                        y=_tp, row=1, col=1,
-                        line=dict(color="rgba(38,166,154,0.55)", width=1, dash="dash"),
-                    )
+                    fig.add_hline(y=_tp, row=_pr, col=1,
+                        line=dict(color="rgba(38,166,154,0.55)", width=1, dash="dash"))
 
-            # ── Stochastic (row 2) ─────────────────────────────────────────────
-            if "stoch_k" in df_chart.columns:
-                fig.add_trace(go.Scatter(
-                    x=df_chart["open_time"], y=df_chart["stoch_k"],
-                    line=dict(color="#79b0ff", width=1.5), name="%K",
-                    hovertemplate="%K: %{y:.1f}<extra></extra>",
-                ), row=2, col=1)
-                fig.add_trace(go.Scatter(
-                    x=df_chart["open_time"], y=df_chart["stoch_d"],
-                    line=dict(color="#c9d1d9", width=1.2, dash="dot"), name="%D",
-                    hovertemplate="%D: %{y:.1f}<extra></extra>",
-                ), row=2, col=1)
-                fig.add_hline(y=80, line=dict(color="rgba(239,83,80,0.38)",   width=1, dash="dash"), row=2, col=1)
-                fig.add_hline(y=20, line=dict(color="rgba(38,166,154,0.38)",  width=1, dash="dash"), row=2, col=1)
-                fig.add_hrect(y0=80, y1=100, fillcolor="rgba(239,83,80,0.06)",  line_width=0, row=2, col=1)
-                fig.add_hrect(y0=0,  y1=20,  fillcolor="rgba(38,166,154,0.06)", line_width=0, row=2, col=1)
-
-            # ── RSI (row 3) ────────────────────────────────────────────────────
-            if _has_rsi:
-                _rsi_color = df_chart["rsi"].apply(
-                    lambda v: "#ef5350" if v > 70 else ("#26a69a" if v < 30 else "#79b0ff")
-                )
+            # ── RSI panel ───────────────────────────────────────────────────────
+            if "rsi" in _row:
+                _rr = _row["rsi"]
                 fig.add_trace(go.Scatter(
                     x=df_chart["open_time"], y=df_chart["rsi"],
-                    line=dict(color="#79b0ff", width=1.5), name="RSI 14",
-                    fill="tozeroy", fillcolor="rgba(121,176,255,0.05)",
+                    line=dict(color="#b794f6", width=1.5), name="RSI 14",
                     hovertemplate="RSI: %{y:.1f}<extra></extra>",
-                ), row=3, col=1)
-                fig.add_hline(y=70, line=dict(color="rgba(239,83,80,0.38)",   width=1, dash="dash"), row=3, col=1)
-                fig.add_hline(y=30, line=dict(color="rgba(38,166,154,0.38)",  width=1, dash="dash"), row=3, col=1)
-                fig.add_hline(y=50, line=dict(color="rgba(72,80,88,0.19)",    width=1, dash="dot"),  row=3, col=1)
-                fig.add_hrect(y0=70, y1=100, fillcolor="rgba(239,83,80,0.06)",  line_width=0, row=3, col=1)
-                fig.add_hrect(y0=0,  y1=30,  fillcolor="rgba(38,166,154,0.06)", line_width=0, row=3, col=1)
+                ), row=_rr, col=1)
+                fig.add_hline(y=70, line=dict(color="rgba(239,83,80,0.45)", width=1, dash="dash"), row=_rr, col=1)
+                fig.add_hline(y=30, line=dict(color="rgba(38,166,154,0.45)", width=1, dash="dash"), row=_rr, col=1)
+                fig.add_hline(y=50, line=dict(color="rgba(110,118,129,0.25)", width=1, dash="dot"), row=_rr, col=1)
 
-            # ── Layout ─────────────────────────────────────────────────────────
-            G = "#1a2030"
-            n_rows = 3 if _has_rsi else 2
+            # ── MACD panel ──────────────────────────────────────────────────────
+            if "macd" in _row:
+                _mr = _row["macd"]
+                _hist_col = ["rgba(38,166,154,0.55)" if v >= 0 else "rgba(239,83,80,0.55)"
+                             for v in df_chart["macd_hist"]]
+                fig.add_trace(go.Bar(
+                    x=df_chart["open_time"], y=df_chart["macd_hist"],
+                    marker_color=_hist_col, marker_line_width=0,
+                    name="Hist", showlegend=False,
+                    hovertemplate="Hist: %{y:.4f}<extra></extra>",
+                ), row=_mr, col=1)
+                fig.add_trace(go.Scatter(
+                    x=df_chart["open_time"], y=df_chart["macd"],
+                    line=dict(color="#79b0ff", width=1.4), name="MACD",
+                    hovertemplate="MACD: %{y:.4f}<extra></extra>",
+                ), row=_mr, col=1)
+                fig.add_trace(go.Scatter(
+                    x=df_chart["open_time"], y=df_chart["macd_signal"],
+                    line=dict(color="#e3b341", width=1.2, dash="dot"), name="Signal",
+                    hovertemplate="Signal: %{y:.4f}<extra></extra>",
+                ), row=_mr, col=1)
+                fig.add_hline(y=0, line=dict(color="rgba(110,118,129,0.35)", width=1), row=_mr, col=1)
+
+            # ── Stochastic panel (optional) ────────────────────────────────────
+            if "stoch" in _row:
+                _sr = _row["stoch"]
+                fig.add_trace(go.Scatter(
+                    x=df_chart["open_time"], y=df_chart["stoch_k"],
+                    line=dict(color="#79b0ff", width=1.4), name="%K",
+                    hovertemplate="%K: %{y:.1f}<extra></extra>",
+                ), row=_sr, col=1)
+                fig.add_trace(go.Scatter(
+                    x=df_chart["open_time"], y=df_chart["stoch_d"],
+                    line=dict(color="#c9d1d9", width=1.1, dash="dot"), name="%D",
+                    hovertemplate="%D: %{y:.1f}<extra></extra>",
+                ), row=_sr, col=1)
+                fig.add_hline(y=80, line=dict(color="rgba(239,83,80,0.45)",  width=1, dash="dash"), row=_sr, col=1)
+                fig.add_hline(y=20, line=dict(color="rgba(38,166,154,0.45)", width=1, dash="dash"), row=_sr, col=1)
+
+            # ── Subtle corner labels for each sub-panel (no big titles) ────────
+            _panel_lbl = {"rsi": "RSI 14", "macd": "MACD 12/26/9", "stoch": "Stoch 14"}
+            for _p, _r in _row.items():
+                if _p == "price": continue
+                fig.add_annotation(
+                    xref=f"x{_r} domain" if _r > 1 else "x domain",
+                    yref=f"y{_r} domain" if _r > 1 else "y domain",
+                    x=0.005, y=0.95, xanchor="left", yanchor="top",
+                    text=_panel_lbl.get(_p, _p),
+                    showarrow=False,
+                    font=dict(size=9, color="#6e7681",
+                              family="'JetBrains Mono',monospace"),
+                    row=_r, col=1,
+                )
+
+            # ── Layout (TradingView-style: minimal, sparse grid) ───────────────
+            G       = "rgba(48,54,61,0.35)"   # very subtle gridlines
+            G_ZERO  = "rgba(48,54,61,0.55)"
+            _heights = {1: 560, 2: 660, 3: 760, 4: 860}
             fig.update_layout(
                 paper_bgcolor="#0a0c10",
                 plot_bgcolor="#0a0c10",
-                font=dict(color="#6e7681", family="'JetBrains Mono',monospace", size=10),
+                font=dict(color="#9ba3ad", family="'JetBrains Mono',monospace", size=10),
                 xaxis_rangeslider_visible=False,
-                height=700,
-                # Right margin shrunk (no in-chart legend); bottom expanded for legend below
-                margin=dict(l=0, r=64, t=18, b=72),
+                height=_heights[n_rows],
+                margin=dict(l=0, r=78, t=10, b=58),  # extra right margin for price pill
                 showlegend=True,
-                # Legend BELOW chart (horizontal) — never overlays candles
                 legend=dict(
-                    bgcolor="rgba(13,17,23,0.0)",
+                    bgcolor="rgba(13,17,23,0)",
                     bordercolor="rgba(0,0,0,0)", borderwidth=0,
                     font=dict(size=10, color="#9ba3ad"),
                     orientation="h",
-                    yanchor="top", y=-0.10,
+                    yanchor="top", y=-0.06,
                     xanchor="center", x=0.5,
                     itemsizing="constant",
                 ),
                 hovermode="x unified",
                 hoverlabel=dict(bgcolor="#161b22", bordercolor="#30363d",
                                 font_color="#c9d1d9", font_size=11),
-                # Drag = pan (TradingView-style). Wheel = zoom (config below).
-                # Box-select / lasso are removed from the modebar.
                 dragmode="pan",
-                # uirevision: stable across reruns (preserves user zoom/pan) but
-                # tied to symbol+interval+reset-nonce so:
-                #   - switching symbol/interval → fresh view
-                #   - clicking any view button   → fresh view (nonce bumps)
-                #   - normal auto-refresh        → user's zoom is preserved
                 uirevision=f"alphatrade-main-chart-"
                            f"{st.session_state.symbol}-"
                            f"{st.session_state.interval}-"
                            f"{st.session_state[_nonce_key]}",
             )
+            # X-axis: shared, sparse grid, scroll/pan unlocked, default 12h window
             for r in range(1, n_rows + 1):
                 fig.update_xaxes(
-                    gridcolor=G, gridwidth=1, zerolinecolor=G,
-                    showspikes=True, spikecolor="#484f58", spikethickness=1,
-                    tickfont=dict(size=10), row=r, col=1,
-                    # Exact HH:MM:SS Europe/London time (klines already tz-converted in binance_client)
-                    tickformat="%H:%M:%S",
+                    gridcolor=G, gridwidth=1, zerolinecolor=G_ZERO,
+                    showspikes=True, spikecolor="#484f58",
+                    spikethickness=1, spikedash="dot", spikemode="across",
+                    tickfont=dict(size=10, color="#6e7681"),
+                    tickformat="%H:%M\n%b-%d",
                     hoverformat="%Y-%m-%d %H:%M:%S",
-                    # Initial view = last N hours; user can pan/zoom past it.
                     range=[_view_start, _view_end],
-                    # Explicitly allow pan + zoom on x-axis.
-                    fixedrange=False,
-                    autorange=False,
+                    fixedrange=False, autorange=False,
+                    nticks=8,
+                    row=r, col=1,
                 )
+            # Price Y-axis
             fig.update_yaxes(
-                gridcolor=G, gridwidth=1, zerolinecolor=G,
+                gridcolor=G, gridwidth=1, zerolinecolor=G_ZERO,
                 showspikes=True, spikecolor="#484f58",
-                tickfont=dict(size=10), tickprefix="$",
-                row=1, col=1,
-                # Let Y rescale as user pans through different price regions.
+                spikethickness=1, spikedash="dot",
+                tickfont=dict(size=10, color="#9ba3ad"),
+                tickprefix="$", side="right", nticks=8,
                 autorange=True, fixedrange=False,
+                row=_row["price"], col=1,
             )
-            fig.update_yaxes(
-                gridcolor=G, gridwidth=1, range=[0, 100],
-                tickfont=dict(size=10), row=2, col=1, fixedrange=False,
-            )
-            if _has_rsi:
+            # RSI / Stoch Y-axes: pinned 0–100, sparse ticks
+            for _p in ("rsi", "stoch"):
+                if _p in _row:
+                    fig.update_yaxes(
+                        gridcolor=G, gridwidth=1, range=[0, 100],
+                        tickvals=[20, 50, 80] if _p == "stoch" else [30, 50, 70],
+                        tickfont=dict(size=9, color="#6e7681"),
+                        side="right", fixedrange=False,
+                        row=_row[_p], col=1,
+                    )
+            # MACD Y-axis: autoscale, sparse
+            if "macd" in _row:
                 fig.update_yaxes(
-                    gridcolor=G, gridwidth=1, range=[0, 100],
-                    tickfont=dict(size=10), row=3, col=1, fixedrange=False,
+                    gridcolor=G, gridwidth=1, zerolinecolor=G_ZERO,
+                    tickfont=dict(size=9, color="#6e7681"),
+                    side="right", nticks=4,
+                    autorange=True, fixedrange=False,
+                    row=_row["macd"], col=1,
                 )
-            # Subplot title styling
-            for ann in fig.layout.annotations:
-                ann.font.color = "#484f58"
-                ann.font.size  = 9
 
             # Stable key → Streamlit reuses the same DOM node across reruns (no flicker / no remount)
             # scrollZoom=True lets the user wheel/pinch-zoom freely; doubleClick="reset"
