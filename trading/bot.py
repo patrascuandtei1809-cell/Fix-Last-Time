@@ -581,6 +581,9 @@ def create_bot(
     global_risk:           Optional[GlobalRiskManager] = None,
     exchange:              Optional[Exchange] = None,
     initial_balance:       float = 1000.0,
+    # AI assist (extra decision layer)
+    ai_assist:             bool = False,
+    ai_aggressiveness:     str  = "Balanced",
 ) -> TradingBot:
     """Build (or rebuild) the singleton bot. LIVE Binance Mainnet only."""
     global _bot, _primary_symbol
@@ -630,17 +633,19 @@ def create_bot(
         for sym in sym_list:
             rm = per_sym[sym]
             w = SymbolWorker(
-                exchange        = exchange,
-                symbol          = sym,
-                strategy        = strategy,
-                risk_manager    = rm,
-                interval        = interval,
-                price_threshold = threshold,
-                on_log          = log_activity,
-                on_state_update = _set_shared_for,
-                on_open_trade   = add_trade,
-                on_close_trade  = close_trade,
-                on_telegram     = _tg_dispatch,
+                exchange          = exchange,
+                symbol            = sym,
+                strategy          = strategy,
+                risk_manager      = rm,
+                interval          = interval,
+                price_threshold   = threshold,
+                on_log            = log_activity,
+                on_state_update   = _set_shared_for,
+                on_open_trade     = add_trade,
+                on_close_trade    = close_trade,
+                on_telegram       = _tg_dispatch,
+                ai_assist         = ai_assist,
+                ai_aggressiveness = ai_aggressiveness,
             )
             workers[f"{exchange.name}:{sym}"] = w
 

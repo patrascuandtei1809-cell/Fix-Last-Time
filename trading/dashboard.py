@@ -499,6 +499,8 @@ def _init():
         "risk_manager":     RiskManager(),
         "initial_balance":  1000.0,
         "manual_amount":    10.0,                # fixed $10 per trade (scalping)
+        "ai_assist":        False,               # AI Decision Engine OFF by default
+        "ai_aggressiveness": "Balanced",         # Conservative | Balanced | Aggressive
         "refresh_secs":     5,
         "alert_open_ids":      [],
         "alert_closed_ids":    [],
@@ -600,16 +602,18 @@ def _maybe_resume_bot():
     _global_rm = GlobalRiskManager(st.session_state.global_risk)
     try:
         b = _bm.create_bot(
-            client          = st.session_state.client,
-            symbols         = syms,
-            per_symbol_risk = _per_sym_rm,
-            global_risk     = _global_rm,
-            strategy        = st.session_state.strategy,
-            risk_manager    = st.session_state.risk_manager,
-            interval        = st.session_state.interval,
-            check_every     = st.session_state.check_every,
-            threshold       = float(st.session_state.threshold) / 100,
-            initial_balance = st.session_state.initial_balance,
+            client            = st.session_state.client,
+            symbols           = syms,
+            per_symbol_risk   = _per_sym_rm,
+            global_risk       = _global_rm,
+            strategy          = st.session_state.strategy,
+            risk_manager      = st.session_state.risk_manager,
+            interval          = st.session_state.interval,
+            check_every       = st.session_state.check_every,
+            threshold         = float(st.session_state.threshold) / 100,
+            initial_balance   = st.session_state.initial_balance,
+            ai_assist         = bool(st.session_state.get("ai_assist", False)),
+            ai_aggressiveness = st.session_state.get("ai_aggressiveness","Balanced"),
         )
         b._initial_balance = st.session_state.initial_balance
         b.start()
@@ -629,6 +633,7 @@ if not st.session_state.get("_settings_loaded"):
         "threshold", "initial_balance", "manual_amount",
         "refresh_secs", "tg_enabled", "tg_token", "tg_chat_id",
         "active_symbols", "bot_was_running",
+        "ai_assist", "ai_aggressiveness",
     )
     for _k in _PERSIST_KEYS:
         if _k in _persisted:
@@ -1539,6 +1544,35 @@ with st.sidebar:
                          help="Trigger % for Price Movement. 0.05% = aggressive scalping, 0.30%+ = conservative.")
     st.session_state.threshold = thr_val
 
+    # ── 🧠 AI Decision Engine ─────────────────────────────────────────────────
+    # Extra decision layer that scans RSI/MACD/Volume/EMA/momentum and refuses
+    # obvious dumps, pump-tops, and flat markets. Never bypasses risk gates.
+    _ai1, _ai2 = st.columns([0.42, 0.58])
+    with _ai1:
+        st.session_state.ai_assist = st.toggle(
+            "🧠 AI Assist",
+            value=bool(st.session_state.get("ai_assist", False)),
+            key="ai_assist_toggle",
+            help="When ON, every bot tick gets an extra AI scan that can "
+                 "veto BUY into dumps, BUY at pump tops, or trades in flat "
+                 "markets. Risk gates (SL/TP/exposure) always run regardless.",
+        )
+    with _ai2:
+        st.session_state.ai_aggressiveness = st.selectbox(
+            "Aggressiveness",
+            options=["Conservative", "Balanced", "Aggressive"],
+            index=["Conservative","Balanced","Aggressive"].index(
+                st.session_state.get("ai_aggressiveness","Balanced")),
+            key="ai_aggressiveness_sel",
+            help="Conservative: conf≥70, vetoes 0.3% dumps, only takes high-"
+                 "confidence trades. Balanced: conf≥55. Aggressive: conf≥40, "
+                 "allows AI to initiate trades when strategy says HOLD.",
+            disabled=not st.session_state.ai_assist,
+        )
+    if st.session_state.ai_assist:
+        st.caption(f"🧠 AI **{st.session_state.ai_aggressiveness}** active — "
+                   f"every tick gets a [AI] log line with decision + confidence + reason.")
+
     # ── 🔥 AGGRESSIVE LIVE preset ─────────────────────────────────────────────
     # Maximum-aggression scalping: 5s ticks, 0.03% threshold, 90% of free USDT
     # per trade, max 2 open. Still respects global risk caps. Use when you
@@ -1549,6 +1583,10 @@ with st.sidebar:
                       "Respects global risk caps. Bot will enter on any micro-move."):
         st.session_state.check_every    = 5
         st.session_state.threshold      = 0.03
+        # AGGRESSIVE preset also flips AI to its Aggressive profile so it
+        # can initiate trades when the strategy says HOLD.
+        st.session_state.ai_assist          = True
+        st.session_state.ai_aggressiveness  = "Aggressive"
         # Size: 90% of free USDT (computed live; persisted as the dollar amount)
         _free_now = 0.0
         try:
@@ -1635,6 +1673,8 @@ with st.sidebar:
                     check_every=ck_val,
                     threshold=thr_val / 100,
                     initial_balance=st.session_state.initial_balance,
+                    ai_assist=bool(st.session_state.get("ai_assist", False)),
+                    ai_aggressiveness=st.session_state.get("ai_aggressiveness","Balanced"),
                 )
                 b._initial_balance = st.session_state.initial_balance
                 b.start()
@@ -2153,6 +2193,8 @@ with st.container():
                             check_every=st.session_state.check_every,
                             threshold=st.session_state.threshold / 100,
                             initial_balance=st.session_state.initial_balance,
+                            ai_assist=bool(st.session_state.get("ai_assist", False)),
+                            ai_aggressiveness=st.session_state.get("ai_aggressiveness","Balanced"),
                         )
                         b._initial_balance = st.session_state.initial_balance
                         b.start()

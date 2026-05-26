@@ -9,6 +9,7 @@ from typing import Optional, Dict, List, Callable
 from exchanges.base import Exchange
 from strategy import get_signal, get_indicators
 from risk import RiskManager
+from ai_engine import ai_decide
 
 
 class SymbolWorker:
@@ -25,6 +26,8 @@ class SymbolWorker:
         on_open_trade:   Optional[Callable] = None,
         on_close_trade:  Optional[Callable] = None,
         on_telegram:     Optional[Callable] = None,
+        ai_assist:       bool = False,
+        ai_aggressiveness: str = "Balanced",
     ):
         self.exchange   = exchange
         self.symbol     = symbol
@@ -32,6 +35,8 @@ class SymbolWorker:
         self.risk       = risk_manager
         self.interval   = interval
         self.threshold  = price_threshold
+        self.ai_assist  = bool(ai_assist)
+        self.ai_aggressiveness = ai_aggressiveness or "Balanced"
 
         self._on_log    = on_log    or (lambda *_a, **_kw: None)
         self._on_state  = on_state_update or (lambda *_a, **_kw: None)
@@ -121,6 +126,40 @@ class SymbolWorker:
         # Concise per-symbol decision line (matches user-requested format)
         print(f"[BOT] {self.symbol} signal={signal} reason={reason}", flush=True)
         self._log("SIGNAL", f"{tag} 📊 [{self.strategy}] → {signal} | conf={confidence} | {reason}")
+
+        # 3b. AI Decision Engine — extra decision layer (veto + optional override).
+        # Reads RSI/MACD/Volume/EMA/momentum and refuses obvious dumps, pump-tops,
+        # and flat markets. Never bypasses risk gates — those still run below.
+        if self.ai_assist:
+            try:
+                _free = 0.0
+                try:
+                    _b = self.exchange.get_balance("USDT")
+                    _free = float(_b.get("free", 0.0))
+                except Exception:
+                    _free = 0.0
+                _ai = ai_decide(
+                    df_ind if "df_ind" in locals() else df,
+                    strategy_signal       = signal,
+                    strategy_reason       = reason,
+                    open_positions_for_sym = my_open,
+                    free_usdt             = _free,
+                    aggressiveness        = self.ai_aggressiveness,
+                )
+                # Always log the AI line — operator wants to see every decision.
+                print(f"[AI] {self.symbol} decision={_ai.decision} "
+                      f"confidence={_ai.confidence} reason={_ai.reason}", flush=True)
+                self._log("AI",
+                    f"{tag} 🧠 [{self.ai_aggressiveness}] → {_ai.decision} | "
+                    f"conf={_ai.confidence} | {_ai.reason}")
+                # AI overrides the strategy signal (it had it as a strong prior).
+                signal, reason, confidence = _ai.decision, _ai.reason, _ai.confidence
+                self._on_state(self.symbol, signal=signal, reason=reason,
+                               confidence=confidence)
+            except Exception as _e:
+                # AI engine must NEVER break trading. Fall back to strategy signal.
+                self._log("WARNING", f"{tag} AI engine error (falling back to "
+                                     f"strategy signal): {_e}")
 
         if signal == "HOLD":
             # Clear block_reason — HOLD is a strategy decision, not a risk gate.
