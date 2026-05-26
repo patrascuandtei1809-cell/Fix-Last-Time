@@ -2924,18 +2924,27 @@ with st.container():
                     return ts.tz_localize("UTC").tz_convert(_xtz)
                 return ts.tz_convert(_xtz)
 
-            for t in all_trades:
+            # CRITICAL: filter to ONLY trades for the currently-viewed symbol.
+            # Mixing ETH trades onto the BTC chart blows out the Y-axis (e.g.
+            # ETH $2k SL drawn on a BTC $76k chart drags the scale to $0).
+            _chart_sym = st.session_state.symbol
+            _sym_trades = [t for t in all_trades
+                           if (t.get("coin") or "").upper() == _chart_sym.upper()]
+            for t in _sym_trades:
                 try:
                     ts    = _to_xtz(t.get("open_time"))
                     ep    = t.get("entry_price")
                     ttype = t.get("type", "manual")
                     side  = t.get("side", "BUY")
-                    if ep is None:
+                    # Defensive: skip trades with missing OR zero entry price
+                    # (corrupt rows would otherwise pin the Y-axis to $0).
+                    if ep is None or float(ep or 0) <= 0:
                         continue
                     k = ("mb" if side == "BUY" else "ms") if ttype == "manual" else ("bb" if side == "BUY" else "bs")
                     buckets[k][0].append(ts)
                     buckets[k][1].append(ep)
-                    if t.get("exit_price") and t.get("close_time"):
+                    if t.get("exit_price") and t.get("close_time") \
+                            and float(t.get("exit_price") or 0) > 0:
                         cts = _to_xtz(t["close_time"])
                         xk = "mx" if ttype == "manual" else "bx"
                         buckets[xk][0].append(cts)
@@ -2956,14 +2965,17 @@ with st.container():
                     ), row=_pr, col=1)
 
             # ── SL / TP lines for every open position (toggle) ────────────────
+            # Same symbol filter — don't draw ETH's SL/TP on the BTC chart.
             if st.session_state.show_sl_tp:
-                for _op in open_trades:
+                _sym_open = [t for t in open_trades
+                             if (t.get("coin") or "").upper() == _chart_sym.upper()]
+                for _op in _sym_open:
                     _sl  = _op.get("stop_loss")
                     _tp  = _op.get("take_profit")
-                    if _sl:
+                    if _sl and float(_sl or 0) > 0:
                         fig.add_hline(y=_sl, row=_pr, col=1,
                             line=dict(color="rgba(239,83,80,0.55)", width=1, dash="dash"))
-                    if _tp:
+                    if _tp and float(_tp or 0) > 0:
                         fig.add_hline(y=_tp, row=_pr, col=1,
                             line=dict(color="rgba(38,166,154,0.55)", width=1, dash="dash"))
 
