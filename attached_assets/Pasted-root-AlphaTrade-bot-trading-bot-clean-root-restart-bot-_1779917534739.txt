@@ -1,0 +1,78 @@
+root@AlphaTrade-bot:~/trading-bot-clean# /root/restart-bot.sh
+remote: Enumerating objects: 47, done.
+remote: Counting objects: 100% (47/47), done.
+remote: Compressing objects: 100% (12/12), done.
+remote: Total 38 (delta 31), reused 33 (delta 26), pack-reused 0 (from 0)
+Unpacking objects: 100% (38/38), 13.04 KiB | 360.00 KiB/s, done.
+From https://github.com/patrascuandtei1809-cell/Fix-Last-Time
+   6900d0a..80de7b7  main       -> origin/main
+Updating 6900d0a..80de7b7
+error: Your local changes to the following files would be overwritten by merge:
+        trading/data/settings.json
+Please commit your changes or stash them before you merge.
+Aborting
+root@AlphaTrade-bot:~/trading-bot-clean# cat > /root/restart-bot.sh << 'EOF'
+#!/bin/bash
+cd /root/trading-bot-clean || exit 1
+echo "[1/5] Stashing local settings.json and pulling..."
+git stash push -m "droplet-local-$(date +%s)" trading/data/settings.json 2>/dev/null
+git pull || { echo "git pull FAILED"; exit 1; }
+echo "[2/5] Killing port 8501..."
+fuser -k 8501/tcp 2>/dev/null
+pkill -9 -f streamlit 2>/dev/null
+for i in 1 2 3 4 5; do
+    ss -tlnp 2>/dev/null | grep -q ':8501 ' || break
+    sleep 1
+done
+echo "[3/5] OPENAI_API_KEY in shell: $([ -n "$OPENAI_API_KEY" ] && echo YES || echo NO)"
+echo "[4/5] Launching streamlit..."
+cd trading || exit 1
+nohup /root/trading-bot-clean/venv/bin/streamlit run dashboard.py \
+    --server.port 8501 --server.address 0.0.0.0 \
+    > /root/streamlit.log 2>&1 &
+sleep 3
+PID=$(pgrep -f "streamlit run dashboard.py" | head -1)
+echo "[5/5] PID=$PID  OPENAI in process: $(cat /proc/$PID/environ 2>/dev/null | tr '\0' '\n' | grep -c OPENAI_API_KEY)"
+tail -15 /root/streamlit.log
+EOF
+chmod +x /root/restart-bot.sh
+/root/restart-bot.sh
+[1/5] Stashing local settings.json and pulling...
+Saved working directory and index state On main: droplet-local-1779917515
+Updating 6900d0a..80de7b7
+Fast-forward
+ FETCH_HEAD                                                                                       |   0
+ attached_assets/Pasted--workspace-git-stash-push-m-local-settings-trading-data_1779916267715.txt |  42 ++++++++++++++++++++++++++++++++++++++
+ attached_assets/Pasted--workspace-git-stash-push-m-local-settings-trading-data_1779917259024.txt |  51 ++++++++++++++++++++++++++++++++++++++++++++++
+ attached_assets/Pasted-FINAL-NEXT-LEVEL-PLAN-DO-NOT-CODE-RANDOMLY-Important-Be_1779915071271.txt | 118 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ attached_assets/Pasted-Wi-Uz-ajs1gA-bashrc-source-bashrc-root-AlphaTrade-bot-c_1779913920480.txt |  62 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ attached_assets/Pasted-fi-if-color-prompt-yes-then-PS1-debian-chroot-debian-ch_1779914113704.txt |  56 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ attached_assets/Pasted-root-134-122-107-236-s-password-Permission-denied-pleas_1779913662685.txt |  79 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ main                                                                                             |   0
+ replit.md                                                                                        |   5 ++++-
+ trading/dashboard.py                                                                             |  73 ++++++++++++++++++++++++++++++++++-------------------------------
+ trading/data/settings.json                                                                       |   4 ++--
+ trading/risk.py                                                                                  |  20 ++++++++++--------
+ trading/symbol_worker.py                                                                         |  43 +++++++++++++++++++++++++--------------
+ 13 files changed, 493 insertions(+), 60 deletions(-)
+ create mode 100644 FETCH_HEAD
+ create mode 100644 attached_assets/Pasted--workspace-git-stash-push-m-local-settings-trading-data_1779916267715.txt
+ create mode 100644 attached_assets/Pasted--workspace-git-stash-push-m-local-settings-trading-data_1779917259024.txt
+ create mode 100644 attached_assets/Pasted-FINAL-NEXT-LEVEL-PLAN-DO-NOT-CODE-RANDOMLY-Important-Be_1779915071271.txt
+ create mode 100644 attached_assets/Pasted-Wi-Uz-ajs1gA-bashrc-source-bashrc-root-AlphaTrade-bot-c_1779913920480.txt
+ create mode 100644 attached_assets/Pasted-fi-if-color-prompt-yes-then-PS1-debian-chroot-debian-ch_1779914113704.txt
+ create mode 100644 attached_assets/Pasted-root-134-122-107-236-s-password-Permission-denied-pleas_1779913662685.txt
+ create mode 100644 main
+[2/5] Killing port 8501...
+ 643871[3/5] OPENAI_API_KEY in shell: YES
+[4/5] Launching streamlit...
+[5/5] PID=645243  OPENAI in process: 1
+2026-05-27 22:31:58.546 Uvicorn server started on 0.0.0.0:8501
+
+  You can now view your Streamlit app in your browser.
+
+  Local URL: http://localhost:8501
+  Network URL: http://134.122.107.236:8501
+  External URL: http://134.122.107.236:8501
+
+root@AlphaTrade-bot:~/trading-bot-clean# 
