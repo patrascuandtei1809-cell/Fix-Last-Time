@@ -1,0 +1,118 @@
+FINAL NEXT LEVEL PLAN — DO NOT CODE RANDOMLY
+
+Important:
+Before editing code, first analyze current bot behavior and explain what will change.
+Goal is to avoid wasting money on many small edits.
+
+CURRENT STATE:
+- Bot works
+- Binance live works
+- Active Scalper works
+- OpenAI/GPT Hybrid is connected
+- Problem: bot is still too restricted by risk/exposure caps
+- It sees BUY/SELL signals but often blocks them
+- GPT is only advisory, not predictive
+- We want 3-symbol active scalping on BTCUSDT, ETHUSDT, SOLUSDT
+
+MAIN GOAL:
+Create a smarter aggressive scalping system that:
+- trades more often
+- uses all 3 coins properly
+- does not stay on HOLD for hours
+- uses GPT only as advisor, not blocker
+- manages risk automatically
+- avoids wasting money on useless edits
+
+IMPORTANT TRUTH:
+GPT cannot know the future.
+It should not pretend to predict.
+It should estimate probability based on current market structure:
+momentum, EMA, RSI, MACD, volume, candles, volatility.
+
+IMPLEMENT THIS:
+
+1. Keep ACTIVE SCALPER as the only mode.
+
+2. Fix risk/exposure logic:
+- remove overly strict 50% concentration cap
+- allow trading across BTC, ETH, SOL
+- max 1 open position per symbol
+- max 3 open positions total
+- allow higher capital use, but not stupid all-in
+
+3. Position sizing:
+- default: use 30–50% of available USDT per trade
+- never below Binance minimum
+- never use 100% of balance
+- always leave 15–25% USDT free
+- exit must close 100% of the position when SL/TP/exit signal hits
+
+4. Entry logic:
+BUY if:
+- price movement >= 0.01%
+- or EMA9 slope turns up
+- or momentum flips up
+- or bounce after red candles
+- or GPT supports BUY with confidence > 60
+
+SELL / EXIT if:
+- momentum weakens
+- EMA9 slope turns down
+- price reverses fast
+- SL hits
+- TP hits
+- GPT supports SELL with confidence > 60
+
+5. GPT Hybrid logic:
+- GPT must NOT block trades
+- GPT only confirms / boosts confidence
+- max 1 GPT call per symbol every 10 seconds
+- if GPT fails, bot continues normally
+- show GPT verdict, confidence and reason in dashboard
+
+6. Anti-idle:
+- if no trade for 5 minutes, lower threshold
+- if no trade for 10 minutes, force next valid micro-entry
+- bot must not stay inactive all day
+
+7. Dashboard:
+Show clearly:
+- why BUY
+- why SELL
+- why HOLD
+- what blocked the trade
+- GPT status
+- capital used
+- current exposure per symbol
+- exact position size before order
+
+8. Profit logic:
+- TP: 0.3%–0.7%
+- SL: 0.3%–0.5%
+- move stop to breakeven at +0.2%
+- close fast if reversal appears
+- do not hold losing scalps too long
+
+9. Manual trades:
+If user manually buys BTC/ETH/SOL:
+- bot must detect and manage it
+- bot must close it on exit rules
+- treat manual and bot positions the same
+
+10. Final test:
+After coding:
+- run syntax check
+- restart dashboard
+- verify Binance connection
+- verify OpenAI key detected
+- verify GPT badge works
+- verify bot logs BUY/SELL/HOLD reasons
+- verify no fake blocked states
+
+DO NOT add new buttons unless necessary.
+DO NOT create more modes.
+DO NOT spend time on UI cosmetics.
+Focus only on trading logic, risk logic, GPT advisor, and execution.
+
+Final target:
+A bot that trades BTC/ETH/SOL actively, uses GPT as extra intelligence, enters more often, exits faster, and manages risk without staying on HOLD forever.
