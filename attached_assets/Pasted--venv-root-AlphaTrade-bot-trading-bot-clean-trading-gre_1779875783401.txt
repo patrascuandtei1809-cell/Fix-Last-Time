@@ -1,0 +1,23 @@
+(venv) root@AlphaTrade-bot:~/trading-bot-clean/trading# grep -E "FORCED MICRO-ENTRY|decision=BUY|decision=SELL" /root/alphatrade.log | tail -20
+(venv) root@AlphaTrade-bot:~/trading-bot-clean/trading# pkill -9 -f "streamlit run dashboard.py"
+cd /root/trading-bot-clean && git pull
+cd trading && source ../venv/bin/activate
+nohup streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0 > /root/alphatrade.log 2>&1 & disown
+remote: Enumerating objects: 16, done.
+remote: Counting objects: 100% (16/16), done.
+remote: Compressing objects: 100% (2/2), done.
+remote: Total 9 (delta 7), reused 9 (delta 7), pack-reused 0 (from 0)
+Unpacking objects: 100% (9/9), 12.46 KiB | 797.00 KiB/s, done.
+From https://github.com/patrascuandtei1809-cell/Fix-Last-Time
+   72fc121..fa79429  main       -> origin/main
+Updating 72fc121..fa79429
+Fast-forward
+ attached_assets/Pasted-We-need-to-implement-PRO-MODE-FAST-SCALPER-MODE-with-le_1779875225394.txt | 172 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ trading/ai_engine.py                                                                             | 219 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++----------
+ trading/bot.py                                                                                   |  22 ++++++++---
+ trading/dashboard.py                                                                             | 154 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-----
+ trading/symbol_worker.py                                                                         | 198 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-------
+ 5 files changed, 717 insertions(+), 48 deletions(-)
+ create mode 100644 attached_assets/Pasted-We-need-to-implement-PRO-MODE-FAST-SCALPER-MODE-with-le_1779875225394.txt
+[1] 589382
+(venv) root@AlphaTrade-bot:~/trading-bot-clean/trading# 
