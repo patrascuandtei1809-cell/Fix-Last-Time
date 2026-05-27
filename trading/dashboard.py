@@ -680,27 +680,28 @@ if not st.session_state.get("_settings_loaded"):
     _syms_persist = st.session_state.get("active_symbols") or []
     if len(_syms_persist) < 2:
         st.session_state.active_symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
-    # Risk sizing: clamp to ACTIVE SCALPER spec ($10–$20, 1/sym).
+    # Risk sizing: ACTIVE SCALPER dynamic % sizing, 1 open per symbol, 3 total.
     try:
         _r = st.session_state.risk
-        _r.invest_per_trade = max(10.0, min(20.0, float(_r.invest_per_trade or 10.0)))
-        _r.max_trade_usdt   = max(10.0, min(20.0, float(_r.max_trade_usdt   or 20.0)))
+        if not hasattr(_r, "dynamic_size_pct") or not _r.dynamic_size_pct:
+            _r.dynamic_size_pct = 40.0
         _r.max_per_symbol   = 1
-        _r.max_open_trades  = max(1, min(3, int(_r.max_open_trades or 1)))
+        _r.max_open_trades  = 1
         _r.cooldown_seconds = min(int(_r.cooldown_seconds or 0), 30)
     except Exception:
         pass
     for _sym, _rs in (st.session_state.get("per_symbol_risk") or {}).items():
         try:
-            _rs.invest_per_trade = max(10.0, min(20.0, float(_rs.invest_per_trade or 10.0)))
-            _rs.max_trade_usdt   = max(10.0, min(20.0, float(_rs.max_trade_usdt   or 20.0)))
+            if not hasattr(_rs, "dynamic_size_pct") or not _rs.dynamic_size_pct:
+                _rs.dynamic_size_pct = 40.0
             _rs.max_per_symbol   = 1
-            _rs.max_open_trades  = max(1, min(3, int(_rs.max_open_trades or 1)))
+            _rs.max_open_trades  = 1
             _rs.cooldown_seconds = min(int(_rs.cooldown_seconds or 0), 30)
         except Exception:
             pass
     try:
         st.session_state.global_risk.max_open_trades_total = 3
+        st.session_state.global_risk.max_exposure_per_symbol_pct = 100.0
     except Exception:
         pass
 
@@ -1779,16 +1780,15 @@ with st.sidebar:
 
     if st.button("🔄 Reset to ACTIVE SCALPER defaults",
                  width="stretch", key="reset_scalp_defaults_btn",
-                 help="Snap check=2s, threshold=0.01%, size=$10, "
-                      "SL=0.5%, TP=1.5%, max_open=1/sym, cooldown=0. Keeps API keys."):
+                 help="Snap check=2s, threshold=0.01%, size=40% of free USDT, "
+                      "SL=0.4%, TP=0.5%, max_open=1/sym, 3 total, cooldown=0. Keeps API keys."):
         st.session_state.check_every    = 2
         st.session_state.threshold      = 0.01
         st.session_state.manual_amount  = 10.0
         try:
-            st.session_state.risk.invest_per_trade  = 10.0
-            st.session_state.risk.max_trade_usdt    = 20.0
-            st.session_state.risk.stop_loss_pct     = 0.5
-            st.session_state.risk.take_profit_pct   = 1.5
+            st.session_state.risk.dynamic_size_pct  = 40.0
+            st.session_state.risk.stop_loss_pct     = 0.4
+            st.session_state.risk.take_profit_pct   = 0.5
             st.session_state.risk.max_per_symbol    = 1
             st.session_state.risk.max_open_trades   = 1
             st.session_state.risk.cooldown_seconds  = 0
@@ -1796,22 +1796,24 @@ with st.sidebar:
             pass
         for _sym, _rs in (st.session_state.get("per_symbol_risk") or {}).items():
             try:
-                _rs.invest_per_trade  = 10.0
-                _rs.max_trade_usdt    = 20.0
-                _rs.stop_loss_pct     = 0.5
-                _rs.take_profit_pct   = 1.5
+                _rs.dynamic_size_pct  = 40.0
+                _rs.stop_loss_pct     = 0.4
+                _rs.take_profit_pct   = 0.5
                 _rs.max_per_symbol    = 1
                 _rs.max_open_trades   = 1
                 _rs.cooldown_seconds  = 0
             except Exception:
                 pass
         try:
-            st.session_state.global_risk.max_open_trades_total = 3
+            st.session_state.global_risk.max_open_trades_total      = 3
+            st.session_state.global_risk.max_exposure_per_symbol_pct = 100.0
+            st.session_state.global_risk.max_total_exposure_usdt    = 1000.0
         except Exception:
             pass
         log_activity("INFO",
                      "⚡ ACTIVE SCALPER defaults applied — check=2s · "
-                     "threshold=0.01% · size=$10–$20 · 1/sym · 3 total · cooldown=0")
+                     "threshold=0.01% · size=40% of free USDT · 1/sym · 3 total · "
+                     "SL=0.4% · TP=0.5% · cooldown=0")
         st.success("✅ ACTIVE SCALPER defaults applied. Restart the bot for "
                    "the 2s tick to take effect.")
         st.rerun()
@@ -1984,25 +1986,28 @@ with st.sidebar:
     st.markdown('<div class="sec-lbl">Risk Management</div>', unsafe_allow_html=True)
     r = st.session_state.risk
 
-    # ── Trade sizing (the single most important safety control) ────────────
-    _inv_cap = min(float(r.invest_per_trade), float(r.max_trade_usdt)) if r.max_trade_usdt > 0 else float(r.invest_per_trade)
+    # ── Trade sizing — ACTIVE SCALPER dynamic % of free USDT ────────────────
+    if not hasattr(r, "dynamic_size_pct") or not r.dynamic_size_pct:
+        r.dynamic_size_pct = 40.0
+    # Live preview: project current size against current free USDT.
+    try:
+        _live_free = float(binance_free_usdt) if _binance_connected else 0.0
+    except Exception:
+        _live_free = 0.0
+    _proj = min(_live_free * r.dynamic_size_pct / 100.0, _live_free * 0.75) if _live_free > 0 else 0.0
+    _proj_str = f"${_proj:.2f}" if _proj >= 10.0 else f"<$10 ⚠️ ({_proj:.2f})"
     st.markdown(f"""
 <div style="background:#0d1a2a;border:1px solid #2962ff44;border-radius:7px;padding:8px 11px;margin-bottom:8px;">
-  <div style="font-size:9px;color:#6e7681;text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px;">Per-trade size (active)</div>
-  <div style="font-size:18px;font-weight:700;color:#f0f6fc;font-family:'JetBrains Mono',monospace;">${_inv_cap:.2f} <span style="font-size:11px;color:#6e7681;">USDT</span></div>
+  <div style="font-size:9px;color:#6e7681;text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px;">Per-trade size (projected)</div>
+  <div style="font-size:18px;font-weight:700;color:#f0f6fc;font-family:'JetBrains Mono',monospace;">{_proj_str} <span style="font-size:11px;color:#6e7681;">USDT · {r.dynamic_size_pct:.0f}% of ${_live_free:.2f} free</span></div>
 </div>""", unsafe_allow_html=True)
 
-    r.invest_per_trade = st.number_input(
-        "Invest per trade (USDT)",
-        min_value=1.0, max_value=100_000.0,
-        value=float(r.invest_per_trade), step=5.0,
-        help="Fixed USDT used for every trade — bot AND manual",
-    )
-    r.max_trade_usdt = st.number_input(
-        "Hard cap per trade (USDT)",
-        min_value=0.0, max_value=100_000.0,
-        value=float(r.max_trade_usdt), step=10.0,
-        help="Absolute maximum — trade is rejected if invest > cap. 0 = no cap.",
+    r.dynamic_size_pct = st.slider(
+        "% of free USDT per trade",
+        5.0, 75.0, float(r.dynamic_size_pct), 5.0,
+        help="ACTIVE SCALPER: each trade uses this % of your free Binance USDT. "
+             "Capped at 75% of free USDT (always leaves a buffer). Floored at $10 "
+             "(Binance minimum). Set to 40% for ~2 concurrent trades, 25% for ~3.",
     )
     r.max_trades_per_session = st.number_input(
         "Max bot trades / session",

@@ -19,15 +19,19 @@ class SymbolRiskSettings:
     # ── Stop / Take-profit ────────────────────────────────────────────────────
     # Defaults tuned for 1m scalping on BTC/ETH/SOL: tight SL, modest TP that
     # still clears Binance Spot round-trip fees (~0.2%) with margin.
-    stop_loss_pct:    float = 0.5
-    take_profit_pct:  float = 1.5
-    max_open_trades:  int   = 2          # max open trades for THIS symbol
+    stop_loss_pct:    float = 0.4
+    take_profit_pct:  float = 0.5
+    max_open_trades:  int   = 1          # max open trades for THIS symbol
     max_per_symbol:   int   = 1          # 1 trade per symbol at a time (no stacking)
     cooldown_seconds: int   = 180        # min seconds between bot trades on this symbol
     emergency_stop:   bool  = False      # per-symbol kill switch
 
-    # ── Position sizing (FIXED USDT) ──────────────────────────────────────────
-    # Small fixed size for scalping — many small trades, controlled risk.
+    # ── Position sizing ───────────────────────────────────────────────────────
+    # ACTIVE SCALPER: size = free_usdt * dynamic_size_pct / 100, floored at
+    # $10 (Binance min) and ceilinged at free_usdt * 0.75 (always leave buffer).
+    # invest_per_trade/max_trade_usdt are kept as legacy fallback when
+    # dynamic_size_pct == 0.
+    dynamic_size_pct:      float = 40.0  # % of free USDT per trade (0 = use fixed)
     invest_per_trade:      float = 10.0
     max_trade_usdt:        float = 15.0
     max_trades_per_session: int  = 0     # 0 = unlimited
@@ -139,10 +143,10 @@ class RiskManager:
 # ─────────────────────────────────────────────────────────────────────────────
 @dataclass
 class GlobalRiskSettings:
-    max_total_exposure_usdt:    float = 300.0   # sum of all open invested USDT
-    max_exposure_per_symbol_pct: float = 50.0   # no single symbol > X% of total exposure
+    max_total_exposure_usdt:    float = 1000.0  # sum of all open invested USDT
+    max_exposure_per_symbol_pct: float = 100.0  # 100 = disabled (no concentration cap)
     max_daily_loss_pct:         float = 5.0     # auto-halt if today P&L ≤ -X% of initial balance
-    max_open_trades_total:      int   = 5       # hard cap across all symbols
+    max_open_trades_total:      int   = 3       # hard cap across all symbols (BTC+ETH+SOL)
     emergency_stop:             bool  = False   # GLOBAL kill switch
 
 

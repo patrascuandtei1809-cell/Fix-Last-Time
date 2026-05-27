@@ -394,21 +394,7 @@ class SymbolWorker:
             self._last_block_reason = block
             return
 
-        # 5. Sizing — ACTIVE SCALPER spec: $10–$20 per trade, never below $10.
-        # Operator can raise the cap by setting max_trade_usdt > 20 in the
-        # sidebar, but the default and floor are always [$10, $20].
-        invested = self.risk.get_invest_amount()
-        invested = max(10.0, min(20.0, invested))
-
-        # 6. Global gate
-        ok_g, block_g = global_gate_fn(invested, self.symbol)
-        if not ok_g:
-            print(f"[BOT] {self.symbol} blocked reason={block_g} (global gate)", flush=True)
-            self._log("INFO", f"{tag} ⏸️ {block_g}")
-            self._on_state(self.symbol, block_reason=block_g)
-            return
-
-        # 7. LIVE balance gate — always
+        # 5. LIVE balance gate FIRST — sizing depends on free USDT
         try:
             bal = self.exchange.get_balance("USDT")
             free_usdt = float(bal.get("free", 0))
@@ -416,6 +402,33 @@ class SymbolWorker:
             msg = f"{tag} balance fetch failed: {e}"
             self._log("WARNING", msg)
             self._on_state(self.symbol, block_reason=msg)
+            return
+
+        # 6. Sizing — ACTIVE SCALPER dynamic sizing:
+        # If dynamic_size_pct > 0: invested = free_usdt * pct / 100.
+        # Floor at $10 (Binance min notional). Ceiling at free_usdt * 0.75
+        # to always leave 25% buffer for fees/slippage/other symbols.
+        _dyn_pct = float(getattr(self.risk.settings, "dynamic_size_pct", 0) or 0)
+        if _dyn_pct > 0:
+            invested = free_usdt * _dyn_pct / 100.0
+            invested = min(invested, free_usdt * 0.75)
+        else:
+            invested = self.risk.get_invest_amount()
+        # Hard floor at Binance minimum
+        if invested < 10.0:
+            msg = (f"sizing ${invested:.2f} < $10 Binance min (free USDT "
+                   f"${free_usdt:.2f} too low for {_dyn_pct:.0f}% sizing)")
+            print(f"[BOT] {self.symbol} blocked reason={msg} (balance gate)", flush=True)
+            self._on_state(self.symbol, block_reason=msg)
+            return
+        invested = round(invested, 2)
+
+        # 7. Global gate
+        ok_g, block_g = global_gate_fn(invested, self.symbol)
+        if not ok_g:
+            print(f"[BOT] {self.symbol} blocked reason={block_g} (global gate)", flush=True)
+            self._log("INFO", f"{tag} ⏸️ {block_g}")
+            self._on_state(self.symbol, block_reason=block_g)
             return
         if invested > free_usdt:
             msg = f"invest ${invested:.2f} > free USDT ${free_usdt:.2f} in Binance Spot wallet"

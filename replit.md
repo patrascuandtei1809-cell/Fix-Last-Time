@@ -76,8 +76,11 @@ Hardcoded spec:
 - Triggers BUY/SELL on ANY of: price ±0.01%, EMA9 3-bar slope, bounce
   (≥2 reds → green), or momentum flip. No EMA hard veto, no green-candle
   requirement, no "wait for perfect trend".
-- **Size**: $10–$20 per trade (clamped in `symbol_worker.tick()`).
+- **Size**: dynamic — `free_usdt * dynamic_size_pct/100` (default 40%),
+  capped at `free_usdt * 0.75` (always leaves 25% buffer), floored at $10
+  (Binance min notional). Set via sidebar "% of free USDT per trade" slider.
 - **Caps**: 1 open trade per symbol, 3 total open across BTC/ETH/SOL.
+  Concentration cap REMOVED (`max_exposure_per_symbol_pct = 100`). SL=0.4%, TP=0.5%.
 - **Manages manual trades** the same as bot trades — SL/TP filter is by
   symbol only, not `type=="bot"`.
 - **Post-entry**: breakeven SL armed at +0.20%, exits on 2 consecutive red
