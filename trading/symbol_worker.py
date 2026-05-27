@@ -305,6 +305,73 @@ class SymbolWorker:
                 self._log("WARNING", f"{tag} AI engine error (falling back to "
                                      f"strategy signal): {_e}")
 
+        # 3c. HYBRID MODE — non-blocking GPT advisor (secondary).
+        # Consulted ONLY when the rule+AI verdict is weak (conf<60) or HOLD on
+        # a moving market. Throttled to 1 call / 10s / symbol, runs in a
+        # background thread, never blocks this tick. Reads the LAST cached
+        # verdict instantly; the request fires off the refresh for next tick.
+        try:
+            from gpt_advisor import get_advisor as _get_gpt
+            _gpt = _get_gpt()
+            _gpt_status = _gpt.status()
+            # Moving-market predicate: last 1m candle move ≥ flat_pct.
+            # GPT is wasted on a truly motionless tape — skip the call there.
+            try:
+                _last_pct_abs = abs(
+                    (float(df["close"].iloc[-1]) - float(df["close"].iloc[-2]))
+                    / float(df["close"].iloc[-2]) * 100
+                )
+            except Exception:
+                _last_pct_abs = 0.0
+            _flat_pct = 0.005  # mirrors ai_engine.ACTIVE_SCALPER["flat_pct"]
+            _moving = _last_pct_abs >= _flat_pct
+            _should_consult = (
+                _gpt_status["enabled"]
+                and _moving
+                and (signal == "HOLD" or confidence < 60)
+            )
+            if _should_consult:
+                _snap = {
+                    "price":      float(df["close"].iloc[-1]),
+                    "pct_1m":     round((float(df["close"].iloc[-1]) - float(df["close"].iloc[-2]))
+                                        / float(df["close"].iloc[-2]) * 100, 4),
+                    "ema9":       float(df_ind["ema9"].iloc[-1])  if "df_ind" in locals() and "ema9"  in df_ind.columns else None,
+                    "ema21":      float(df_ind["ema21"].iloc[-1]) if "df_ind" in locals() and "ema21" in df_ind.columns else None,
+                    "rsi":        float(df_ind["rsi"].iloc[-1])   if "df_ind" in locals() and "rsi"   in df_ind.columns else None,
+                    "rule_signal":     signal,
+                    "rule_confidence": confidence,
+                    "rule_reason":     reason[:160],
+                    "open_for_symbol": len(my_open),
+                }
+                _gpt.maybe_request(self.symbol, _snap)
+            _cached = _gpt.get_cached(self.symbol)
+            if (_cached
+                and _cached.get("decision") in ("BUY", "SELL")
+                and int(_cached.get("confidence", 0)) > 60
+                and (signal == "HOLD" or confidence < 60)):
+                _old_sig = signal
+                signal     = _cached["decision"]
+                confidence = max(int(confidence), int(_cached["confidence"]))
+                reason     = (f"🤖 GPT override ({_old_sig}→{signal}, "
+                              f"gpt_conf={_cached['confidence']}) | {_cached.get('reason','')[:120]}")
+                print(f"[GPT-OVERRIDE] {self.symbol} {_old_sig}→{signal} "
+                      f"conf={_cached['confidence']}", flush=True)
+                self._log("AI", f"{tag} 🤖 GPT advisor override → {signal} | {reason}")
+                # Republish overridden signal so dashboard matches execution.
+                self._on_state(self.symbol, signal=signal, reason=reason,
+                               confidence=confidence)
+            # Publish GPT state to dashboard regardless of override.
+            self._on_state(self.symbol,
+                           gpt_decision   = (_cached or {}).get("decision", ""),
+                           gpt_confidence = (_cached or {}).get("confidence", 0),
+                           gpt_reason     = (_cached or {}).get("reason", ""),
+                           gpt_age_sec    = (_cached or {}).get("age_sec", -1),
+                           gpt_enabled    = _gpt_status["enabled"],
+                           gpt_active     = _gpt_status["active"])
+        except Exception as _ge:
+            # GPT must NEVER break trading.
+            self._log("WARNING", f"{tag} GPT advisor error (ignored): {_ge}")
+
         if signal == "HOLD":
             # Clear block_reason — HOLD is a strategy decision, not a risk gate.
             # The per-symbol overview card surfaces the HOLD reason via `last_reason`.

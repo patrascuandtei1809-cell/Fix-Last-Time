@@ -63,7 +63,9 @@ def _set_shared_for(symbol: str, *, df=None, price=None, tick=False,
                     ai_why_bullets=None, ai_blocker=None,
                     signal=None, reason=None, confidence=None,
                     block_reason=None, last_order=None,
-                    ai_decision=None, ai_confidence=None, ai_reason=None):
+                    ai_decision=None, ai_confidence=None, ai_reason=None,
+                    gpt_decision=None, gpt_confidence=None, gpt_reason=None,
+                    gpt_age_sec=None, gpt_enabled=None, gpt_active=None):
     """Worker callback target. Writes to _shared_per_symbol[symbol]."""
     with _state_lock:
         s = _ensure_sym(symbol)
@@ -81,6 +83,13 @@ def _set_shared_for(symbol: str, *, df=None, price=None, tick=False,
         if ai_signal_strength is not None: s["ai_signal_strength"] = int(ai_signal_strength)
         if ai_why_bullets     is not None: s["ai_why_bullets"]     = list(ai_why_bullets)
         if ai_blocker         is not None: s["ai_blocker"]         = ai_blocker
+        # HYBRID MODE — GPT advisor fields (non-blocking secondary AI).
+        if gpt_decision   is not None: s["gpt_decision"]   = gpt_decision
+        if gpt_confidence is not None: s["gpt_confidence"] = int(gpt_confidence)
+        if gpt_reason     is not None: s["gpt_reason"]     = gpt_reason
+        if gpt_age_sec    is not None: s["gpt_age_sec"]    = gpt_age_sec
+        if gpt_enabled    is not None: s["gpt_enabled"]    = bool(gpt_enabled)
+        if gpt_active     is not None: s["gpt_active"]     = bool(gpt_active)
         if block_reason is not None:
             s["block_reason"]    = block_reason
             s["block_reason_at"] = datetime.now()
@@ -133,6 +142,13 @@ def get_bot_signal_meta(symbol: Optional[str] = None) -> dict:
             "ai_signal_strength": int(s.get("ai_signal_strength") or 0),
             "ai_why_bullets":     s.get("ai_why_bullets") or [],
             "ai_blocker":         s.get("ai_blocker", ""),
+            # HYBRID MODE — GPT advisor surfaced by dashboard badges.
+            "gpt_decision":       s.get("gpt_decision", ""),
+            "gpt_confidence":     int(s.get("gpt_confidence") or 0),
+            "gpt_reason":         s.get("gpt_reason", ""),
+            "gpt_age_sec":        s.get("gpt_age_sec"),
+            "gpt_enabled":        bool(s.get("gpt_enabled", False)),
+            "gpt_active":         bool(s.get("gpt_active",  False)),
         }
 
 
