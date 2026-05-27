@@ -18,7 +18,7 @@
   "tg_chat_id": "",
   "global_risk": {
     "max_total_exposure_usdt": 300.0,
-    "max_exposure_per_symbol_pct": 50,
+    "max_exposure_per_symbol_pct": 100,
     "max_open_trades_total": 3,
     "max_daily_loss_pct": 5.0
   },
@@ -28,7 +28,7 @@
     "max_trade_usdt": 20.0,
     "stop_loss_pct": 2.0,
     "take_profit_pct": 4.0,
-    "max_open_trades": 2,
+    "max_open_trades": 1,
     "cooldown_seconds": 30,
     "max_daily_loss_pct": 5.0,
     "max_trades_per_session": 0,
