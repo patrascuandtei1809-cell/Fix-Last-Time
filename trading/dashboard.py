@@ -1230,7 +1230,8 @@ _ai_col  = "#2ea043"
 _ai_pill = (f'<span class="pill" style="background:{_ai_col}22;'
             f'border:1px solid {_ai_col}66;color:{_ai_col};'
             f'font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">'
-            f'⚡ ACTIVE SCALPER · AI ON</span>')
+            f'⚡ ACTIVE SCALPER · Strategy Engine ON · '
+            f'<span style="color:#7ee787;">AI TYPE = Rule-based</span></span>')
 
 # Last AI decision for the current symbol (from shared state set in tick())
 _ai_last  = (_sig_meta.get("ai_decision") or "").upper() if _sig_meta else ""
@@ -1704,7 +1705,10 @@ with st.sidebar:
     st.markdown(
         '<div style="background:#1a2e1a;border:1px solid #2ea043;border-radius:6px;'
         'padding:8px 10px;margin:4px 0;color:#7ce0c2;font-weight:700;font-size:13px;">'
-        '⚡ ACTIVE SCALPER MODE</div>',
+        '⚡ ACTIVE SCALPER MODE'
+        '<div style="font-size:10px;font-weight:600;color:#7ee787;'
+        'margin-top:4px;letter-spacing:0.5px;">'
+        'AI TYPE = Rule-based (deterministic, no LLM)</div></div>',
         unsafe_allow_html=True,
     )
     st.caption("Single hardcoded strategy. Fires on price ±0.01% OR EMA9 slope "
@@ -1730,7 +1734,7 @@ with st.sidebar:
     # AI is always on (single hardcoded mode) — never blocks trades.
     st.session_state.ai_assist          = True
     st.session_state.ai_aggressiveness  = "Active Scalper"
-    st.caption("🧠 AI Decision Engine is **always on** in ACTIVE SCALPER MODE — "
+    st.caption("🧠 Strategy Engine (rule-based) is **always on** in ACTIVE SCALPER MODE — "
                "confirms strategy signals, never vetoes BUY/SELL. HOLD only "
                "when the market is truly motionless.")
 
