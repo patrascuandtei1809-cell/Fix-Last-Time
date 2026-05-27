@@ -491,16 +491,17 @@ def _init():
         "active_symbols":   ["BTCUSDT", "ETHUSDT", "SOLUSDT"], # symbols the bot trades on (max 3)
         "per_symbol_risk":  {},          # {symbol: RiskSettings} — overrides global risk
         "global_risk":      None,        # GlobalRiskSettings (built lazily below)
-        "strategy":         "Price Movement",   # scalping by default
-        "interval":         "1m",                # 1-minute candles → faster signals
-        "check_every":      10,                  # tick every 10s — aggressive scalping
-        "threshold":        0.05,                # 0.05% — aggressive scalping (range 0.05–0.10)
+        # ACTIVE SCALPER MODE — single hardcoded profile (no dropdowns).
+        "strategy":         "Active Scalper",
+        "interval":         "1m",                # 1-minute candles
+        "check_every":      2,                   # 2s tick — ACTIVE SCALPER spec
+        "threshold":        0.01,                # 0.01% — ACTIVE SCALPER spec
         "risk":             RiskSettings(),
         "risk_manager":     RiskManager(),
         "initial_balance":  1000.0,
-        "manual_amount":    10.0,                # fixed $10 per trade (scalping)
-        "ai_assist":        False,               # AI Decision Engine OFF by default
-        "ai_aggressiveness": "Balanced",         # Conservative | Balanced | Aggressive
+        "manual_amount":    10.0,                # $10–$20 per trade
+        "ai_assist":        True,                # AI always on (advisory, never blocks)
+        "ai_aggressiveness": "Active Scalper",   # ignored — single mode
         "refresh_secs":     5,
         "alert_open_ids":      [],
         "alert_closed_ids":    [],
@@ -589,7 +590,10 @@ def _maybe_resume_bot():
         cfg = _bm.load_settings() or {}
     except Exception:
         return
-    if not cfg.get("bot_was_running"):
+    # ACTIVE SCALPER MODE: auto-start the bot whenever the LIVE client is
+    # connected — no longer gated on bot_was_running. Operator can stop with
+    # the ⏹ Stop button; stop sets a session flag so we don't re-launch.
+    if st.session_state.get("_user_stopped_bot"):
         return
     syms = cfg.get("active_symbols") or st.session_state.active_symbols
     if not syms:
@@ -612,12 +616,13 @@ def _maybe_resume_bot():
             check_every       = st.session_state.check_every,
             threshold         = float(st.session_state.threshold) / 100,
             initial_balance   = st.session_state.initial_balance,
-            ai_assist         = bool(st.session_state.get("ai_assist", False)),
-            ai_aggressiveness = st.session_state.get("ai_aggressiveness","Balanced"),
+            ai_assist         = True,                 # ACTIVE SCALPER — always on
+            ai_aggressiveness = "Active Scalper",     # ignored — single mode
         )
         b._initial_balance = st.session_state.initial_balance
         b.start()
-        print(f"[BOT] Auto-resumed bot after server restart — symbols={syms}",
+        st.session_state.bot_was_running = True
+        print(f"[BOT] Auto-started ACTIVE SCALPER bot — symbols={syms}",
               flush=True)
     except Exception as _e:
         print(f"[BOT] Auto-resume failed: {_e}", flush=True)
@@ -661,9 +666,48 @@ if not st.session_state.get("_settings_loaded"):
                     setattr(_rs, _rk, _rv)
             _pso[_sym] = _rs
         st.session_state.per_symbol_risk = _pso
+    # ── ACTIVE SCALPER MODE: force-snap protected fields back to spec ────
+    # The persisted settings.json on disk may pre-date the FULL RESET (e.g.
+    # contains BTCUSDT only, 15s tick, 0.05% threshold, 50/100 risk). The
+    # operator has no UI to change these in the new build, so override.
+    st.session_state.strategy           = "Active Scalper"
+    st.session_state.interval           = "1m"
+    st.session_state.check_every        = 2
+    st.session_state.threshold          = 0.01
+    st.session_state.ai_assist          = True
+    st.session_state.ai_aggressiveness  = "Active Scalper"
+    # Symbols: re-instate BTC+ETH+SOL if persisted file dropped to one.
+    _syms_persist = st.session_state.get("active_symbols") or []
+    if len(_syms_persist) < 2:
+        st.session_state.active_symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+    # Risk sizing: clamp to ACTIVE SCALPER spec ($10–$20, 1/sym).
+    try:
+        _r = st.session_state.risk
+        _r.invest_per_trade = max(10.0, min(20.0, float(_r.invest_per_trade or 10.0)))
+        _r.max_trade_usdt   = max(10.0, min(20.0, float(_r.max_trade_usdt   or 20.0)))
+        _r.max_per_symbol   = 1
+        _r.max_open_trades  = max(1, min(3, int(_r.max_open_trades or 1)))
+        _r.cooldown_seconds = min(int(_r.cooldown_seconds or 0), 30)
+    except Exception:
+        pass
+    for _sym, _rs in (st.session_state.get("per_symbol_risk") or {}).items():
+        try:
+            _rs.invest_per_trade = max(10.0, min(20.0, float(_rs.invest_per_trade or 10.0)))
+            _rs.max_trade_usdt   = max(10.0, min(20.0, float(_rs.max_trade_usdt   or 20.0)))
+            _rs.max_per_symbol   = 1
+            _rs.max_open_trades  = max(1, min(3, int(_rs.max_open_trades or 1)))
+            _rs.cooldown_seconds = min(int(_rs.cooldown_seconds or 0), 30)
+        except Exception:
+            pass
+    try:
+        st.session_state.global_risk.max_open_trades_total = 3
+    except Exception:
+        pass
+
     st.session_state._settings_loaded = True
     if _persisted:
-        print(f"[SETTINGS] loaded {len(_persisted)} keys from disk", flush=True)
+        print(f"[SETTINGS] loaded {len(_persisted)} keys from disk "
+              f"(ACTIVE SCALPER overrides applied)", flush=True)
     tg.configure(
         token   = st.session_state.get("tg_token",   ""),
         chat_id = st.session_state.get("tg_chat_id", ""),
@@ -676,7 +720,7 @@ if not st.session_state.get("_settings_loaded"):
 SYMBOLS    = ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT",
               "ADAUSDT","DOGEUSDT","AVAXUSDT","DOTUSDT","MATICUSDT"]
 INTERVALS  = ["1m","3m","5m","15m","30m","1h","4h","1d"]
-STRATEGIES = ["EMA Crossover","Price Movement","Momentum (RSI)"]
+STRATEGIES = ["Active Scalper"]   # ACTIVE SCALPER MODE — single hardcoded strategy
 
 
 def _cl():
@@ -1179,23 +1223,14 @@ _strat_html = (f'<span style="font-size:10px;color:#484f58;">STRATEGY</span> '
                f'<span style="font-size:11px;font-weight:700;color:#79b0ff;font-family:\'JetBrains Mono\',monospace;">'
                f'{st.session_state.strategy}</span>')
 
-# ── AI status pill — visible right next to BOT ON/OFF ────────────────────
-# Shows: AI: ON/OFF · profile · last decision/confidence for current symbol.
-# Pulled from session state (set by sidebar) + ai_engine's per-tick log.
-_ai_on   = bool(st.session_state.get("ai_assist"))
-_ai_prof = st.session_state.get("ai_aggressiveness", "Balanced")
-if _ai_on:
-    _ai_col = {"Conservative":"#7ce0c2","Balanced":"#79b0ff",
-               "Aggressive":"#f0883e","Ultra Aggressive":"#ff3860",
-               "Pro Fast Scalper":"#a371f7"}.get(_ai_prof, "#79b0ff")
-    _ai_pill = (f'<span class="pill" style="background:{_ai_col}22;'
-                f'border:1px solid {_ai_col}66;color:{_ai_col};'
-                f'font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">'
-                f'🧠 AI: ON · {_ai_prof}</span>')
-else:
-    _ai_pill = ('<span class="pill" style="background:#1e2736;border:1px solid #30363d;'
-                'color:#6e7681;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">'
-                '🧠 AI: OFF</span>')
+# ── ACTIVE SCALPER pill — single hardcoded mode, AI always on ───────────
+_ai_on   = True
+_ai_prof = "Active Scalper"
+_ai_col  = "#2ea043"
+_ai_pill = (f'<span class="pill" style="background:{_ai_col}22;'
+            f'border:1px solid {_ai_col}66;color:{_ai_col};'
+            f'font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">'
+            f'⚡ ACTIVE SCALPER · AI ON</span>')
 
 # Last AI decision for the current symbol (from shared state set in tick())
 _ai_last  = (_sig_meta.get("ai_decision") or "").upper() if _sig_meta else ""
@@ -1663,16 +1698,18 @@ with st.sidebar:
                              if st.session_state.interval in INTERVALS else 2)
     st.session_state.interval = intv_sel
 
-    strat_sel = st.selectbox("Strategy", STRATEGIES,
-                              index=STRATEGIES.index(st.session_state.strategy)
-                              if st.session_state.strategy in STRATEGIES else 0)
-    st.session_state.strategy = strat_sel
-    if strat_sel == "EMA Crossover":
-        st.caption("⚠️ EMA Crossover is strict — requires a fresh cross + RSI + trend + volatility all to align. "
-                   "Switch to **Price Movement** below for active scalping.")
-    elif strat_sel == "Price Movement":
-        st.caption("⚡ Scalping mode — triggers on every price move ≥ threshold % below. "
-                   "Lower threshold = more trades.")
+    # ACTIVE SCALPER MODE — single hardcoded strategy, no dropdown.
+    st.session_state.strategy = "Active Scalper"
+    strat_sel = "Active Scalper"
+    st.markdown(
+        '<div style="background:#1a2e1a;border:1px solid #2ea043;border-radius:6px;'
+        'padding:8px 10px;margin:4px 0;color:#7ce0c2;font-weight:700;font-size:13px;">'
+        '⚡ ACTIVE SCALPER MODE</div>',
+        unsafe_allow_html=True,
+    )
+    st.caption("Single hardcoded strategy. Fires on price ±0.01% OR EMA9 slope "
+               "OR bounce OR momentum flip. AI confirms but never blocks. "
+               "Anti-idle lowers threshold after 5–10 min of no trades.")
 
     st.markdown('<hr class="s-div"/>', unsafe_allow_html=True)
 
@@ -1680,264 +1717,63 @@ with st.sidebar:
     st.markdown('<div class="sec-lbl">Bot</div>', unsafe_allow_html=True)
     st.caption("⚡ Bot places **real** Binance Mainnet orders on every signal.")
 
-    ck_val = st.slider("Check interval (s)", 5, 300, st.session_state.check_every, 5)
+    # ACTIVE SCALPER MODE: fixed 2s tick + 0.01% threshold. Sliders kept
+    # for emergency override but operator should not need to touch them.
+    ck_val = st.slider("Check interval (s)", 1, 30, st.session_state.check_every, 1,
+                       help="ACTIVE SCALPER spec: 2s tick.")
     st.session_state.check_every = ck_val
 
-    thr_val = st.slider("Price threshold %", 0.01, 2.0, st.session_state.threshold, 0.01,
-                         help="Trigger % for Price Movement. 0.05% = aggressive scalping, 0.30%+ = conservative.")
+    thr_val = st.slider("Price threshold %", 0.005, 0.5, st.session_state.threshold, 0.005,
+                         help="ACTIVE SCALPER spec: 0.01%. Anti-idle auto-lowers after 5 min.")
     st.session_state.threshold = thr_val
 
-    # ── 🧠 AI Decision Engine ─────────────────────────────────────────────────
-    # Extra decision layer that scans RSI/MACD/Volume/EMA/momentum and refuses
-    # obvious dumps, pump-tops, and flat markets. Never bypasses risk gates.
-    _ai1, _ai2 = st.columns([0.42, 0.58])
-    with _ai1:
-        st.session_state.ai_assist = st.toggle(
-            "🧠 AI Assist",
-            value=bool(st.session_state.get("ai_assist", False)),
-            key="ai_assist_toggle",
-            help="When ON, every bot tick gets an extra AI scan that can "
-                 "veto BUY into dumps, BUY at pump tops, or trades in flat "
-                 "markets. Risk gates (SL/TP/exposure) always run regardless.",
-        )
-    with _ai2:
-        _AGG_OPTS = ["Conservative", "Balanced", "Aggressive",
-                     "Ultra Aggressive", "Pro Fast Scalper"]
-        _cur_agg = st.session_state.get("ai_aggressiveness", "Balanced")
-        if _cur_agg not in _AGG_OPTS:
-            _cur_agg = "Balanced"
-        st.session_state.ai_aggressiveness = st.selectbox(
-            "Aggressiveness",
-            options=_AGG_OPTS,
-            index=_AGG_OPTS.index(_cur_agg),
-            key="ai_aggressiveness_sel",
-            help="Conservative: conf≥70, vetoes 0.3% dumps. Balanced: conf≥55. "
-                 "Aggressive: conf≥20, ATR floor 0.005%, force micro-entry "
-                 "after 30 min idle. ULTRA: conf≥20, near-zero ATR floor, "
-                 "force micro-entry after 15 min — pair with 3s ticks.",
-            disabled=not st.session_state.ai_assist,
-        )
-    if st.session_state.ai_assist:
-        st.caption(f"🧠 AI **{st.session_state.ai_aggressiveness}** active — "
-                   f"every tick gets a [AI] log line with decision + confidence + reason.")
+    # AI is always on (single hardcoded mode) — never blocks trades.
+    st.session_state.ai_assist          = True
+    st.session_state.ai_aggressiveness  = "Active Scalper"
+    st.caption("🧠 AI Decision Engine is **always on** in ACTIVE SCALPER MODE — "
+               "confirms strategy signals, never vetoes BUY/SELL. HOLD only "
+               "when the market is truly motionless.")
 
-    # ── 🔥 AGGRESSIVE LIVE preset ─────────────────────────────────────────────
-    # Maximum-aggression scalping: 5s ticks, 0.03% threshold, 90% of free USDT
-    # per trade, max 2 open. Still respects global risk caps. Use when you
-    # want the bot to enter on any micro-move.
-    if st.button("🔥 AGGRESSIVE LIVE preset",
-                 width="stretch", key="aggressive_live_preset_btn", type="primary",
-                 help="Maximum aggression: 5s · 0.03% · 90% USDT · SL 0.5% · TP 1.5%. "
-                      "Respects global risk caps. Bot will enter on any micro-move."):
-        print("[CLICK] AGGRESSIVE LIVE preset button pressed", flush=True)
-        st.session_state.check_every    = 5
-        st.session_state.threshold      = 0.03
-        # AGGRESSIVE preset also flips AI to its Aggressive profile so it
-        # can initiate trades when the strategy says HOLD.
-        st.session_state.ai_assist          = True
-        st.session_state.ai_aggressiveness  = "Aggressive"
-        # Size: 90% of free USDT (computed live; persisted as the dollar amount)
-        _free_now = 0.0
+    # ── Preset buttons removed — ACTIVE SCALPER MODE is the single profile.
+
+
+    if st.button("🔄 Reset to ACTIVE SCALPER defaults",
+                 width="stretch", key="reset_scalp_defaults_btn",
+                 help="Snap check=2s, threshold=0.01%, size=$10, "
+                      "SL=0.5%, TP=1.5%, max_open=1/sym, cooldown=0. Keeps API keys."):
+        st.session_state.check_every    = 2
+        st.session_state.threshold      = 0.01
+        st.session_state.manual_amount  = 10.0
         try:
-            _c = _cl()
-            if _c is not None:
-                _free_now = float(_c.get_account_balance("USDT").get("free", 0.0))
-        except Exception:
-            _free_now = 0.0
-        _agg_size = round(_free_now * 0.90, 2) if _free_now > 0 else 10.0
-        st.session_state.manual_amount  = _agg_size
-        try:
-            st.session_state.risk.invest_per_trade = _agg_size
-            st.session_state.risk.stop_loss_pct    = 0.5
-            st.session_state.risk.take_profit_pct  = 1.5
-            st.session_state.risk.max_open_trades  = 2
+            st.session_state.risk.invest_per_trade  = 10.0
+            st.session_state.risk.max_trade_usdt    = 20.0
+            st.session_state.risk.stop_loss_pct     = 0.5
+            st.session_state.risk.take_profit_pct   = 1.5
+            st.session_state.risk.max_per_symbol    = 1
+            st.session_state.risk.max_open_trades   = 1
+            st.session_state.risk.cooldown_seconds  = 0
         except Exception:
             pass
         for _sym, _rs in (st.session_state.get("per_symbol_risk") or {}).items():
             try:
-                _rs.invest_per_trade = _agg_size
-                _rs.stop_loss_pct    = 0.5
-                _rs.take_profit_pct  = 1.5
-                _rs.max_open_trades  = 2
-            except Exception:
-                pass
-        log_activity("INFO",
-                     f"🔥 AGGRESSIVE LIVE preset applied — check=5s · "
-                     f"threshold=0.03% · size=${_agg_size:.2f} (90% of "
-                     f"${_free_now:.2f} free) · SL=0.5% · TP=1.5% · "
-                     f"max_open=2")
-        # Persist immediately so the values survive the rerun even if the
-        # bottom-of-script auto-save doesn't run first.
-        try:
-            from bot import save_settings as _save_settings
-            _save_settings({
-                "check_every": 5, "threshold": 0.03,
-                "manual_amount": _agg_size,
-                "ai_assist": True, "ai_aggressiveness": "Aggressive",
-            })
-        except Exception:
-            pass
-        _msg = (f"🔥 AGGRESSIVE LIVE applied · check=5s · threshold=0.03% · "
-                f"size=${_agg_size:.2f} (90% of ${_free_now:.2f} free) · "
-                f"SL=0.5% · TP=1.5% · AI=Aggressive. Restart the bot to "
-                f"pick up the 5s tick.")
-        st.session_state.last_action = {"kind": "ok", "msg": _msg}
-        st.toast("🔥 AGGRESSIVE LIVE applied", icon="✅")
-        st.rerun()
-
-    # ── 🚀 ULTRA AGGRESSIVE preset ────────────────────────────────────────────
-    # Even more aggressive than AGGRESSIVE: 3s tick, 0.01% threshold,
-    # AI = Ultra Aggressive (conf≥20, ATR floor 0.005%, force micro-entry
-    # every 15 min). For dead-market scalping. Same 90% USDT size + SL/TP.
-    if st.button("🚀 ULTRA AGGRESSIVE preset",
-                 width="stretch", key="ultra_aggressive_preset_btn", type="primary",
-                 help="Maximum-fire scalping: 3s tick · 0.01% threshold · "
-                      "AI=Ultra (conf≥20, force micro-entry every 15 min). "
-                      "Pairs with 90% USDT size. Risk caps still enforced."):
-        print("[CLICK] ULTRA AGGRESSIVE preset button pressed", flush=True)
-        st.session_state.check_every       = 3
-        st.session_state.threshold         = 0.01
-        st.session_state.ai_assist         = True
-        st.session_state.ai_aggressiveness = "Ultra Aggressive"
-        _u_free = 0.0
-        try:
-            _uc = _cl()
-            if _uc is not None:
-                _u_free = float(_uc.get_account_balance("USDT").get("free", 0.0))
-        except Exception:
-            _u_free = 0.0
-        _u_size = round(_u_free * 0.90, 2) if _u_free > 0 else 10.0
-        st.session_state.manual_amount = _u_size
-        try:
-            st.session_state.risk.invest_per_trade = _u_size
-            st.session_state.risk.stop_loss_pct    = 0.5
-            st.session_state.risk.take_profit_pct  = 1.5
-            st.session_state.risk.max_open_trades  = 3
-        except Exception:
-            pass
-        for _sym, _rs in (st.session_state.get("per_symbol_risk") or {}).items():
-            try:
-                _rs.invest_per_trade = _u_size
-                _rs.stop_loss_pct    = 0.5
-                _rs.take_profit_pct  = 1.5
-                _rs.max_open_trades  = 3
-            except Exception:
-                pass
-        try:
-            from bot import save_settings as _save_settings
-            _save_settings({
-                "check_every": 3, "threshold": 0.01,
-                "manual_amount": _u_size,
-                "ai_assist": True, "ai_aggressiveness": "Ultra Aggressive",
-            })
-        except Exception:
-            pass
-        log_activity("INFO",
-                     f"🚀 ULTRA AGGRESSIVE preset applied — check=3s · "
-                     f"threshold=0.01% · size=${_u_size:.2f} (90% of "
-                     f"${_u_free:.2f} free) · AI=Ultra Aggressive · "
-                     f"force-entry every 15 min")
-        st.session_state.last_action = {"kind":"ok","msg":
-            f"🚀 ULTRA AGGRESSIVE applied · check=3s · threshold=0.01% · "
-            f"size=${_u_size:.2f} (90% of ${_u_free:.2f} free) · "
-            f"AI=Ultra Aggressive (conf≥20, ATR floor 0.005%, force micro-"
-            f"entry every 15 min). Restart the bot to pick up the 3s tick."}
-        st.toast("🚀 ULTRA AGGRESSIVE applied", icon="✅")
-        st.rerun()
-
-    # ── 🎯 PRO FAST SCALPER preset ────────────────────────────────────────────
-    # Frequent trades, fast reactions, STRICT entry filter, strict exits.
-    # 2s tick · 0.01% threshold · 50% USDT size · SL 0.4% · TP 0.5% ·
-    # AI=Pro Fast Scalper (EMA9 cross + green candle + vol>3MA + RSI 45-70
-    # + MACD improving + above EMA21 + no recent pump). Worker enforces
-    # breakeven move @ +0.25%, 2-red-candle exit, EMA9-break exit, and
-    # per-symbol per-hour cap of 6 trades.
-    if st.button("🎯 PRO FAST SCALPER preset",
-                 width="stretch", key="pro_fast_scalper_preset_btn", type="primary",
-                 help="Frequent trades with strict filters: 2s tick · 0.01% "
-                      "threshold · 50% USDT · SL 0.4% · TP 0.5%. AI requires "
-                      "EMA9 cross + green candle + volume + healthy RSI + "
-                      "MACD improving. Breakeven SL at +0.25%, exit on 2 red "
-                      "candles or EMA9 break. 6 trades/hour/symbol max."):
-        print("[CLICK] PRO FAST SCALPER preset button pressed", flush=True)
-        st.session_state.check_every       = 2
-        st.session_state.threshold         = 0.01
-        st.session_state.ai_assist         = True
-        st.session_state.ai_aggressiveness = "Pro Fast Scalper"
-        _p_free = 0.0
-        try:
-            _pc = _cl()
-            if _pc is not None:
-                _p_free = float(_pc.get_account_balance("USDT").get("free", 0.0))
-        except Exception:
-            _p_free = 0.0
-        # 50% of free USDT (middle of the 40-60% band the operator asked for)
-        _p_size = round(_p_free * 0.50, 2) if _p_free > 0 else 10.0
-        st.session_state.manual_amount = _p_size
-        try:
-            st.session_state.risk.invest_per_trade = _p_size
-            st.session_state.risk.stop_loss_pct    = 0.4
-            st.session_state.risk.take_profit_pct  = 0.5
-            st.session_state.risk.max_open_trades  = 3
-            st.session_state.risk.cooldown_seconds = 0    # PRO uses per-hour cap
-        except Exception:
-            pass
-        for _sym, _rs in (st.session_state.get("per_symbol_risk") or {}).items():
-            try:
-                _rs.invest_per_trade  = _p_size
-                _rs.stop_loss_pct     = 0.4
-                _rs.take_profit_pct   = 0.5
-                _rs.max_open_trades   = 3
+                _rs.invest_per_trade  = 10.0
+                _rs.max_trade_usdt    = 20.0
+                _rs.stop_loss_pct     = 0.5
+                _rs.take_profit_pct   = 1.5
+                _rs.max_per_symbol    = 1
+                _rs.max_open_trades   = 1
                 _rs.cooldown_seconds  = 0
             except Exception:
                 pass
         try:
-            from bot import save_settings as _save_settings
-            _save_settings({
-                "check_every": 2, "threshold": 0.01,
-                "manual_amount": _p_size,
-                "ai_assist": True, "ai_aggressiveness": "Pro Fast Scalper",
-            })
+            st.session_state.global_risk.max_open_trades_total = 3
         except Exception:
             pass
         log_activity("INFO",
-                     f"🎯 PRO FAST SCALPER preset applied — check=2s · "
-                     f"threshold=0.01% · size=${_p_size:.2f} (50% of "
-                     f"${_p_free:.2f} free) · SL 0.4% · TP 0.5% · "
-                     f"AI=Pro Fast Scalper · BE+0.25% · 6/hr/sym cap")
-        st.session_state.last_action = {"kind":"ok","msg":
-            f"🎯 PRO FAST SCALPER applied · check=2s · threshold=0.01% · "
-            f"size=${_p_size:.2f} (50% of ${_p_free:.2f} free) · "
-            f"SL 0.4% · TP 0.5% · BE arm @ +0.25%. Restart the bot to pick "
-            f"up the 2s tick."}
-        st.toast("🎯 PRO FAST SCALPER applied", icon="✅")
-        st.rerun()
-
-    if st.button("🔄 Reset to scalping defaults",
-                 width="stretch", key="reset_scalp_defaults_btn",
-                 help="Snap check=10s, threshold=0.05%, size=$10, "
-                      "SL=0.5%, TP=1.5%. Keeps API keys + risk caps."):
-        st.session_state.check_every    = 10
-        st.session_state.threshold      = 0.05
-        st.session_state.manual_amount  = 10.0
-        try:
-            st.session_state.risk.invest_per_trade = 10.0
-            st.session_state.risk.stop_loss_pct    = 0.5
-            st.session_state.risk.take_profit_pct  = 1.5
-        except Exception:
-            pass
-        for _sym, _rs in (st.session_state.get("per_symbol_risk") or {}).items():
-            try:
-                _rs.invest_per_trade = 10.0
-                _rs.stop_loss_pct    = 0.5
-                _rs.take_profit_pct  = 1.5
-            except Exception:
-                pass
-        log_activity("INFO",
-                     "🔄 Reset to scalping defaults — check=10s · "
-                     "threshold=0.05% · size=$10 · SL=0.5% · TP=1.5%")
-        st.success("✅ Scalping defaults applied. Restart the bot for the "
-                   "new check interval to take effect.")
+                     "⚡ ACTIVE SCALPER defaults applied — check=2s · "
+                     "threshold=0.01% · size=$10–$20 · 1/sym · 3 total · cooldown=0")
+        st.success("✅ ACTIVE SCALPER defaults applied. Restart the bot for "
+                   "the 2s tick to take effect.")
         st.rerun()
 
     bc1, bc2 = st.columns(2)
@@ -1964,24 +1800,32 @@ with st.sidebar:
                     check_every=ck_val,
                     threshold=thr_val / 100,
                     initial_balance=st.session_state.initial_balance,
-                    ai_assist=bool(st.session_state.get("ai_assist", False)),
-                    ai_aggressiveness=st.session_state.get("ai_aggressiveness","Balanced"),
+                    ai_assist=True,                       # ACTIVE SCALPER — always on
+                    ai_aggressiveness="Active Scalper",   # ignored — single mode
                 )
                 b._initial_balance = st.session_state.initial_balance
                 b.start()
-                # Mark for refresh-proof auto-resume — the bottom-of-script
-                # auto-save now owns this flag (single source of truth, no race).
-                st.session_state.bot_was_running = True
+                # Refresh-proof: clear stop flag so auto-resume re-launches on
+                # next cold start.
+                st.session_state.bot_was_running   = True
+                st.session_state._user_stopped_bot = False
                 st.rerun()
     with bc2:
         if st.button("⏹ Stop", width="stretch", disabled=not bot_running):
             bot_module.stop_bot()
-            st.session_state.bot_was_running = False
+            st.session_state.bot_was_running   = False
+            # ACTIVE SCALPER auto-resume: explicit Stop suppresses auto-launch
+            # on next cold start. ▶ Start clears this flag.
+            st.session_state._user_stopped_bot = True
             st.rerun()
 
     if st.button("🚨 Emergency Stop", width="stretch", type="secondary"):
         st.session_state.risk.emergency_stop = True
         bot_module.stop_bot()
+        # Unified stop semantics — same as ⏹ Stop and toolbar OFF: suppress
+        # auto-resume on next cold start until operator explicitly restarts.
+        st.session_state.bot_was_running   = False
+        st.session_state._user_stopped_bot = True
         log_activity("WARNING", "🚨 EMERGENCY STOP activated — all trading halted")
         tg.bot_event("emergency", "All trading halted by user")
         st.rerun()
@@ -2473,6 +2317,8 @@ with st.container():
                           help="Toggle bot on/off"):
                 if bot_running:
                     bot_module.stop_bot()
+                    st.session_state.bot_was_running   = False
+                    st.session_state._user_stopped_bot = True
                 else:
                     c = _cl()
                     if c is None:
@@ -2494,7 +2340,7 @@ with st.container():
                             threshold=st.session_state.threshold / 100,
                             initial_balance=st.session_state.initial_balance,
                             ai_assist=bool(st.session_state.get("ai_assist", False)),
-                            ai_aggressiveness=st.session_state.get("ai_aggressiveness","Balanced"),
+                            ai_aggressiveness="Active Scalper",   # ACTIVE SCALPER MODE — ignored
                         )
                         b._initial_balance = st.session_state.initial_balance
                         b.start()
@@ -2944,6 +2790,8 @@ with st.container():
         if emg_btn:
             st.session_state.risk.emergency_stop = True
             bot_module.stop_bot()
+            st.session_state.bot_was_running   = False
+            st.session_state._user_stopped_bot = True
             log_activity("WARNING", "🚨 EMERGENCY STOP activated")
             st.rerun()
 

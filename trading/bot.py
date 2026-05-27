@@ -590,11 +590,11 @@ def get_bot_last_signal() -> dict:
 def create_bot(
     client=None,                                # BinanceClient (LIVE) — REQUIRED for orders
     symbol:       Optional[str] = None,         # legacy: single-symbol mode
-    strategy:     str = "EMA Crossover",
+    strategy:     str = "Active Scalper",       # ACTIVE SCALPER MODE — only mode
     risk_manager: Optional[RiskManager] = None,
-    interval:     str = "5m",
-    check_every:  int = 30,
-    threshold:    float = 0.0003,
+    interval:     str = "1m",                   # 1m candles for scalping
+    check_every:  int = 2,                      # 2s tick — ACTIVE SCALPER spec
+    threshold:    float = 0.0001,               # 0.01% (passed as fraction)
     # Multi-symbol args
     symbols:               Optional[List[str]] = None,
     per_symbol_risk:       Optional[Dict[str, RiskManager]] = None,
@@ -602,8 +602,8 @@ def create_bot(
     exchange:              Optional[Exchange] = None,
     initial_balance:       float = 1000.0,
     # AI assist (extra decision layer)
-    ai_assist:             bool = False,
-    ai_aggressiveness:     str  = "Balanced",
+    ai_assist:             bool = True,         # ACTIVE SCALPER — AI always on
+    ai_aggressiveness:     str  = "Active Scalper",  # ignored — single hardcoded mode
 ) -> TradingBot:
     """Build (or rebuild) the singleton bot. LIVE Binance Mainnet only."""
     global _bot, _primary_symbol
@@ -616,8 +616,9 @@ def create_bot(
     else:
         ex_registry.register(exchange)
 
-    # Resolve which symbols to run
-    sym_list = symbols if symbols else ([symbol] if symbol else ["BTCUSDT"])
+    # ACTIVE SCALPER MODE: hardcoded to BTC + ETH + SOL unless caller overrides.
+    sym_list = symbols if symbols else ([symbol] if symbol else
+                                        ["BTCUSDT", "ETHUSDT", "SOLUSDT"])
     if len(sym_list) > 3:
         print(f"[BOT] capping symbols list to 3 (got {len(sym_list)})", flush=True)
         sym_list = sym_list[:3]

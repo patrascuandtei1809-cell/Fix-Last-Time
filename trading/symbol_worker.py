@@ -12,6 +12,14 @@ from risk import RiskManager
 from ai_engine import ai_decide
 
 
+# ── ACTIVE SCALPER MODE — hardcoded post-entry & anti-idle constants ────────
+# Per operator spec (FULL RESET). One mode, no profiles.
+AS_BE_ARM_PCT          = 0.20    # arm breakeven SL at +0.20%
+AS_MAX_RED_AFTER_ENTRY = 2       # exit on 2 consecutive red candles after entry
+AS_ANTI_IDLE_MIN       = 5.0     # after 5 min idle → halve threshold
+AS_FORCE_AFTER_MIN     = 10.0    # after 10 min idle → quarter threshold + force
+
+
 class SymbolWorker:
     def __init__(
         self,
@@ -19,15 +27,15 @@ class SymbolWorker:
         symbol:          str,
         strategy:        str,
         risk_manager:    RiskManager,
-        interval:        str   = "5m",
-        price_threshold: float = 0.0003,
+        interval:        str   = "1m",
+        price_threshold: float = 0.0001,    # 0.01% — ACTIVE SCALPER default
         on_log:          Optional[Callable] = None,
         on_state_update: Optional[Callable] = None,
         on_open_trade:   Optional[Callable] = None,
         on_close_trade:  Optional[Callable] = None,
         on_telegram:     Optional[Callable] = None,
-        ai_assist:       bool = False,
-        ai_aggressiveness: str = "Balanced",
+        ai_assist:       bool = True,
+        ai_aggressiveness: str = "Active Scalper",   # ignored — single mode
     ):
         self.exchange   = exchange
         self.symbol     = symbol
@@ -35,8 +43,10 @@ class SymbolWorker:
         self.risk       = risk_manager
         self.interval   = interval
         self.threshold  = price_threshold
+        self._base_threshold = price_threshold     # restored after anti-idle force
         self.ai_assist  = bool(ai_assist)
-        self.ai_aggressiveness = ai_aggressiveness or "Balanced"
+        # ACTIVE SCALPER MODE is the only profile; accept legacy arg for compat.
+        self.ai_aggressiveness = "Active Scalper"
 
         self._on_log    = on_log    or (lambda *_a, **_kw: None)
         self._on_state  = on_state_update or (lambda *_a, **_kw: None)
@@ -52,7 +62,8 @@ class SymbolWorker:
         # Per-trade post-entry exit state — keyed by trade id.
         # Tracks bars seen since entry, consecutive red count, breakeven-armed.
         self._post_entry: Dict[str, Dict] = {}
-        # Per-hour trade cap (used by Pro Fast Scalper). Timestamps culled in tick.
+        # Per-hour trade cap (legacy — kept for back-compat; ACTIVE SCALPER
+        # MODE relies on max_per_symbol=1 + cooldown_seconds instead).
         self._recent_trade_times: List[datetime] = []
 
         # Fees-vs-TP sanity check at construction (Binance Spot ~0.2% round-trip).
@@ -92,18 +103,14 @@ class SymbolWorker:
             return
         self._on_state(self.symbol, price=price, tick=True)
 
-        # 2. Manage open positions (SL/TP)
-        my_open = [t for t in all_open_trades
-                   if t.get("type") == "bot" and t.get("coin") == self.symbol]
-        # PRO post-entry exit hints (only active when this worker runs a
-        # profile that defines them — Pro Fast Scalper).
-        try:
-            from ai_engine import AGGRESSIVENESS_PROFILES
-            _pro_prof = AGGRESSIVENESS_PROFILES.get(self.ai_aggressiveness, {})
-        except Exception:
-            _pro_prof = {}
-        _be_arm_pct   = float(_pro_prof.get("be_arm_pct", 0) or 0)
-        _max_red      = int(_pro_prof.get("max_red_after_entry", 0) or 0)
+        # 2. Manage open positions (SL/TP) — INCLUDES manual trades.
+        # ACTIVE SCALPER spec: bot must monitor and close manual BTC/ETH/SOL
+        # positions using the same SL/TP rules. Filter is by symbol only,
+        # not by type=="bot".
+        my_open = [t for t in all_open_trades if t.get("coin") == self.symbol]
+        # ACTIVE SCALPER hardcoded post-entry behavior (no profile lookup).
+        _be_arm_pct   = AS_BE_ARM_PCT
+        _max_red      = AS_MAX_RED_AFTER_ENTRY
         for trade in my_open:
             entry = trade["entry_price"]
             side  = trade["side"]
@@ -202,23 +209,49 @@ class SymbolWorker:
                         _pe["red_count"] += 1
                     else:
                         _pe["red_count"] = 0
-                    # N-red exit
+                    # N-red exit (ACTIVE SCALPER spec — exit on 2 consecutive reds).
                     if _max_red > 0 and _pe["red_count"] >= _max_red:
-                        _msg = (f"PRO exit — {_pe['red_count']} consecutive red "
-                                f"candles after entry (limit {_max_red})")
+                        _msg = (f"ACTIVE SCALPER exit — {_pe['red_count']} consecutive "
+                                f"red candles after entry (limit {_max_red})")
                         self._log("ORDER", f"{tag} 🔻 {_msg} | {_tid}")
                         self._close_position(_t, _close_n, _msg)
                         return
-                # EMA9-break exit (BUY only) — only after breakeven arm
-                # so we don't whipsaw out on first dip. Acts as trailing stop.
-                if _pe["armed_be"] and _ema9_now > 0 and _close_n < _ema9_now:
-                    _msg = (f"PRO exit — price ${_close_n:.4f} < EMA9 "
-                            f"${_ema9_now:.4f} after breakeven arm")
-                    self._log("ORDER", f"{tag} 🔻 {_msg} | {_tid}")
-                    self._close_position(_t, _close_n, _msg)
-                    return
+                # EMA9-break exit REMOVED — ACTIVE SCALPER spec uses ONLY
+                # SL/TP + breakeven SL + N-red exit. No trailing EMA9 stop.
+
+        # ── Anti-idle: dynamically lower threshold after idle periods ──────
+        # ACTIVE SCALPER spec: "If no trade for 5–10 minutes → automatically
+        # lower thresholds (be more aggressive)". Threshold is restored to its
+        # base value as soon as a new trade fires (self._last_trade_at update).
+        _mins_idle = None
+        if self._last_trade_at is not None:
+            _mins_idle = (datetime.now() - self._last_trade_at).total_seconds() / 60.0
+        _force_idle = False
+        if _mins_idle is not None and _mins_idle >= AS_FORCE_AFTER_MIN:
+            self.threshold = self._base_threshold * 0.25   # 0.0025% — forced
+            _force_idle = True
+        elif _mins_idle is not None and _mins_idle >= AS_ANTI_IDLE_MIN:
+            self.threshold = self._base_threshold * 0.5    # 0.005%
+        else:
+            self.threshold = self._base_threshold
 
         signal, reason, confidence = get_signal(df, self.strategy, threshold=self.threshold)
+        if _force_idle and signal == "HOLD":
+            # ACTIVE SCALPER spec: after 10+ min idle, actually FORCE an entry
+            # attempt using the sign of the most recent candle. Risk + global
+            # + balance gates still run below, so this only fires if everything
+            # else is healthy.
+            try:
+                _last_pct = (float(df["close"].iloc[-1]) - float(df["close"].iloc[-2])) \
+                            / float(df["close"].iloc[-2]) * 100
+            except Exception:
+                _last_pct = 0.0
+            signal     = "BUY" if _last_pct >= 0 else "SELL"
+            confidence = max(confidence, 35)
+            reason = (f"⚡ FORCED MICRO-ENTRY {signal} — idle {_mins_idle:.0f} min, "
+                      f"last candle {_last_pct:+.4f}%")
+        if self.threshold != self._base_threshold:
+            reason = f"[idle {_mins_idle:.1f}m, thresh×{self.threshold/self._base_threshold:.2f}] {reason}"
         self._on_state(self.symbol, signal=signal, reason=reason, confidence=confidence)
         # Concise per-symbol decision line (matches user-requested format)
         print(f"[BOT] {self.symbol} signal={signal} reason={reason}", flush=True)
@@ -294,28 +327,11 @@ class SymbolWorker:
             self._last_block_reason = block
             return
 
-        # 4b. PRO per-symbol per-hour cap (Pro Fast Scalper).
-        _max_per_hr = int(_pro_prof.get("max_trades_per_hour", 0) or 0)
-        if _max_per_hr > 0:
-            _cutoff = datetime.now()
-            self._recent_trade_times = [t for t in self._recent_trade_times
-                                        if (_cutoff - t).total_seconds() < 3600]
-            if len(self._recent_trade_times) >= _max_per_hr:
-                _msg = (f"PRO hourly cap — {len(self._recent_trade_times)}/"
-                        f"{_max_per_hr} trades on {self.symbol} in last 60 min")
-                print(f"[BOT] {self.symbol} blocked reason={_msg} (per-hour cap)", flush=True)
-                self._log("INFO", f"{tag} ⏸️ {_msg}")
-                self._on_state(self.symbol, block_reason=_msg)
-                return
-
-        # 5. Sizing
+        # 5. Sizing — ACTIVE SCALPER spec: $10–$20 per trade, never below $10.
+        # Operator can raise the cap by setting max_trade_usdt > 20 in the
+        # sidebar, but the default and floor are always [$10, $20].
         invested = self.risk.get_invest_amount()
-        if invested < 10:
-            msg = f"{tag} ⚠️ invest_per_trade ${invested:.2f} < $10 minimum"
-            print(f"[WORKER {self.symbol}] BLOCKED (sizing) {msg}", flush=True)
-            self._log("WARNING", msg)
-            self._on_state(self.symbol, block_reason=msg)
-            return
+        invested = max(10.0, min(20.0, invested))
 
         # 6. Global gate
         ok_g, block_g = global_gate_fn(invested, self.symbol)

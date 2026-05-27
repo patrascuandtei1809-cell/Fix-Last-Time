@@ -1,13 +1,15 @@
 {
   "symbol": "BTCUSDT",
   "active_symbols": [
-    "BTCUSDT"
+    "BTCUSDT",
+    "ETHUSDT",
+    "SOLUSDT"
   ],
   "bot_was_running": false,
-  "strategy": "Price Movement",
+  "strategy": "Active Scalper",
   "interval": "1m",
-  "check_every": 15,
-  "threshold": 0.05,
+  "check_every": 2,
+  "threshold": 0.01,
   "initial_balance": 1000.0,
   "manual_amount": 100.0,
   "refresh_secs": 5,
@@ -17,17 +19,17 @@
   "global_risk": {
     "max_total_exposure_usdt": 300.0,
     "max_exposure_per_symbol_pct": 50,
-    "max_open_trades_total": 5,
+    "max_open_trades_total": 3,
     "max_daily_loss_pct": 5.0
   },
   "per_symbol_risk": {},
   "risk": {
-    "invest_per_trade": 50.0,
-    "max_trade_usdt": 100.0,
+    "invest_per_trade": 20.0,
+    "max_trade_usdt": 20.0,
     "stop_loss_pct": 2.0,
     "take_profit_pct": 4.0,
     "max_open_trades": 2,
-    "cooldown_seconds": 180,
+    "cooldown_seconds": 30,
     "max_daily_loss_pct": 5.0,
     "max_trades_per_session": 0,
     "emergency_stop": false

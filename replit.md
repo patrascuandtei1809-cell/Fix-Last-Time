@@ -64,6 +64,38 @@ LIVE-only Binance Mainnet trading dashboard. **Every BUY/SELL is a real order on
 5. Start small — set Risk per trade % to 0.5–1% and place one manual trade first to verify.
 6. Keep emergency stop ready — one click halts all bot activity.
 
+## ACTIVE SCALPER MODE (May 2026 — full reset)
+
+The bot has a **single hardcoded strategy** called `Active Scalper`. All previous
+modes (Conservative / Balanced / Aggressive / Ultra / Pro) and their preset
+buttons have been removed. There is no Aggressiveness dropdown. AI is always
+on, advisory only — it confirms strategy BUY/SELL but **never blocks** them.
+
+Hardcoded spec:
+- **2s tick**, **1m candles**, threshold `0.01%` (anti-idle auto-lowers).
+- Triggers BUY/SELL on ANY of: price ±0.01%, EMA9 3-bar slope, bounce
+  (≥2 reds → green), or momentum flip. No EMA hard veto, no green-candle
+  requirement, no "wait for perfect trend".
+- **Size**: $10–$20 per trade (clamped in `symbol_worker.tick()`).
+- **Caps**: 1 open trade per symbol, 3 total open across BTC/ETH/SOL.
+- **Manages manual trades** the same as bot trades — SL/TP filter is by
+  symbol only, not `type=="bot"`.
+- **Post-entry**: breakeven SL armed at +0.20%, exits on 2 consecutive red
+  candles (constants `AS_BE_ARM_PCT` / `AS_MAX_RED_AFTER_ENTRY` in
+  `symbol_worker.py`).
+- **Anti-idle**: if no trade for ≥5 min → threshold ×0.5; ≥10 min →
+  threshold ×0.25 + forced micro-entry attempt. Threshold restores on next
+  trade.
+- **Auto-start**: bot launches automatically on every cold start as long as
+  LIVE creds are present and the operator has not pressed ⏹ Stop
+  (`_user_stopped_bot` session flag).
+- **AI behavior** (`ai_engine.ai_decide`): the only HOLDs it ever emits are
+  data shortage, balance < $10 (BUY only), max_open reached, or a truly
+  motionless market (last candle move below `flat_pct`). Everything else
+  gets a directional verdict.
+
+Target throughput: 50–150 trades/day across all three symbols.
+
 ## Multi-symbol bot UX (May 2026)
 
 - Default `active_symbols` = **BTC + ETH + SOL** — the orchestrator scans all three each tick.

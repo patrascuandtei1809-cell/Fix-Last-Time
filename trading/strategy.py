@@ -7,7 +7,7 @@ return confidence 0 unless they explain why a near-miss was rejected.
 """
 import pandas as pd
 import numpy as np
-from typing import Tuple
+from typing import Tuple, List
 
 
 # ── Indicator primitives ──────────────────────────────────────────────────────
@@ -198,10 +198,96 @@ def momentum_signal(df: pd.DataFrame, period: int = 14) -> Tuple[str, str, int]:
     return "HOLD", f"RSI={rsi_v:.1f} neutral{vol_note}", 0
 
 
+# ── Strategy: Active Scalper (ACTIVE SCALPER MODE — single hardcoded mode) ───
+#
+# Fires on ANY of:
+#   • |price change| >= threshold_pct (default 0.01%)
+#   • EMA9 3-bar slope crosses |ema9_slope_thresh| (default 0.005%)
+#   • Bounce: >=2 of last 3 candles red AND current candle green → BUY
+#   • Momentum flip: pct_prev<0 & pct_now>0 → BUY (reverse → SELL)
+#
+# No EMA hard veto, no "perfect trend" requirement, no green-candle requirement.
+# Allows trading in sideways markets. HOLD only when NOTHING moves.
+#
+# The worker dynamically lowers `threshold_pct` after idle periods (anti-idle),
+# so this function must remain pure — it only reads what's passed in.
+def active_scalper_signal(
+    df: pd.DataFrame,
+    threshold_pct:     float = 0.01,
+    ema9_slope_thresh: float = 0.005,
+) -> Tuple[str, str, int]:
+    if len(df) < 25:
+        return "HOLD", "Need 25+ candles for ACTIVE SCALPER", 0
+
+    close = df["close"]
+    opn   = df["open"]
+    try:
+        curr  = float(close.iloc[-1])
+        prev  = float(close.iloc[-2])
+        prev2 = float(close.iloc[-3])
+    except Exception:
+        return "HOLD", "Bad candle frame", 0
+
+    pct      = (curr - prev) / prev * 100 if prev else 0.0
+    pct_prev = (prev - prev2) / prev2 * 100 if prev2 else 0.0
+
+    # EMA9 slope over last 3 closes — captures direction change before a full cross.
+    ema9 = calculate_ema(close, 9)
+    try:
+        e_now, e_prev2 = float(ema9.iloc[-1]), float(ema9.iloc[-3])
+        slope = (e_now - e_prev2) / e_prev2 * 100 if e_prev2 else 0.0
+    except Exception:
+        e_now, slope = 0.0, 0.0
+
+    # Bounce detector: >=2 of last 3 candles red AND current is green.
+    try:
+        reds_before = sum(
+            1 for i in (-4, -3, -2)
+            if float(close.iloc[i]) < float(opn.iloc[i])
+        )
+        curr_green = curr > float(opn.iloc[-1])
+    except Exception:
+        reds_before, curr_green = 0, False
+    bounce_up = reds_before >= 2 and curr_green
+
+    momentum_up   = pct_prev < 0 and pct > 0
+    momentum_down = pct_prev > 0 and pct < 0
+
+    buy_triggers:  List[str] = []
+    sell_triggers: List[str] = []
+    if pct >=  threshold_pct: buy_triggers.append(f"price {pct:+.3f}% ≥ +{threshold_pct:.3f}%")
+    if pct <= -threshold_pct: sell_triggers.append(f"price {pct:+.3f}% ≤ -{threshold_pct:.3f}%")
+    if slope >=  ema9_slope_thresh: buy_triggers.append(f"EMA9 slope {slope:+.3f}%")
+    if slope <= -ema9_slope_thresh: sell_triggers.append(f"EMA9 slope {slope:+.3f}%")
+    if bounce_up:    buy_triggers.append(f"bounce — {reds_before}/3 reds → green")
+    if momentum_up:  buy_triggers.append(f"momentum flip up ({pct_prev:+.3f}%→{pct:+.3f}%)")
+    if momentum_down: sell_triggers.append(f"momentum flip down ({pct_prev:+.3f}%→{pct:+.3f}%)")
+
+    # Confidence scales with magnitude of move vs threshold.
+    mag = max(abs(pct), abs(slope))
+    conf = int(min(100, (mag / threshold_pct) * 30 + 40)) if threshold_pct > 0 else 50
+
+    if buy_triggers and not sell_triggers:
+        return "BUY",  "ACTIVE SCALPER BUY: "  + " | ".join(buy_triggers), conf
+    if sell_triggers and not buy_triggers:
+        return "SELL", "ACTIVE SCALPER SELL: " + " | ".join(sell_triggers), conf
+    if buy_triggers and sell_triggers:
+        # Mixed — pick stronger by trigger count, tie → side of larger magnitude.
+        if len(buy_triggers) > len(sell_triggers) or \
+           (len(buy_triggers) == len(sell_triggers) and pct >= 0):
+            return "BUY",  "ACTIVE SCALPER BUY (mixed): " + " | ".join(buy_triggers), conf
+        return "SELL", "ACTIVE SCALPER SELL (mixed): " + " | ".join(sell_triggers), conf
+    return "HOLD", (f"No movement — pct={pct:+.4f}% slope={slope:+.4f}% "
+                    f"(threshold ±{threshold_pct:.3f}%)"), 0
+
+
 # ── Dispatcher ────────────────────────────────────────────────────────────────
 
 def get_signal(df: pd.DataFrame, strategy: str, threshold: float = 0.0003) -> Tuple[str, str, int]:
     """Returns (signal, reason, confidence_0_100)."""
+    if strategy == "Active Scalper":
+        # `threshold` is fractional (0.0001 = 0.01%); convert to percent.
+        return active_scalper_signal(df, threshold_pct=max(threshold, 0.00001) * 100)
     if strategy == "EMA Crossover":
         return ema_crossover_signal(df)
     if strategy == "Price Movement":
