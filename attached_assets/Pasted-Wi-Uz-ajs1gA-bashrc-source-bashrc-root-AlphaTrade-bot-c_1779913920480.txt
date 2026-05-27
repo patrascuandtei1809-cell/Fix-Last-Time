@@ -1,0 +1,62 @@
+Wi-Uz_ajs1gA"' >> ~/.bashrc
+source ~/.bashrc
+root@AlphaTrade-bot:~# cd /root/trading-bot-clean && git pull
+remote: Enumerating objects: 39, done.
+remote: Counting objects: 100% (39/39), done.
+remote: Compressing objects: 100% (10/10), done.
+remote: Total 27 (delta 22), reused 22 (delta 17), pack-reused 0 (from 0)
+Unpacking objects: 100% (27/27), 19.20 KiB | 357.00 KiB/s, done.
+From https://github.com/patrascuandtei1809-cell/Fix-Last-Time
+   fa79429..6900d0a  main       -> origin/main
+Updating fa79429..6900d0a
+error: Your local changes to the following files would be overwritten by merge:
+        trading/data/settings.json
+Please commit your changes or stash them before you merge.
+Aborting
+root@AlphaTrade-bot:~/trading-bot-clean# pkill -9 -f streamlit
+sleep 3
+ss -tlnp | grep 8501 
+root@AlphaTrade-bot:~/trading-bot-clean# cd /root/trading-bot-clean/trading
+nohup /root/trading-bot-clean/venv/bin/streamlit run dashboard.py \
+    --server.port 8501 \
+    --server.address 0.0.0.0 \
+    > /root/streamlit.log 2>&1 &
+[1] 639346
+root@AlphaTrade-bot:~/trading-bot-clean/trading# sleep 3
+ps aux | grep streamlit | grep -v grep
+tail -20 /root/streamlit.log
+[1]+  Exit 1                  nohup /root/trading-bot-clean/venv/bin/streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0 > /root/streamlit.log 2>&1
+root      639335 19.9 19.8 1987120 195864 ?      Ssl  21:30   0:04 /root/trading-bot-clean/venv/bin/python3 /root/trading-bot-clean/venv/bin/streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0
+nohup: ignoring input
+2026-05-27 21:30:43.086 Port 8501 is not available
+root@AlphaTrade-bot:~/trading-bot-clean/trading# source /root/trading-bot-clean/venv/bin/activate && cd /root/trading-bot-clean && git pull && pkill -9 -f streamlit; sleep 3; cd trading && nohup /root/trading-bot-clean/venv/bin/streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0 > /root/streamlit.log 2>&1 & sleep 3 && tail -20 /root/streamlit.log
+Updating fa79429..6900d0a
+error: Your local changes to the following files would be overwritten by merge:
+        trading/data/settings.json
+Please commit your changes or stash them before you merge.
+Aborting
+[1] 639390
+[1]+  Exit 1                  cd trading && nohup /root/trading-bot-clean/venv/bin/streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0 > /root/streamlit.log 2>&1
+nohup: ignoring input
+2026-05-27 21:31:10.989 Port 8501 is not available
+(venv) root@AlphaTrade-bot:~/trading-bot-clean# cat /proc/$(pgrep -f streamlit)/environ | tr '\0' '\n' | grep OPENAI_API_KEY
+(venv) root@AlphaTrade-bot:~/trading-bot-clean# cat > /root/restart-bot.sh << 'EOF'
+#!/bin/bash
+set -e
+cd /root/trading-bot-clean
+git pull
+pkill -9 -f streamlit || true
+for i in 1 2 3 4 5; do
+    ss -tlnp | grep -q 8501 || break
+    sleep 1
+done
+fuser -k 8501/tcp 2>/dev/null || true
+cd trading
+nohup /root/trading-bot-clean/venv/bin/streamlit run dashboard.py \
+    --server.port 8501 --server.address 0.0.0.0 > /root/streamlit.log 2>&1 &
+sleep 3
+echo "=== Streamlit log (last 20 lines) ==="
+tail -20 /root/streamlit.log
+EOF
+chmod +x /root/restart-bot.sh
+(venv) root@AlphaTrade-bot:~/trading-bot-clean# 
