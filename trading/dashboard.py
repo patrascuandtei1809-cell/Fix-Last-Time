@@ -1185,7 +1185,8 @@ _strat_html = (f'<span style="font-size:10px;color:#484f58;">STRATEGY</span> '
 _ai_on   = bool(st.session_state.get("ai_assist"))
 _ai_prof = st.session_state.get("ai_aggressiveness", "Balanced")
 if _ai_on:
-    _ai_col = {"Conservative":"#7ce0c2","Balanced":"#79b0ff","Aggressive":"#f0883e"}.get(_ai_prof, "#79b0ff")
+    _ai_col = {"Conservative":"#7ce0c2","Balanced":"#79b0ff",
+               "Aggressive":"#f0883e","Ultra Aggressive":"#ff3860"}.get(_ai_prof, "#79b0ff")
     _ai_pill = (f'<span class="pill" style="background:{_ai_col}22;'
                 f'border:1px solid {_ai_col}66;color:{_ai_col};'
                 f'font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">'
@@ -1638,15 +1639,19 @@ with st.sidebar:
                  "markets. Risk gates (SL/TP/exposure) always run regardless.",
         )
     with _ai2:
+        _AGG_OPTS = ["Conservative", "Balanced", "Aggressive", "Ultra Aggressive"]
+        _cur_agg = st.session_state.get("ai_aggressiveness", "Balanced")
+        if _cur_agg not in _AGG_OPTS:
+            _cur_agg = "Balanced"
         st.session_state.ai_aggressiveness = st.selectbox(
             "Aggressiveness",
-            options=["Conservative", "Balanced", "Aggressive"],
-            index=["Conservative","Balanced","Aggressive"].index(
-                st.session_state.get("ai_aggressiveness","Balanced")),
+            options=_AGG_OPTS,
+            index=_AGG_OPTS.index(_cur_agg),
             key="ai_aggressiveness_sel",
-            help="Conservative: conf≥70, vetoes 0.3% dumps, only takes high-"
-                 "confidence trades. Balanced: conf≥55. Aggressive: conf≥40, "
-                 "allows AI to initiate trades when strategy says HOLD.",
+            help="Conservative: conf≥70, vetoes 0.3% dumps. Balanced: conf≥55. "
+                 "Aggressive: conf≥20, ATR floor 0.005%, force micro-entry "
+                 "after 30 min idle. ULTRA: conf≥20, near-zero ATR floor, "
+                 "force micro-entry after 15 min — pair with 3s ticks.",
             disabled=not st.session_state.ai_assist,
         )
     if st.session_state.ai_assist:
@@ -1715,6 +1720,66 @@ with st.sidebar:
                 f"pick up the 5s tick.")
         st.session_state.last_action = {"kind": "ok", "msg": _msg}
         st.toast("🔥 AGGRESSIVE LIVE applied", icon="✅")
+        st.rerun()
+
+    # ── 🚀 ULTRA AGGRESSIVE preset ────────────────────────────────────────────
+    # Even more aggressive than AGGRESSIVE: 3s tick, 0.01% threshold,
+    # AI = Ultra Aggressive (conf≥20, ATR floor 0.005%, force micro-entry
+    # every 15 min). For dead-market scalping. Same 90% USDT size + SL/TP.
+    if st.button("🚀 ULTRA AGGRESSIVE preset",
+                 width="stretch", key="ultra_aggressive_preset_btn", type="primary",
+                 help="Maximum-fire scalping: 3s tick · 0.01% threshold · "
+                      "AI=Ultra (conf≥20, force micro-entry every 15 min). "
+                      "Pairs with 90% USDT size. Risk caps still enforced."):
+        print("[CLICK] ULTRA AGGRESSIVE preset button pressed", flush=True)
+        st.session_state.check_every       = 3
+        st.session_state.threshold         = 0.01
+        st.session_state.ai_assist         = True
+        st.session_state.ai_aggressiveness = "Ultra Aggressive"
+        _u_free = 0.0
+        try:
+            _uc = _cl()
+            if _uc is not None:
+                _u_free = float(_uc.get_account_balance("USDT").get("free", 0.0))
+        except Exception:
+            _u_free = 0.0
+        _u_size = round(_u_free * 0.90, 2) if _u_free > 0 else 10.0
+        st.session_state.manual_amount = _u_size
+        try:
+            st.session_state.risk.invest_per_trade = _u_size
+            st.session_state.risk.stop_loss_pct    = 0.5
+            st.session_state.risk.take_profit_pct  = 1.5
+            st.session_state.risk.max_open_trades  = 3
+        except Exception:
+            pass
+        for _sym, _rs in (st.session_state.get("per_symbol_risk") or {}).items():
+            try:
+                _rs.invest_per_trade = _u_size
+                _rs.stop_loss_pct    = 0.5
+                _rs.take_profit_pct  = 1.5
+                _rs.max_open_trades  = 3
+            except Exception:
+                pass
+        try:
+            from bot import save_settings as _save_settings
+            _save_settings({
+                "check_every": 3, "threshold": 0.01,
+                "manual_amount": _u_size,
+                "ai_assist": True, "ai_aggressiveness": "Ultra Aggressive",
+            })
+        except Exception:
+            pass
+        log_activity("INFO",
+                     f"🚀 ULTRA AGGRESSIVE preset applied — check=3s · "
+                     f"threshold=0.01% · size=${_u_size:.2f} (90% of "
+                     f"${_u_free:.2f} free) · AI=Ultra Aggressive · "
+                     f"force-entry every 15 min")
+        st.session_state.last_action = {"kind":"ok","msg":
+            f"🚀 ULTRA AGGRESSIVE applied · check=3s · threshold=0.01% · "
+            f"size=${_u_size:.2f} (90% of ${_u_free:.2f} free) · "
+            f"AI=Ultra Aggressive (conf≥20, ATR floor 0.005%, force micro-"
+            f"entry every 15 min). Restart the bot to pick up the 3s tick."}
+        st.toast("🚀 ULTRA AGGRESSIVE applied", icon="✅")
         st.rerun()
 
     if st.button("🔄 Reset to scalping defaults",

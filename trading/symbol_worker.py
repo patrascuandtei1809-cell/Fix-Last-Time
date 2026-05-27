@@ -138,6 +138,11 @@ class SymbolWorker:
                     _free = float(_b.get("free", 0.0))
                 except Exception:
                     _free = 0.0
+                # Minutes since the worker last took a trade on this symbol —
+                # drives the ULTRA / Aggressive "forced micro-entry" path.
+                _mins_since = None
+                if self._last_trade_at is not None:
+                    _mins_since = (datetime.now() - self._last_trade_at).total_seconds() / 60.0
                 _ai = ai_decide(
                     df_ind if "df_ind" in locals() else df,
                     strategy_signal       = signal,
@@ -145,6 +150,7 @@ class SymbolWorker:
                     open_positions_for_sym = my_open,
                     free_usdt             = _free,
                     aggressiveness        = self.ai_aggressiveness,
+                    minutes_since_last_trade = _mins_since,
                 )
                 # Always log the AI line — operator wants to see every decision.
                 print(f"[AI] {self.symbol} decision={_ai.decision} "

@@ -66,13 +66,30 @@ AGGRESSIVENESS_PROFILES: Dict[str, Dict] = {
         "max_open":       2,
     },
     "Aggressive": {
-        "confidence_min": 40,
+        "confidence_min": 20,       # lowered from 40 per operator spec
         "dump_pct":       0.80,
         "pump_rsi":       82.0,
-        "flat_atr_pct":   0.02,
+        "flat_atr_pct":   0.005,    # lowered from 0.02 per operator spec
         "strategy_bonus": 15,
-        "allow_override": True,    # AI may initiate when strategy says HOLD
+        "allow_override": True,     # AI may initiate when strategy says HOLD
         "max_open":       3,
+        "force_after_min": 30,      # if no trade for 30 min, force a micro-entry
+    },
+    # ── ULTRA AGGRESSIVE ──────────────────────────────────────────────────
+    # Maximum-fire scalping profile. Use with 3s ticks + 0.01% threshold.
+    # Bypasses confidence floor, near-zero ATR floor, allows override,
+    # forces a micro-entry every 15 min if nothing else has fired.
+    # STILL refuses obvious dumps and pump tops, STILL respects max_open
+    # and balance gates. Always pairs with global risk caps.
+    "Ultra Aggressive": {
+        "confidence_min": 20,
+        "dump_pct":       1.50,     # only veto on >1.5% three-bar dump
+        "pump_rsi":       88.0,     # only veto on extreme overbought
+        "flat_atr_pct":   0.005,    # essentially no flat-market gate
+        "strategy_bonus": 10,
+        "allow_override": True,
+        "max_open":       3,
+        "force_after_min": 15,      # force micro-entry every 15 min if idle
     },
 }
 
@@ -132,6 +149,7 @@ def ai_decide(
     open_positions_for_sym:  List[Dict],
     free_usdt:               float,
     aggressiveness:          str = "Balanced",
+    minutes_since_last_trade: Optional[float] = None,
 ) -> AIDecision:
     """Combine indicators + strategy prior into a single decision with
     confidence 0..100. Never places orders; the worker still owns risk gates.
@@ -180,10 +198,16 @@ def ai_decide(
             factors)
 
     # ── Hard gate: flat market ─────────────────────────────────────────────
+    # In Aggressive/Ultra, `force_after_min` lets a stale market punch through:
+    # if nothing has traded for N minutes the flat gate is skipped so the
+    # operator gets at least one micro-entry per period.
     atr_pct = _atr_pct(df)
+    _force_now = bool(profile.get("force_after_min")
+                      and minutes_since_last_trade is not None
+                      and minutes_since_last_trade >= profile["force_after_min"])
     if atr_pct is not None:
         factors["atr_pct"] = round(atr_pct * 100, 4)
-        if atr_pct * 100 < profile["flat_atr_pct"]:
+        if atr_pct * 100 < profile["flat_atr_pct"] and not _force_now:
             return AIDecision("HOLD", 0,
                 f"Flat market — ATR%={atr_pct*100:.4f}% < "
                 f"{profile['flat_atr_pct']:.3f}% floor for {aggressiveness}. "
@@ -278,12 +302,25 @@ def ai_decide(
             f"for {aggressiveness}.",
             factors)
 
-    # Confidence floor
-    if confidence < profile["confidence_min"]:
+    # Confidence floor — bypassed when force_after_min has elapsed (forced
+    # micro-entry path) so the operator gets a trade even in a dead market.
+    if confidence < profile["confidence_min"] and not _force_now:
         return AIDecision("HOLD", confidence,
             f"AI confidence {confidence} < {profile['confidence_min']} "
             f"floor for {aggressiveness} (BUY={buy_score}/SELL={sell_score})",
             factors)
+
+    if _force_now:
+        # Forced micro-entry: tag the reason so the operator can see WHY
+        # the bot took an otherwise-marginal trade. Prefer BUY in a dead
+        # market (long-bias scalp). Risk gates still enforce size + SL/TP.
+        decision = decision if decision in ("BUY", "SELL") else "BUY"
+        reason = (f"⚡ FORCED MICRO-ENTRY ({aggressiveness}) — no trade for "
+                  f"{minutes_since_last_trade:.0f} min ≥ "
+                  f"{profile['force_after_min']} min trigger. "
+                  f"AI {decision} BUY={buy_score}/SELL={sell_score}")
+        return AIDecision(decision, max(profile["confidence_min"], confidence),
+                          reason, factors)
 
     # Build a compact reason string
     bits = []
