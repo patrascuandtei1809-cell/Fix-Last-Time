@@ -1186,7 +1186,8 @@ _ai_on   = bool(st.session_state.get("ai_assist"))
 _ai_prof = st.session_state.get("ai_aggressiveness", "Balanced")
 if _ai_on:
     _ai_col = {"Conservative":"#7ce0c2","Balanced":"#79b0ff",
-               "Aggressive":"#f0883e","Ultra Aggressive":"#ff3860"}.get(_ai_prof, "#79b0ff")
+               "Aggressive":"#f0883e","Ultra Aggressive":"#ff3860",
+               "Pro Fast Scalper":"#a371f7"}.get(_ai_prof, "#79b0ff")
     _ai_pill = (f'<span class="pill" style="background:{_ai_col}22;'
                 f'border:1px solid {_ai_col}66;color:{_ai_col};'
                 f'font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">'
@@ -1197,10 +1198,16 @@ else:
                 '🧠 AI: OFF</span>')
 
 # Last AI decision for the current symbol (from shared state set in tick())
-_ai_last = (_sig_meta.get("ai_decision") or "").upper() if _sig_meta else ""
+_ai_last  = (_sig_meta.get("ai_decision") or "").upper() if _sig_meta else ""
 _ai_lconf = int((_sig_meta.get("ai_confidence") or 0)) if _sig_meta else 0
 _ai_lreason = ((_sig_meta.get("ai_reason") or "")[:80]) if _sig_meta else ""
+# Learning-mode extras (trend pill + why-bullets panel rendered below).
+_ai_trend  = (_sig_meta.get("ai_trend") or "SIDEWAYS") if _sig_meta else "SIDEWAYS"
+_ai_sstr   = int((_sig_meta.get("ai_signal_strength") or 0)) if _sig_meta else 0
+_ai_why    = (_sig_meta.get("ai_why_bullets") or []) if _sig_meta else []
+_ai_blkr   = (_sig_meta.get("ai_blocker") or "") if _sig_meta else ""
 _ai_last_html = ""
+_trend_pill_html = ""
 if _ai_on and _ai_last:
     _alc = {"BUY":"#26a69a","SELL":"#ef5350","HOLD":"#6e7681"}.get(_ai_last, "#484f58")
     _ai_last_html = (
@@ -1213,11 +1220,20 @@ if _ai_on and _ai_last:
         f'{_ai_lconf}%</span>'
         f'</div>'
     )
+if _ai_on and _ai_trend:
+    _tc = {"UP":"#26a69a","DOWN":"#ef5350","SIDEWAYS":"#a371f7"}.get(_ai_trend, "#6e7681")
+    _ticon = {"UP":"📈","DOWN":"📉","SIDEWAYS":"➡️"}.get(_ai_trend, "·")
+    _trend_pill_html = (
+        f'<span class="pill" style="background:{_tc}22;border:1px solid {_tc}66;'
+        f'color:{_tc};font-size:10px;font-weight:700;padding:2px 8px;'
+        f'border-radius:10px;">{_ticon} TREND · {_ai_trend}</span>'
+    )
 
 _bot_status_html = (
     f'<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">'
     f'<div style="display:flex;align-items:center;gap:6px;">{_bot_dot}{_bot_lbl}</div>'
     f'<div>{_ai_pill}</div>'
+    f'<div>{_trend_pill_html}</div>'
     f'{_ai_last_html}'
     f'<div>{_strat_html}</div>'
     f'<div style="display:flex;align-items:center;gap:6px;">'
@@ -1418,6 +1434,52 @@ if bot_running:
         st.markdown(
             f'<div style="display:flex;gap:10px;flex-wrap:wrap;padding:10px 20px;background:#0a0d12;border-bottom:1px solid #1e2736;">'
             f'{_cards}</div>',
+            unsafe_allow_html=True,
+        )
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 🧠 WHY AI DID THIS — learning panel for the currently-viewed symbol
+# Always-visible expander (collapsed by default) that shows the bullet list
+# of factors the AI checked on its last tick, the detected trend, signal
+# strength, and any blocker. Empowers the operator to understand every
+# HOLD/BUY/SELL decision in plain language.
+# ─────────────────────────────────────────────────────────────────────────────
+if _ai_on and (_ai_why or _ai_last or _ai_blkr):
+    _verdict_col = {"BUY":"#26a69a","SELL":"#ef5350","HOLD":"#e3b341"}.get(
+        (_ai_last or "HOLD"), "#6e7681")
+    _verdict_txt = _ai_last or "HOLD"
+    _blk_line = ""
+    if _ai_blkr:
+        _blk_line = (f'<div style="margin-top:6px;color:#e3b341;font-size:11px;">'
+                     f'🚫 Blocker: <code style="background:#1e2736;padding:1px 6px;'
+                     f'border-radius:4px;color:#f0d169;">{_ai_blkr}</code></div>')
+    _bul_lines = ""
+    for _b in (_ai_why or []):
+        _bc = "#26a69a" if str(_b).lstrip().startswith("✓") else "#ef5350" \
+              if str(_b).lstrip().startswith("✗") else "#c9d1d9"
+        _bul_lines += (f'<div style="font-size:11px;color:{_bc};font-family:'
+                       f'\'JetBrains Mono\',monospace;line-height:1.7;">{_b}</div>')
+    if not _bul_lines:
+        _bul_lines = ('<div style="font-size:11px;color:#6e7681;font-style:italic;">'
+                      'Waiting for first AI tick on this symbol…</div>')
+    with st.expander(f"🧠 Why AI did this · {st.session_state.symbol} · "
+                     f"verdict {_verdict_txt} · trend {_ai_trend} · "
+                     f"strength {_ai_sstr}%", expanded=False):
+        st.markdown(
+            f'<div style="padding:8px 12px;background:#0d1117;border:1px solid #1e2736;'
+            f'border-radius:6px;">'
+            f'<div style="font-size:10px;color:#484f58;text-transform:uppercase;'
+            f'letter-spacing:.5px;margin-bottom:6px;">Last AI decision</div>'
+            f'<div style="font-size:13px;font-weight:700;color:{_verdict_col};'
+            f'margin-bottom:8px;">{_verdict_txt} · confidence {_ai_lconf}% · '
+            f'trend {_ai_trend}</div>'
+            f'<div style="font-size:10px;color:#484f58;text-transform:uppercase;'
+            f'letter-spacing:.5px;margin-bottom:4px;">Factors checked</div>'
+            f'{_bul_lines}'
+            f'{_blk_line}'
+            f'<div style="margin-top:8px;font-size:10px;color:#6e7681;font-style:italic;">'
+            f'{(_ai_lreason or "—")[:200]}</div>'
+            f'</div>',
             unsafe_allow_html=True,
         )
 
@@ -1639,7 +1701,8 @@ with st.sidebar:
                  "markets. Risk gates (SL/TP/exposure) always run regardless.",
         )
     with _ai2:
-        _AGG_OPTS = ["Conservative", "Balanced", "Aggressive", "Ultra Aggressive"]
+        _AGG_OPTS = ["Conservative", "Balanced", "Aggressive",
+                     "Ultra Aggressive", "Pro Fast Scalper"]
         _cur_agg = st.session_state.get("ai_aggressiveness", "Balanced")
         if _cur_agg not in _AGG_OPTS:
             _cur_agg = "Balanced"
@@ -1780,6 +1843,74 @@ with st.sidebar:
             f"AI=Ultra Aggressive (conf≥20, ATR floor 0.005%, force micro-"
             f"entry every 15 min). Restart the bot to pick up the 3s tick."}
         st.toast("🚀 ULTRA AGGRESSIVE applied", icon="✅")
+        st.rerun()
+
+    # ── 🎯 PRO FAST SCALPER preset ────────────────────────────────────────────
+    # Frequent trades, fast reactions, STRICT entry filter, strict exits.
+    # 2s tick · 0.01% threshold · 50% USDT size · SL 0.4% · TP 0.5% ·
+    # AI=Pro Fast Scalper (EMA9 cross + green candle + vol>3MA + RSI 45-70
+    # + MACD improving + above EMA21 + no recent pump). Worker enforces
+    # breakeven move @ +0.25%, 2-red-candle exit, EMA9-break exit, and
+    # per-symbol per-hour cap of 6 trades.
+    if st.button("🎯 PRO FAST SCALPER preset",
+                 width="stretch", key="pro_fast_scalper_preset_btn", type="primary",
+                 help="Frequent trades with strict filters: 2s tick · 0.01% "
+                      "threshold · 50% USDT · SL 0.4% · TP 0.5%. AI requires "
+                      "EMA9 cross + green candle + volume + healthy RSI + "
+                      "MACD improving. Breakeven SL at +0.25%, exit on 2 red "
+                      "candles or EMA9 break. 6 trades/hour/symbol max."):
+        print("[CLICK] PRO FAST SCALPER preset button pressed", flush=True)
+        st.session_state.check_every       = 2
+        st.session_state.threshold         = 0.01
+        st.session_state.ai_assist         = True
+        st.session_state.ai_aggressiveness = "Pro Fast Scalper"
+        _p_free = 0.0
+        try:
+            _pc = _cl()
+            if _pc is not None:
+                _p_free = float(_pc.get_account_balance("USDT").get("free", 0.0))
+        except Exception:
+            _p_free = 0.0
+        # 50% of free USDT (middle of the 40-60% band the operator asked for)
+        _p_size = round(_p_free * 0.50, 2) if _p_free > 0 else 10.0
+        st.session_state.manual_amount = _p_size
+        try:
+            st.session_state.risk.invest_per_trade = _p_size
+            st.session_state.risk.stop_loss_pct    = 0.4
+            st.session_state.risk.take_profit_pct  = 0.5
+            st.session_state.risk.max_open_trades  = 3
+            st.session_state.risk.cooldown_seconds = 0    # PRO uses per-hour cap
+        except Exception:
+            pass
+        for _sym, _rs in (st.session_state.get("per_symbol_risk") or {}).items():
+            try:
+                _rs.invest_per_trade  = _p_size
+                _rs.stop_loss_pct     = 0.4
+                _rs.take_profit_pct   = 0.5
+                _rs.max_open_trades   = 3
+                _rs.cooldown_seconds  = 0
+            except Exception:
+                pass
+        try:
+            from bot import save_settings as _save_settings
+            _save_settings({
+                "check_every": 2, "threshold": 0.01,
+                "manual_amount": _p_size,
+                "ai_assist": True, "ai_aggressiveness": "Pro Fast Scalper",
+            })
+        except Exception:
+            pass
+        log_activity("INFO",
+                     f"🎯 PRO FAST SCALPER preset applied — check=2s · "
+                     f"threshold=0.01% · size=${_p_size:.2f} (50% of "
+                     f"${_p_free:.2f} free) · SL 0.4% · TP 0.5% · "
+                     f"AI=Pro Fast Scalper · BE+0.25% · 6/hr/sym cap")
+        st.session_state.last_action = {"kind":"ok","msg":
+            f"🎯 PRO FAST SCALPER applied · check=2s · threshold=0.01% · "
+            f"size=${_p_size:.2f} (50% of ${_p_free:.2f} free) · "
+            f"SL 0.4% · TP 0.5% · BE arm @ +0.25%. Restart the bot to pick "
+            f"up the 2s tick."}
+        st.toast("🎯 PRO FAST SCALPER applied", icon="✅")
         st.rerun()
 
     if st.button("🔄 Reset to scalping defaults",
@@ -1997,8 +2128,13 @@ with st.sidebar:
     )
 
     st.markdown('<div style="height:4px;"></div>', unsafe_allow_html=True)
-    r.stop_loss_pct      = st.slider("Stop loss %",     0.5, 20.0, float(r.stop_loss_pct),      0.5)
-    r.take_profit_pct    = st.slider("Take profit %",   0.5, 50.0, float(r.take_profit_pct),    0.5)
+    # Min 0.1 + step 0.1 so PRO FAST SCALPER preset (SL 0.4 / TP 0.5) and
+    # other sub-0.5% scalping setups don't trip Streamlit's value-below-min
+    # validation after the preset rerun.
+    r.stop_loss_pct      = st.slider("Stop loss %",     0.1, 20.0,
+        max(0.1, float(r.stop_loss_pct)),   0.1)
+    r.take_profit_pct    = st.slider("Take profit %",   0.1, 50.0,
+        max(0.1, float(r.take_profit_pct)), 0.1)
     r.max_daily_loss_pct = st.slider("Max daily loss %",1.0, 30.0, float(r.max_daily_loss_pct), 0.5)
     r.max_open_trades    = st.slider("Max open trades", 1,   20,   int(r.max_open_trades),      1)
     st.session_state.risk_manager.settings = r
@@ -2048,15 +2184,15 @@ with st.sidebar:
                         f"{_sym} invest/trade", 1.0, 100_000.0,
                         float(_o.invest_per_trade), 5.0, key=f"pso_inv_{_sym}")
                     _o.stop_loss_pct    = st.slider(
-                        f"{_sym} SL %", 0.5, 20.0,
-                        float(_o.stop_loss_pct), 0.5, key=f"pso_sl_{_sym}")
+                        f"{_sym} SL %", 0.1, 20.0,
+                        max(0.1, float(_o.stop_loss_pct)), 0.1, key=f"pso_sl_{_sym}")
                 with _c2:
                     _o.max_trade_usdt   = st.number_input(
                         f"{_sym} hard cap", 0.0, 100_000.0,
                         float(_o.max_trade_usdt), 10.0, key=f"pso_cap_{_sym}")
                     _o.take_profit_pct  = st.slider(
-                        f"{_sym} TP %", 0.5, 50.0,
-                        float(_o.take_profit_pct), 0.5, key=f"pso_tp_{_sym}")
+                        f"{_sym} TP %", 0.1, 50.0,
+                        max(0.1, float(_o.take_profit_pct)), 0.1, key=f"pso_tp_{_sym}")
                 st.session_state.per_symbol_risk[_sym] = _o
             elif _has:
                 st.session_state.per_symbol_risk.pop(_sym, None)

@@ -91,18 +91,157 @@ AGGRESSIVENESS_PROFILES: Dict[str, Dict] = {
         "max_open":       3,
         "force_after_min": 15,      # force micro-entry every 15 min if idle
     },
+    # ── PRO FAST SCALPER ──────────────────────────────────────────────────
+    # Frequent trades, fast reactions, STRICT entry filters, strict exits.
+    # Pair with 2s tick · 0.01% threshold · 40–60% USDT size · 1m timeframe.
+    # The worker enforces post-entry exits (breakeven move at +0.25%,
+    # 2-red-candle exit, EMA9-break exit) + per-symbol per-hour cap of 6.
+    "Pro Fast Scalper": {
+        "confidence_min":      20,
+        "dump_pct":            1.00,
+        "pump_rsi":            75.0,    # veto BUY when RSI > 75
+        "flat_atr_pct":        0.005,
+        "strategy_bonus":      10,
+        "allow_override":      True,
+        "max_open":            3,
+        "force_after_min":     20,
+        # PRO-specific filters (enforced inside ai_decide):
+        "pro_filter":          True,
+        "pro_pump_pct":        0.60,    # veto if pumped >0.6% in last 5 candles
+        "pro_rsi_lo":          45.0,
+        "pro_rsi_hi":          70.0,
+        # PRO-specific exit hints (read by symbol_worker post-entry logic):
+        "be_arm_pct":          0.25,    # arm breakeven SL at +0.25%
+        "max_red_after_entry": 2,       # exit if 2 red candles after entry
+        "max_trades_per_hour": 6,       # per-symbol per-hour cap
+    },
 }
 
 
 @dataclass
 class AIDecision:
-    decision:   str                            # "BUY" | "SELL" | "HOLD"
-    confidence: int                            # 0..100
-    reason:     str
-    factors:    Dict[str, float] = field(default_factory=dict)
+    decision:        str                       # "BUY" | "SELL" | "HOLD"
+    confidence:      int                       # 0..100
+    reason:          str
+    factors:         Dict[str, float] = field(default_factory=dict)
+    # Learning-mode extras — surfaced in the dashboard "Why AI did this" panel.
+    trend:           str = "SIDEWAYS"          # UP | DOWN | SIDEWAYS
+    signal_strength: int = 0                   # 0..100
+    why_bullets:     List[str] = field(default_factory=list)
+    blocker:         str = ""                  # atr|confidence|pro_filter|dump|pump|balance|max_open|trend|''
 
     def __str__(self) -> str:
         return f"{self.decision} conf={self.confidence} | {self.reason}"
+
+
+def _detect_trend(df: pd.DataFrame) -> str:
+    """UP / DOWN / SIDEWAYS based on EMA21 slope + price vs EMA21."""
+    try:
+        if "ema21" not in df.columns or len(df) < 12:
+            return "SIDEWAYS"
+        last_p = float(df["close"].iloc[-1])
+        ema_n  = float(df["ema21"].iloc[-1])
+        ema_p  = float(df["ema21"].iloc[-10])
+        if not ema_p or not ema_n:
+            return "SIDEWAYS"
+        slope_pct = (ema_n - ema_p) / ema_p * 100
+        if slope_pct >  0.05 and last_p > ema_n: return "UP"
+        if slope_pct < -0.05 and last_p < ema_n: return "DOWN"
+        return "SIDEWAYS"
+    except Exception:
+        return "SIDEWAYS"
+
+
+def _pro_buy_filter(df: pd.DataFrame, profile: Dict) -> tuple:
+    """Strict PRO-MODE BUY entry filter. Returns (ok, why_bullets, blocker_reason).
+
+    All of these must be TRUE to allow BUY:
+      • last candle closed GREEN
+      • last close > EMA9   (price crossed/holds above EMA9)
+      • last close > EMA21  (above structural trend)
+      • EMA9 > EMA21        (short-term trend up)
+      • RSI in [pro_rsi_lo .. pro_rsi_hi]   (healthy, not overbought)
+      • MACD histogram improving (or MACD > MACD signal AND rising)
+      • current volume > average of last 3 candles
+      • NO pump > pro_pump_pct in the last 5 candles
+    """
+    why: List[str] = []
+    try:
+        if len(df) < 6: return False, ["Not enough candles"], "data"
+        last  = df.iloc[-1]
+        prev  = df.iloc[-2]
+
+        # 1. Green candle
+        if not (float(last["close"]) > float(last["open"])):
+            return False, ["Last candle is RED — wait for green"], "pro_filter"
+        why.append("✓ Green candle confirmed")
+
+        # 2. Price above EMA9 (cross)
+        ema9_now  = float(last.get("ema9",  0) or 0)
+        ema9_prev = float(prev.get("ema9",  0) or 0)
+        close_now = float(last["close"])
+        if ema9_now <= 0 or close_now <= ema9_now:
+            return False, [f"Price ${close_now:.4f} ≤ EMA9 ${ema9_now:.4f}"], "pro_filter"
+        crossed = float(prev["close"]) <= ema9_prev and close_now > ema9_now
+        why.append("✓ Price crossed above EMA9" if crossed else "✓ Price holds above EMA9")
+
+        # 3. Above EMA21 (structural)
+        ema21_now = float(last.get("ema21", 0) or 0)
+        if ema21_now <= 0 or close_now <= ema21_now:
+            return False, [f"Price ${close_now:.4f} below EMA21 ${ema21_now:.4f}"], "trend"
+        why.append("✓ Above EMA21 (structural trend up)")
+
+        # 4. EMA9 > EMA21 (short-term trend up)
+        if ema9_now <= ema21_now:
+            return False, [f"EMA9 ${ema9_now:.4f} ≤ EMA21 ${ema21_now:.4f} (no short-trend)"], "trend"
+        why.append("✓ EMA9 > EMA21 (short-term up)")
+
+        # 5. RSI band
+        rsi_v = float(last.get("rsi", 0) or 0)
+        if rsi_v < profile["pro_rsi_lo"] or rsi_v > profile["pro_rsi_hi"]:
+            return False, [f"RSI={rsi_v:.1f} outside [{profile['pro_rsi_lo']:.0f}-"
+                           f"{profile['pro_rsi_hi']:.0f}] band"], "pro_filter"
+        why.append(f"✓ RSI healthy ({rsi_v:.1f})")
+
+        # 6. MACD improving
+        mh_now  = last.get("macd_hist")
+        mh_prev = prev.get("macd_hist")
+        if mh_now is not None and mh_prev is not None \
+                and not pd.isna(mh_now) and not pd.isna(mh_prev):
+            if float(mh_now) <= float(mh_prev):
+                return False, [f"MACD hist not improving ({float(mh_prev):+.5f}→{float(mh_now):+.5f})"], "pro_filter"
+            why.append(f"✓ MACD improving ({float(mh_prev):+.5f}→{float(mh_now):+.5f})")
+        else:
+            m_now = last.get("macd"); ms_now = last.get("macd_signal")
+            if m_now is None or ms_now is None or pd.isna(m_now) or pd.isna(ms_now):
+                return False, ["MACD unavailable"], "data"
+            if float(m_now) <= float(ms_now):
+                return False, [f"MACD {float(m_now):+.5f} ≤ signal {float(ms_now):+.5f}"], "pro_filter"
+            why.append("✓ MACD above signal")
+
+        # 7. Volume confirmation
+        try:
+            v_now = float(last["volume"])
+            v_3   = float(df["volume"].iloc[-4:-1].mean())
+            if v_3 <= 0 or v_now <= v_3:
+                return False, [f"Volume {v_now:.2f} ≤ 3-bar avg {v_3:.2f}"], "pro_filter"
+            why.append(f"✓ Volume spike ({v_now/v_3:.2f}× 3-bar avg)")
+        except Exception:
+            pass
+
+        # 8. No recent pump
+        try:
+            pump5 = (close_now - float(df["close"].iloc[-6])) / float(df["close"].iloc[-6]) * 100
+            if pump5 > profile["pro_pump_pct"]:
+                return False, [f"Already pumped {pump5:+.2f}% in last 5 candles "
+                               f"(> {profile['pro_pump_pct']}%)"], "pump"
+            why.append(f"✓ No recent overextension ({pump5:+.2f}% over 5 candles)")
+        except Exception:
+            pass
+
+        return True, why, ""
+    except Exception as e:
+        return False, [f"Filter error: {e}"], "data"
 
 
 def _safe_last(series, default=None):
@@ -161,22 +300,26 @@ def ai_decide(
     if df is None or len(df) < 30:
         return AIDecision("HOLD", 0,
             f"Not enough candles ({0 if df is None else len(df)}/30) for AI scan",
-            {"data": 0.0})
+            {"data": 0.0}, blocker="data")
 
-    factors: Dict[str, float] = {}
+    # Trend detection — surfaced even on HOLD so the dashboard can show it.
+    trend = _detect_trend(df)
+    factors: Dict[str, float] = {"trend": {"UP":1.0,"DOWN":-1.0,"SIDEWAYS":0.0}.get(trend, 0.0)}
 
     # ── Hard gate: free USDT below minimum notional ────────────────────────
     if free_usdt < 10.0 and strategy_signal == "BUY":
         return AIDecision("HOLD", 0,
             f"Insufficient USDT for BUY (free=${free_usdt:.2f} < $10 min notional)",
-            {"balance": 0.0})
+            {"balance": 0.0}, trend=trend, blocker="balance",
+            why_bullets=[f"✗ Free USDT ${free_usdt:.2f} < $10 minimum"])
 
     # ── Hard gate: max open positions for this profile ─────────────────────
     if len(open_positions_for_sym) >= profile["max_open"] and strategy_signal == "BUY":
         return AIDecision("HOLD", 0,
             f"Max open positions reached for {aggressiveness} profile "
             f"({len(open_positions_for_sym)}/{profile['max_open']})",
-            {"max_open": 0.0})
+            {"max_open": 0.0}, trend=trend, blocker="max_open",
+            why_bullets=[f"✗ {len(open_positions_for_sym)}/{profile['max_open']} positions open"])
 
     # ── Hard gate: dump detection (refuse BUY into falling knife) ──────────
     cum3_pct = _cumulative_pct(df, 3) * 100   # %
@@ -185,7 +328,8 @@ def ai_decide(
         return AIDecision("HOLD", 0,
             f"Dump detected — last 3 candles fell {cum3_pct:+.3f}% "
             f"(≤ −{profile['dump_pct']:.2f}% veto). Won't buy into a dump.",
-            factors)
+            factors, trend=trend, blocker="dump",
+            why_bullets=[f"✗ Dump — {cum3_pct:+.3f}% over last 3 candles"])
 
     # ── Hard gate: pump-exhaustion (refuse BUY at the top) ────────────────
     rsi_v = _safe_last(df["rsi"]) if "rsi" in df.columns else None
@@ -195,7 +339,9 @@ def ai_decide(
         return AIDecision("HOLD", 0,
             f"Pump-exhaustion — RSI={rsi_v:.1f} ≥ {profile['pump_rsi']:.0f} "
             f"after {cum3_pct:+.3f}% rise. Likely top; refusing BUY.",
-            factors)
+            factors, trend=trend, blocker="pump",
+            why_bullets=[f"✗ RSI {rsi_v:.1f} ≥ {profile['pump_rsi']:.0f} "
+                         f"after {cum3_pct:+.2f}% rise — pump exhaustion"])
 
     # ── Hard gate: flat market ─────────────────────────────────────────────
     # In Aggressive/Ultra, `force_after_min` lets a stale market punch through:
@@ -212,7 +358,25 @@ def ai_decide(
                 f"Flat market — ATR%={atr_pct*100:.4f}% < "
                 f"{profile['flat_atr_pct']:.3f}% floor for {aggressiveness}. "
                 f"No edge; fees would eat the move.",
-                factors)
+                factors, trend=trend, blocker="atr",
+                why_bullets=[f"✗ ATR%={atr_pct*100:.4f}% < "
+                             f"{profile['flat_atr_pct']:.3f}% floor — flat market"])
+
+    # ── PRO FAST SCALPER strict entry filter ──────────────────────────────
+    # Only enforced when profile flags pro_filter=True and the *intended*
+    # action is a BUY (either strategy=BUY or override+score will be BUY).
+    # On veto we return HOLD with the failing rule as the bullet so the
+    # operator sees exactly why we passed.
+    if profile.get("pro_filter") and not _force_now:
+        # Decide what the *intended* action looks like — we only need PRO
+        # filtering on the long side. If strategy says SELL outright, skip.
+        if strategy_signal != "SELL":
+            ok_pro, why_pro, blk_pro = _pro_buy_filter(df, profile)
+            if not ok_pro:
+                return AIDecision("HOLD", 0,
+                    f"PRO filter veto — {why_pro[-1] if why_pro else 'failed'}",
+                    factors, trend=trend, blocker=blk_pro or "pro_filter",
+                    why_bullets=why_pro)
 
     # ── Multi-factor scoring ──────────────────────────────────────────────
     # Each factor adds (or subtracts) confidence points for BUY vs SELL.
@@ -292,7 +456,8 @@ def ai_decide(
             f"AI disagrees with strategy ({strategy_signal}) — "
             f"AI scored BUY={buy_score} / SELL={sell_score}. "
             f"Override disabled for {aggressiveness}; defaulting to HOLD.",
-            factors)
+            factors, trend=trend, signal_strength=confidence, blocker="strategy",
+            why_bullets=[f"✗ AI({decision}) ≠ strategy({strategy_signal}), override off"])
 
     # If strategy said HOLD and override is disabled, mirror HOLD.
     if not profile["allow_override"] and strategy_signal == "HOLD":
@@ -300,7 +465,8 @@ def ai_decide(
             f"Strategy=HOLD ({strategy_reason}); AI scored "
             f"BUY={buy_score}/SELL={sell_score} but override disabled "
             f"for {aggressiveness}.",
-            factors)
+            factors, trend=trend, signal_strength=confidence, blocker="strategy",
+            why_bullets=[f"✗ Strategy=HOLD, override off for {aggressiveness}"])
 
     # Confidence floor — bypassed when force_after_min has elapsed (forced
     # micro-entry path) so the operator gets a trade even in a dead market.
@@ -308,7 +474,8 @@ def ai_decide(
         return AIDecision("HOLD", confidence,
             f"AI confidence {confidence} < {profile['confidence_min']} "
             f"floor for {aggressiveness} (BUY={buy_score}/SELL={sell_score})",
-            factors)
+            factors, trend=trend, signal_strength=confidence, blocker="confidence",
+            why_bullets=[f"✗ Confidence {confidence} < {profile['confidence_min']} floor"])
 
     if _force_now:
         # Forced micro-entry: tag the reason so the operator can see WHY
@@ -320,16 +487,28 @@ def ai_decide(
                   f"{profile['force_after_min']} min trigger. "
                   f"AI {decision} BUY={buy_score}/SELL={sell_score}")
         return AIDecision(decision, max(profile["confidence_min"], confidence),
-                          reason, factors)
+                          reason, factors, trend=trend,
+                          signal_strength=max(profile["confidence_min"], confidence),
+                          why_bullets=[f"⚡ Forced micro-entry after "
+                                       f"{minutes_since_last_trade:.0f} min idle"])
 
-    # Build a compact reason string
+    # Build a compact reason string + why-bullets for the dashboard panel.
     bits = []
-    if rsi_v   is not None: bits.append(f"RSI={rsi_v:.1f}")
-    if macd_hist is not None: bits.append(f"MACDh={macd_hist:+.4f}")
+    why  = []
+    if rsi_v   is not None:
+        bits.append(f"RSI={rsi_v:.1f}"); why.append(f"✓ RSI {rsi_v:.1f}")
+    if macd_hist is not None:
+        bits.append(f"MACDh={macd_hist:+.4f}")
+        why.append(f"✓ MACD hist {macd_hist:+.4f}")
     if ema9 is not None and ema21 is not None:
         bits.append("trend↑" if ema9 > ema21 else "trend↓")
-    if atr_pct is not None: bits.append(f"ATR%={atr_pct*100:.3f}%")
+        why.append("✓ EMA9 above EMA21" if ema9 > ema21 else "✓ EMA9 below EMA21")
+    if atr_pct is not None:
+        bits.append(f"ATR%={atr_pct*100:.3f}%")
+        why.append(f"✓ ATR% {atr_pct*100:.3f}%")
     bits.append(f"3c={cum3_pct:+.3f}%")
     bits.append(f"strat={strategy_signal}")
+    why.append(f"✓ Score {decision} {buy_score}/{sell_score}")
     reason = f"AI {decision} BUY={buy_score}/SELL={sell_score} | " + " | ".join(bits)
-    return AIDecision(decision, confidence, reason, factors)
+    return AIDecision(decision, confidence, reason, factors,
+                      trend=trend, signal_strength=confidence, why_bullets=why)

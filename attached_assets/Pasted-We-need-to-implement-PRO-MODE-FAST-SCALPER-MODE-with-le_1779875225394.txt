@@ -1,0 +1,172 @@
+We need to implement PRO MODE + FAST SCALPER MODE with learning capabilities.
+
+GOAL:
+- Frequent trades (scalping)
+- Fast reactions
+- Clear explanations for every action
+- Help user learn chart behavior in real time
+
+--------------------------------------------------
+
+1. NEW MODES
+
+Add 2 modes:
+
+A) FAST SCALPER
+B) PRO MODE (SMART SCALPER)
+
+--------------------------------------------------
+
+2. FAST SCALPER MODE (VERY AGGRESSIVE)
+
+Settings:
+- timeframe: 1m
+- check interval: 2 seconds
+- price threshold: 0.01%
+- ATR floor: 0.005%
+- confidence floor: 15
+- trade size: 40–60% balance
+- max open trades: 3
+- allow multiple trades per minute
+
+ENTRY (momentum only):
+BUY if:
+- price crosses above EMA 9
+- last candle is green
+- volume > average of last 3 candles
+
+SELL if:
+- reverse conditions
+
+EXIT:
+- TP: +0.3% to +0.6%
+- SL: -0.4%
+- if next candle is red → EXIT IMMEDIATELY
+- if price drops below EMA 9 → EXIT
+
+IMPORTANT:
+Ignore higher timeframe trend → prioritize speed
+
+--------------------------------------------------
+
+3. PRO MODE (SMART SCALPER)
+
+This is more controlled but still fast.
+
+Settings:
+- timeframe: 1m + 5m confirmation
+- check interval: 3 seconds
+- ATR floor: 0.01%
+- confidence floor: 25
+- trade size: 30–50%
+- max trades per symbol per hour: 5
+
+ENTRY:
+BUY ONLY IF ALL TRUE:
+- price above EMA 21
+- EMA 9 > EMA 21 (short-term trend up)
+- candle closes green
+- RSI between 45–70
+- MACD histogram increasing
+- volume increasing
+
+DO NOT BUY IF:
+- RSI > 75
+- price already pumped >0.5% recently
+- candle is weak / doji
+
+EXIT:
+- TP: +0.5% to +1%
+- SL: -0.5%
+- move SL to breakeven at +0.3%
+- exit if 2 red candles appear
+- exit if price crosses below EMA 9
+
+--------------------------------------------------
+
+4. MICRO-ENTRY SYSTEM (IMPORTANT)
+
+If no trades for X minutes:
+- gradually LOWER thresholds
+- allow micro entries
+
+Example:
+- after 10 min no trade → reduce confidence floor by 20%
+- after 20 min → allow lower ATR trades
+
+--------------------------------------------------
+
+5. AI EXPLAIN MODE (VERY IMPORTANT)
+
+Add panel:
+“WHY THIS TRADE”
+
+Example output:
+
+AI DECISION: BUY SOLUSDT
+
+Reasons:
+- Price crossed EMA 9
+- Trend short-term UP
+- RSI healthy (52)
+- Volume spike detected
+- Momentum confirmed
+
+OR for HOLD:
+
+HOLD because:
+- ATR too low (0.02% < 0.03%)
+- No volume
+- Sideways market
+
+--------------------------------------------------
+
+6. FIX CRITICAL BUGS
+
+A) CLOSE ORDER ERROR (-2010)
+
+Fix:
+- fetch REAL Binance balance before closing
+- round quantity to step size
+- sell available balance (not stored value)
+- sync local trades after execution
+
+B) PREVENT FAKE POSITIONS
+- if order fails → do NOT keep it as open locally
+
+--------------------------------------------------
+
+7. CHART IMPROVEMENTS
+
+- show EMA 9 and EMA 21 clearly
+- show BUY / SELL arrows
+- show entry, SL, TP lines
+- show LIVE PNL per trade
+- auto zoom to last 1–2 hours
+- remove empty space
+
+--------------------------------------------------
+
+8. USER FEEDBACK (CRITICAL UX)
+
+Buttons must:
+- show toast (st.toast)
+- show persistent banner:
+  “Last action: BUY executed at $X”
+
+--------------------------------------------------
+
+9. GOAL BEHAVIOR
+
+Bot should:
+- execute 10–30 trades/day when market moves
+- avoid dead markets OR switch to micro mode
+- explain every action clearly
+- react FAST to reversals
+
+--------------------------------------------------
+
+FINAL RESULT:
+- FAST trades
+- CONTROLLED risk
+- CLEAR learning feedback

@@ -59,6 +59,8 @@ def _resolve_sym(sym: Optional[str]) -> Optional[str]:
 
 
 def _set_shared_for(symbol: str, *, df=None, price=None, tick=False,
+                    ai_trend=None, ai_signal_strength=None,
+                    ai_why_bullets=None, ai_blocker=None,
                     signal=None, reason=None, confidence=None,
                     block_reason=None, last_order=None,
                     ai_decision=None, ai_confidence=None, ai_reason=None):
@@ -72,9 +74,13 @@ def _set_shared_for(symbol: str, *, df=None, price=None, tick=False,
         if confidence is not None: s["last_confidence"] = int(confidence)
         # AI fields — shown by the dashboard's AI status pill so the user can
         # see the live AI verdict for the currently-viewed symbol at a glance.
-        if ai_decision   is not None: s["ai_decision"]   = ai_decision
-        if ai_confidence is not None: s["ai_confidence"] = int(ai_confidence)
-        if ai_reason     is not None: s["ai_reason"]     = ai_reason
+        if ai_decision        is not None: s["ai_decision"]        = ai_decision
+        if ai_confidence      is not None: s["ai_confidence"]      = int(ai_confidence)
+        if ai_reason          is not None: s["ai_reason"]          = ai_reason
+        if ai_trend           is not None: s["ai_trend"]           = ai_trend
+        if ai_signal_strength is not None: s["ai_signal_strength"] = int(ai_signal_strength)
+        if ai_why_bullets     is not None: s["ai_why_bullets"]     = list(ai_why_bullets)
+        if ai_blocker         is not None: s["ai_blocker"]         = ai_blocker
         if block_reason is not None:
             s["block_reason"]    = block_reason
             s["block_reason_at"] = datetime.now()
@@ -120,9 +126,13 @@ def get_bot_signal_meta(symbol: Optional[str] = None) -> dict:
             "reason":     s.get("last_reason"),
             "confidence": int(s.get("last_confidence") or 0),
             # AI fields — surfaced by the dashboard's AI pill.
-            "ai_decision":   s.get("ai_decision"),
-            "ai_confidence": int(s.get("ai_confidence") or 0),
-            "ai_reason":     s.get("ai_reason"),
+            "ai_decision":        s.get("ai_decision"),
+            "ai_confidence":      int(s.get("ai_confidence") or 0),
+            "ai_reason":          s.get("ai_reason"),
+            "ai_trend":           s.get("ai_trend", "SIDEWAYS"),
+            "ai_signal_strength": int(s.get("ai_signal_strength") or 0),
+            "ai_why_bullets":     s.get("ai_why_bullets") or [],
+            "ai_blocker":         s.get("ai_blocker", ""),
         }
 
 
