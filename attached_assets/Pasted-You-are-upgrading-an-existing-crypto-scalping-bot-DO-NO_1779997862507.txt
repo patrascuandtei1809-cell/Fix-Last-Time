@@ -1,0 +1,138 @@
+You are upgrading an existing crypto scalping bot. DO NOT redesign everything. Keep architecture but make it SMART, FAST, and CONSISTENT.
+
+GOAL:
+- Trade more often BUT with selection
+- Use ALL symbols and pick the BEST one
+- Use AI as a FILTER, not decoration
+- Never block trades for stupid reasons (like concentration caps)
+- Keep execution fast (2s loop)
+
+--------------------------------------------------
+
+CORE PRINCIPLES:
+
+1. TRADE SELECTION (VERY IMPORTANT)
+- Always evaluate ALL symbols: BTC, ETH, SOL
+- Score each symbol (0–100)
+- ONLY trade the BEST symbol at that moment
+- If none > threshold → NO TRADE
+
+2. REMOVE BAD BLOCKS
+- REMOVE concentration cap completely
+- REMOVE useless exposure blockers
+- ONLY keep:
+  - max_open_trades (user controlled)
+  - min_seconds_between_entries
+  - balance check
+
+3. SMART FREQUENCY
+- Loop every 2 seconds
+- Minimum 10–20s between trades per symbol
+- Bot must NOT stay idle for hours
+- If no trades in 10 min → slightly relax thresholds
+
+4. POSITION SIZING (IMPORTANT)
+- Use % of FREE USDT (NOT fixed $10)
+- Default: 30–50% per trade
+- Always keep 20–30% reserve
+- Example:
+  size = free_usdt * 0.4
+
+5. RISK SETTINGS (SCALPING)
+- SL = 0.4%
+- TP = 0.5–0.6%
+- Breakeven at +0.2%
+- Early exit if momentum dies
+
+6. AI (GPT) ROLE — STRICT
+- GPT does NOT predict future
+- GPT acts as FILTER:
+  - returns BUY / SELL / NO_TRADE
+  - returns probability (0–100)
+- Trade ONLY if:
+  - score >= threshold
+  - GPT agrees
+  - GPT probability >= 60
+
+7. SIGNAL QUALITY
+Entry allowed if ANY of:
+- EMA9 slope strong
+- Momentum spike
+- Bounce / rejection candle
+- Volume spike
+
+But must pass:
+- score threshold
+- GPT filter
+
+8. MAX OPEN TRADES
+- User can set up to 20
+- BUT:
+  - only 1 trade per symbol at a time
+  - so realistically max = number of symbols
+
+9. DASHBOARD (IMPORTANT FIX)
+Persist ALL UI settings:
+- stop loss
+- take profit
+- RSI / MACD / indicators visibility
+- max open trades
+- sliders
+
+Use:
+→ session_state or local storage
+→ NEVER reset on refresh/restart
+
+10. LOGIC PRIORITY
+
+FLOW:
+
+FETCH DATA →
+CALCULATE SIGNALS →
+SCORE ALL SYMBOLS →
+PICK BEST →
+CHECK FILTERS →
+CHECK GPT →
+EXECUTE TRADE →
+MANAGE TRADE
+
+--------------------------------------------------
+
+CRITICAL FIXES TO IMPLEMENT:
+
+1. REMOVE:
+- max_exposure_per_symbol_pct
+- total exposure caps blocking trades
+
+2. ADD:
+- best-symbol selector (global ranking)
+
+3. CHANGE:
+- sizing → % based
+- cooldown → shorter (10–20s)
+
+4. FIX:
+- dashboard resetting values (PERSIST THEM)
+
+5. ENSURE:
+- bot NEVER stays idle > 10 min without reason
+
+--------------------------------------------------
+
+EXPECTED BEHAVIOR AFTER:
+
+- Bot trades multiple times per hour (not 0, not spam)
+- Chooses BEST opportunity (not random)
+- Uses meaningful size (not $10 garbage)
+- Doesn’t block itself stupidly
+- Keeps user settings ALWAYS
+
+--------------------------------------------------
+
+DO NOT:
+- add new UI complexity
+- add new modes
+- overengineer
+
+FOCUS:
+SMART + FAST + CLEAN EXECUTION
