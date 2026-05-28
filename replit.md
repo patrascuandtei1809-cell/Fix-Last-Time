@@ -136,27 +136,27 @@ thresholds, GPT promoted to a global analyst, and a new market-regime gate.
   EMA slope, and rolling volume. `apply_regime_to_score(score, regime)`
   caps DEAD at 30, subtracts 10 in RANGE, adds 5 in TREND, leaves VOLATILE
   untouched (but downsized — see below).
-- **Thresholds (all bumped 55 → 65)**: `score_threshold_base=65`,
-  `confidence_floor=65`, `gpt_prob_floor=65`. `global_throttle_sec=10`
-  (was 20). Anti-idle floor `60` (was 30) — a truly motionless market
-  HOLDs, never forces a low-quality entry.
-- **Per-symbol cooldown 180 → 30s**. TP 0.5 → 0.6%. SL stays 0.4%, BE arm
-  +0.20%, max 2 open trades total, 1 per symbol.
+- **Thresholds (Nov 2026 retune — all 65 → 60 to trade more often while
+  staying smart)**: `score_threshold_base=60`, `confidence_floor=60`,
+  `gpt_prob_floor=60`. `global_throttle_sec=10`. Anti-idle floor `55`
+  (was 60) — a truly motionless market still HOLDs.
+- **Per-symbol cooldown 30 → 15s**. TP 0.6%, SL 0.4%, BE arm +0.20%,
+  max 2 open trades total, 1 per symbol.
 - **GPT = GLOBAL ANALYST** (`gpt_advisor.analyze_global`). Every cycle with
   ≥1 qualified candidate, the orchestrator sends a structured payload for
   ALL three symbols (signal/regime/score/confidence/price/breakdown) and
   GPT returns `{action:TRADE|NO_TRADE, symbol, direction, probability,
   confidence, risk_level, reason}`. Throttled+cached 10s. Trade only if
   action=TRADE AND symbol==score winner AND direction==winner.signal AND
-  probability ≥ 65. On transient outage (None) → fall back to pure score
+  probability ≥ 60. On transient outage (None) → fall back to pure score
   winner. `rank_opportunities()` kept as a backward-compat shim.
 - **Absolute score-tiered sizing** in `symbol_worker.execute_entry()`
-  (decoupled from the sidebar slider):
-  - score 65–74  → 15% of free USDT (medium)
-  - score 75–84  → 25% of free USDT (strong)
-  - score ≥ 85   → 40% of free USDT (excellent)
+  (decoupled from the sidebar slider — Nov 2026 retune, flatter & larger):
+  - score 60–69  → 30% of free USDT (standard)
+  - score 70–79  → 40% of free USDT (strong)
+  - score ≥ 80   → 50% of free USDT (excellent)
   - VOLATILE regime → ×0.75 (downsize when risk is high)
-  - Floor $10 (Binance min notional), ceiling free × 0.75 (25% buffer).
+  - Floor $10 (Binance min notional), ceiling free × 0.75 (25% reserve).
 - **Per-symbol regime** surfaced on the dashboard card (color-coded:
   TREND green / RANGE mint / VOLATILE yellow / DEAD red) and logged on
   every scan: `[SCAN] BTC score=72 signal=BUY conf=68 regime=TREND atr%=0.18`.

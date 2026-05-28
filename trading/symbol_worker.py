@@ -478,17 +478,18 @@ class SymbolWorker:
             return
 
         # 6. Sizing — SMART AI SCALPING BOT absolute score-tiered sizing.
-        # Spec: 65–74 → 15% of free USDT (medium)
-        #       75–84 → 25% of free USDT (strong)
-        #       ≥ 85  → 40% of free USDT (excellent)
-        # VOLATILE regime → downsize by 25% (per spec: reduce size if risk is
-        # high). Ceiling at free_usdt * 0.75 keeps 25% buffer. $10 floor =
-        # Binance Spot min notional.
+        # Spec (Nov 2026 tuning, flatter & larger): 30–50% of free USDT.
+        #       60–69 → 30% (standard — meets min score)
+        #       70–79 → 40% (strong)
+        #       ≥ 80  → 50% (excellent)
+        # VOLATILE regime → downsize by 25% (reduce size if risk is high).
+        # Ceiling at free_usdt * 0.75 keeps 25% reserve. $10 floor = Binance
+        # Spot min notional.
         _score  = int(ev.get("score") or 0)
         _regime = (ev.get("regime") or "").upper()
-        if   _score >= 85: _dyn_pct, _tier_lbl = 40.0, "excellent"
-        elif _score >= 75: _dyn_pct, _tier_lbl = 25.0, "strong"
-        elif _score >= 65: _dyn_pct, _tier_lbl = 15.0, "medium"
+        if   _score >= 80: _dyn_pct, _tier_lbl = 50.0, "excellent"
+        elif _score >= 70: _dyn_pct, _tier_lbl = 40.0, "strong"
+        elif _score >= 60: _dyn_pct, _tier_lbl = 30.0, "standard"
         else:              _dyn_pct, _tier_lbl =  0.0, "below-min"
         if _regime == "VOLATILE" and _dyn_pct > 0:
             _dyn_pct *= 0.75
@@ -497,11 +498,11 @@ class SymbolWorker:
               f"regime={_regime} → {_dyn_pct:.1f}% of free USDT",
               flush=True)
         # SMART AI SCALPING BOT: absolute tiers ONLY — no legacy fallback.
-        # If score < 65 we MUST NOT trade (orchestrator already filters at the
-        # threshold gate, but anti-idle can lower threshold to 60 → still
+        # If score < 60 we MUST NOT trade (orchestrator already filters at the
+        # threshold gate, but anti-idle can lower threshold to 55 → still
         # block here so we never enter on a sub-spec score).
         if _dyn_pct <= 0:
-            msg = (f"score={_score} < 65 — below SMART AI min tier "
+            msg = (f"score={_score} < 60 — below SMART AI min tier "
                    f"(anti-idle threshold={_score})")
             print(f"[BOT] {self.symbol} blocked reason={msg} (sizing gate)",
                   flush=True)

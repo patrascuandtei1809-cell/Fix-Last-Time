@@ -26,7 +26,7 @@ class SymbolRiskSettings:
     take_profit_pct:  float = 0.6
     max_open_trades:  int   = 1          # max open trades for THIS symbol
     max_per_symbol:   int   = 1          # 1 trade per symbol at a time (no stacking)
-    cooldown_seconds: int   = 30         # per-symbol cooldown (global throttle = bot._loop)
+    cooldown_seconds: int   = 15         # per-symbol cooldown (global throttle = bot._loop)
     emergency_stop:   bool  = False      # per-symbol kill switch
 
     # ── Position sizing ───────────────────────────────────────────────────────

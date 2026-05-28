@@ -443,11 +443,11 @@ class TradingBot:
         # truly motionless market HOLDs rather than forcing a low-quality
         # entry. GPT runs as a GLOBAL ANALYST every cycle (≥1 candidate) and
         # can veto with NO_TRADE.
-        self.score_threshold_base: int = 65   # minimum score to trade
-        self.score_threshold:      int = 65   # current threshold (anti-idle lowers it)
-        self.score_threshold_floor: int = 60  # anti-idle never drops below this
-        self.confidence_floor:     int = 65   # min worker confidence to qualify
-        self.gpt_prob_floor:       int = 65   # min GPT probability
+        self.score_threshold_base: int = 60   # minimum score to trade
+        self.score_threshold:      int = 60   # current threshold (anti-idle lowers it)
+        self.score_threshold_floor: int = 55  # anti-idle never drops below this
+        self.confidence_floor:     int = 60   # min worker confidence to qualify
+        self.gpt_prob_floor:       int = 60   # min GPT probability
         self.global_throttle_sec:   int = 10  # min seconds between any 2 new trades
         self._last_global_trade_at: float = 0.0   # unix seconds
         # Candidate queue — workers append their evaluation here via on_candidate;
@@ -623,7 +623,7 @@ class TradingBot:
             #   - GPT returns action=TRADE
             #   - GPT's symbol == our score winner
             #   - GPT's direction == our winner's signal
-            #   - GPT's probability >= gpt_prob_floor (65)
+            #   - GPT's probability >= gpt_prob_floor (60)
             #
             # On transient GPT outage (None) → fall back to pure-score winner
             # (don't kill trading on an API hiccup).

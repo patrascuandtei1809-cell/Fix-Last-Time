@@ -1,0 +1,188 @@
+BUILD A PROFESSIONAL CRYPTO SCALPING BOT (HYBRID AI + RULE-BASED)
+
+GOAL:
+- Fast scalping (2s loop)
+- Trade OFTEN but SMART
+- NO random trades
+- ALWAYS choose BEST symbol (BTC, ETH, SOL)
+- Use GPT as DECISION FILTER, NOT just decoration
+
+━━━━━━━━━━━━━━━━━━━━━━━
+CORE PRINCIPLES
+━━━━━━━━━━━━━━━━━━━━━━━
+
+1. RULE ENGINE = FAST EXECUTION (PRIMARY)
+2. GPT = SMART FILTER (SECONDARY, NON-BLOCKING BUT IMPORTANT)
+3. BOT MUST:
+   - Compare ALL symbols every loop
+   - Trade ONLY the BEST opportunity
+   - Avoid weak/noise trades
+   - Enter FAST when conditions are good
+
+━━━━━━━━━━━━━━━━━━━━━━━
+ARCHITECTURE
+━━━━━━━━━━━━━━━━━━━━━━━
+
+MAIN LOOP (every 2 seconds):
+
+[DATA] → [SIGNALS] → [SCORING] → [GPT FILTER] → [EXECUTION]
+
+━━━━━━━━━━━━━━━━━━━━━━━
+SYMBOL SELECTION (VERY IMPORTANT)
+━━━━━━━━━━━━━━━━━━━━━━━
+
+- Analyze BTCUSDT, ETHUSDT, SOLUSDT
+- Score each symbol (0–100)
+- ONLY trade the BEST one
+
+IF:
+- best_score < 60 → DO NOTHING
+- best_score ≥ 60 → candidate
+
+━━━━━━━━━━━━━━━━━━━━━━━
+SMART SCORING SYSTEM
+━━━━━━━━━━━━━━━━━━━━━━━
+
+Score based on:
+
+- EMA trend (9/21/50)
+- Momentum
+- Candle strength
+- RSI positioning
+- Volume spike
+- Volatility (ATR)
+
+Weights must sum 100.
+
+━━━━━━━━━━━━━━━━━━━━━━━
+GPT ROLE (CRITICAL FIX)
+━━━━━━━━━━━━━━━━━━━━━━━
+
+GPT IS NOT FOR PREDICTING FUTURE.
+
+GPT MUST:
+- Validate the trade
+- Detect bad conditions
+- Improve selection quality
+
+CALL GPT ONLY IF:
+- score ≥ 60
+
+PROMPT:
+
+"You are a professional scalping trader.
+
+Data:
+- symbol
+- score
+- trend
+- momentum
+- RSI
+- candle strength
+- volatility
+
+Decide:
+BUY / SELL / SKIP
+
+Return JSON:
+{
+ "decision": "...",
+ "confidence": 0-100,
+ "reason": "short"
+}"
+
+RULES:
+- If GPT says SKIP → DO NOT TRADE
+- If GPT confidence < 60 → DO NOT TRADE
+- If GPT agrees → EXECUTE FAST
+
+━━━━━━━━━━━━━━━━━━━━━━━
+TRADE FREQUENCY FIX (IMPORTANT)
+━━━━━━━━━━━━━━━━━━━━━━━
+
+PROBLEM NOW: too rare OR too random
+
+FIX:
+
+- Minimum 1 trade every 5–10 minutes (anti-idle)
+- BUT only if score ≥ 55
+
+NO dead bot.
+
+━━━━━━━━━━━━━━━━━━━━━━━
+POSITION SIZING (FIXED)
+━━━━━━━━━━━━━━━━━━━━━━━
+
+NO more $10 trades.
+
+USE:
+
+- 30% – 50% of FREE USDT per trade
+- Always keep 25% reserve
+
+Example:
+$100 → trade $30–$50
+
+━━━━━━━━━━━━━━━━━━━━━━━
+RISK MANAGEMENT
+━━━━━━━━━━━━━━━━━━━━━━━
+
+- SL = 0.4%
+- TP = 0.5–0.7%
+- Breakeven at +0.2%
+- Close early if momentum dies
+
+━━━━━━━━━━━━━━━━━━━━━━━
+DISCIPLINE FIX (IMPORTANT)
+━━━━━━━━━━━━━━━━━━━━━━━
+
+ADD:
+
+- Cooldown per symbol (10–20s)
+- No duplicate entries
+- Max 1 position per symbol
+- Max 2–3 total positions
+
+━━━━━━━━━━━━━━━━━━━━━━━
+EXECUTION RULES
+━━━━━━━━━━━━━━━━━━━━━━━
+
+ONLY TRADE IF ALL TRUE:
+
+- score ≥ 60
+- GPT approves
+- confidence ≥ 60
+- no risk block
+- not in cooldown
+
+ELSE:
+→ DO NOTHING
+
+━━━━━━━━━━━━━━━━━━━━━━━
+EXPECTED BEHAVIOR
+━━━━━━━━━━━━━━━━━━━━━━━
+
+Bot should:
+
+- Trade every few minutes (NOT hours idle)
+- Avoid spam trades
+- Pick BEST coin (not random)
+- Enter fast when signal is strong
+- Cut losers fast
+- Take small consistent wins
+
+━━━━━━━━━━━━━━━━━━━━━━━
+CRITICAL NOTE
+━━━━━━━━━━━━━━━━━━━━━━━
+
+DO NOT:
+- overcomplicate
+- add useless AI layers
+- slow down execution
+
+FOCUS:
+FAST + SMART + DISCIPLINED
+
+━━━━━━━━━━━━━━━━━━━━━━━
+END
+━━━━━━━━━━━━━━━━━━━━━━━
