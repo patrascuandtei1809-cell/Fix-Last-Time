@@ -680,27 +680,33 @@ if not st.session_state.get("_settings_loaded"):
     _syms_persist = st.session_state.get("active_symbols") or []
     if len(_syms_persist) < 2:
         st.session_state.active_symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
-    # Risk sizing: ACTIVE SCALPER dynamic % sizing, 1 open per symbol, 3 total.
+    # SMART AI SCALPING BOT (May 28, 2026): force-snap risk to spec
+    # (SL 0.4 / TP 0.6 / cooldown 30 / 1 open per symbol / 2 total).
+    # Persisted settings.json on disk may be older — override every cold start.
     try:
         _r = st.session_state.risk
         if not hasattr(_r, "dynamic_size_pct") or not _r.dynamic_size_pct:
             _r.dynamic_size_pct = 40.0
+        _r.stop_loss_pct    = 0.4
+        _r.take_profit_pct  = 0.6
         _r.max_per_symbol   = 1
         _r.max_open_trades  = 1
-        _r.cooldown_seconds = min(int(_r.cooldown_seconds or 0), 30)
+        _r.cooldown_seconds = 30
     except Exception:
         pass
     for _sym, _rs in (st.session_state.get("per_symbol_risk") or {}).items():
         try:
             if not hasattr(_rs, "dynamic_size_pct") or not _rs.dynamic_size_pct:
                 _rs.dynamic_size_pct = 40.0
+            _rs.stop_loss_pct    = 0.4
+            _rs.take_profit_pct  = 0.6
             _rs.max_per_symbol   = 1
             _rs.max_open_trades  = 1
-            _rs.cooldown_seconds = min(int(_rs.cooldown_seconds or 0), 30)
+            _rs.cooldown_seconds = 30
         except Exception:
             pass
     try:
-        st.session_state.global_risk.max_open_trades_total = 3
+        st.session_state.global_risk.max_open_trades_total = 2
         st.session_state.global_risk.max_exposure_per_symbol_pct = 100.0
     except Exception:
         pass
@@ -1488,12 +1494,20 @@ if bot_running:
         else:
             _block_s, _block_col = "—", "#6e7681"
 
-        # SMART PRIORITY SCALPER — score display
+        # SMART AI SCALPING BOT — score + regime display
         _score = int(_st.get("score") or 0)
-        if   _score >= 75: _score_col = "#26a69a"   # green
-        elif _score >= 60: _score_col = "#7ce0c2"   # mint
-        elif _score >= 40: _score_col = "#e3b341"   # yellow
-        else:              _score_col = "#6e7681"   # grey
+        if   _score >= 85: _score_col = "#26a69a"   # excellent (green)
+        elif _score >= 75: _score_col = "#7ce0c2"   # strong (mint)
+        elif _score >= 65: _score_col = "#e3b341"   # medium (yellow)
+        else:              _score_col = "#6e7681"   # below-min (grey)
+        _regime = (_st.get("regime") or "").upper()
+        _reg_col = {
+            "TREND":    "#26a69a",   # green
+            "VOLATILE": "#e3b341",   # yellow
+            "RANGE":    "#7ce0c2",   # mint
+            "DEAD":     "#ef5350",   # red
+        }.get(_regime, "#6e7681")
+        _reg_txt = _regime or "—"
         _cards += (
             f'<div style="flex:1 1 0;min-width:220px;background:#0d1117;border:1px solid #1e2736;'
             f'border-radius:8px;padding:10px 12px;">'
@@ -1501,9 +1515,13 @@ if bot_running:
             f'    <span style="font-size:12px;font-weight:800;color:#f0f6fc;font-family:\'JetBrains Mono\',monospace;">{_s.replace("USDT","")}</span>'
             f'    <span style="font-size:11px;font-weight:800;color:{_sc};font-family:\'JetBrains Mono\',monospace;">{_sig}</span>'
             f'  </div>'
-            f'  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+            f'  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
             f'    <span style="font-size:9px;color:#484f58;font-family:\'JetBrains Mono\',monospace;">SCORE</span>'
             f'    <span style="font-size:14px;font-weight:800;color:{_score_col};font-family:\'JetBrains Mono\',monospace;">{_score}</span>'
+            f'  </div>'
+            f'  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+            f'    <span style="font-size:9px;color:#484f58;font-family:\'JetBrains Mono\',monospace;">REGIME</span>'
+            f'    <span style="font-size:10px;font-weight:800;color:{_reg_col};font-family:\'JetBrains Mono\',monospace;">{_reg_txt}</span>'
             f'  </div>'
             f'  <div style="font-size:10px;color:#8b949e;line-height:1.55;">'
             f'    <div><span style="color:#484f58;">LAST CHECK</span> <span style="color:#c9d1d9;font-family:\'JetBrains Mono\',monospace;">{_last_check_s}</span></div>'

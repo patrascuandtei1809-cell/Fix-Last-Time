@@ -338,9 +338,17 @@ def get_indicators(df: pd.DataFrame) -> pd.DataFrame:
 #
 # Returns (score: int 0–100, breakdown: dict).
 # If signal is HOLD, returns 0 (we never trade a HOLD regardless of score).
-def score_market(df: pd.DataFrame, signal: str, base_confidence: int) -> Tuple[int, dict]:
+def score_market(df: pd.DataFrame, signal: str, base_confidence: int,
+                 regime: str = "") -> Tuple[int, dict]:
+    """Compute a 0–100 opportunity score for the given signal on this df.
+
+    `regime` is one of {"", "DEAD", "RANGE", "TREND", "VOLATILE"} from
+    `market_regime.classify_regime`. Applied as bonus/penalty at the end so
+    the raw component breakdown still reflects the rule-based picture.
+    """
     if signal not in ("BUY", "SELL") or len(df) < 30:
-        return 0, {"reason": "no signal or insufficient data"}
+        return 0, {"reason": "no signal or insufficient data",
+                   "regime": regime or "UNKNOWN"}
 
     d = get_indicators(df) if "macd_hist" not in df.columns else df
     last = d.iloc[-1]
@@ -433,6 +441,15 @@ def score_market(df: pd.DataFrame, signal: str, base_confidence: int) -> Tuple[i
     if base_confidence < 40:
         total = min(total, 75)
 
+    # ── 7. Regime adjustment (TREND +5, RANGE −10, DEAD cap 30, VOLATILE 0) ──
+    pre_regime = total
+    if regime:
+        try:
+            from market_regime import apply_regime_to_score
+            total = apply_regime_to_score(total, regime)
+        except Exception:
+            pass
+
     breakdown = {
         "trend":    round(trend_score, 1),
         "momentum": round(mom_score, 1),
@@ -444,5 +461,7 @@ def score_market(df: pd.DataFrame, signal: str, base_confidence: int) -> Tuple[i
         "vol_ratio": round(vol_ratio, 2),
         "ema_slope_pct": round(slope_pct, 4),
         "macd_hist":     round(mhist, 6),
+        "regime":        regime or "UNKNOWN",
+        "pre_regime":    int(pre_regime),
     }
     return total, breakdown

@@ -19,11 +19,14 @@ class SymbolRiskSettings:
     # ── Stop / Take-profit ────────────────────────────────────────────────────
     # Defaults tuned for 1m scalping on BTC/ETH/SOL: tight SL, modest TP that
     # still clears Binance Spot round-trip fees (~0.2%) with margin.
+    # SMART AI SCALPING BOT (May 28, 2026): TP bumped 0.5 → 0.6, per-symbol
+    # cooldown shortened 180 → 30 so the bot can re-engage a hot symbol after
+    # a quick exit (still throttled at the global 10 s level in bot._loop).
     stop_loss_pct:    float = 0.4
-    take_profit_pct:  float = 0.5
+    take_profit_pct:  float = 0.6
     max_open_trades:  int   = 1          # max open trades for THIS symbol
     max_per_symbol:   int   = 1          # 1 trade per symbol at a time (no stacking)
-    cooldown_seconds: int   = 180        # min seconds between bot trades on this symbol
+    cooldown_seconds: int   = 30         # per-symbol cooldown (global throttle = bot._loop)
     emergency_stop:   bool  = False      # per-symbol kill switch
 
     # ── Position sizing ───────────────────────────────────────────────────────

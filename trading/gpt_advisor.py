@@ -198,57 +198,72 @@ class GPTAdvisor:
                           confidence=conf, reason=reason, ts=time.time())
 
 
-    # ── public: rank top-K opportunities (SMART PRIORITY SCALPER tiebreak) ──
+    # ── public: GLOBAL analyst — SMART AI SCALPING BOT (May 28, 2026) ──────
+    # Replaces the old `rank_opportunities` ranker. GPT now sees the full
+    # per-symbol snapshot for BTC/ETH/SOL together and returns a single
+    # decision:
+    #   {action: TRADE|NO_TRADE, symbol, direction, probability, confidence,
+    #    risk_level: LOW|MEDIUM|HIGH, reason}
+    # Throttled to GPT_MIN_SECONDS_BETWEEN_CALLS (10 s). Cached for the
+    # throttle window. Falls back to None on error/disabled so orchestrator
+    # can decide its own policy (never hard-block the bot).
     def rank_opportunities(self, candidates: list) -> Optional[Dict[str, Any]]:
-        """Synchronous, short-call ranker used as a tiebreaker when 2+
-        symbols score within 5 points of each other.
+        """Backward-compat shim. New consumers should call analyze_global()."""
+        return self.analyze_global(candidates)
 
-        Returns {"symbol": str, "reason": str} or None if disabled / error.
-        Cached for 20s on the full input set, throttled to 1 call per 15s.
-        """
-        if not self._enabled or not candidates:
+    def analyze_global(self, payloads: list) -> Optional[Dict[str, Any]]:
+        if not self._enabled or not payloads:
             return None
         now = time.time()
-        # Per-instance throttle for ranking calls (separate from per-symbol).
         if not hasattr(self, "_last_rank_at"):
             self._last_rank_at = 0.0
             self._rank_cache:  Optional[Dict[str, Any]] = None
             self._rank_key:    str = ""
-        key = "|".join(sorted(f"{c['symbol']}:{c.get('score',0)}" for c in candidates))
-        # True global throttle: within the window we NEVER call the API again,
-        # even if candidate scores shifted. Return last cached pick if it still
-        # refers to one of the current candidates, otherwise return None and
-        # let the orchestrator fall back to pure-score tiebreak.
-        if (now - self._last_rank_at) < 15.0:
-            if self._rank_cache and \
-               self._rank_cache.get("symbol") in {c.get("symbol") for c in candidates}:
-                return self._rank_cache
+        # True global throttle (10 s per spec). Within the window we NEVER call
+        # the API again. Return last cached decision IF its symbol is still in
+        # play (or action was NO_TRADE — still valid).
+        if (now - self._last_rank_at) < 10.0:
+            if self._rank_cache:
+                _csym = self._rank_cache.get("symbol", "NONE")
+                if _csym == "NONE" or _csym in {p.get("symbol") for p in payloads}:
+                    return self._rank_cache
             return None
         client = self._get_client()
         if client is None:
             return None
-        # Set throttle BEFORE the call so transient errors / invalid responses
-        # also enter the 15s backoff window. Otherwise a failing GPT would be
-        # retried on every 2s loop tick and could hammer OpenAI.
+        # Set throttle BEFORE call so failures/invalid responses also back off.
         self._last_rank_at = now
-        # Build slim payload
+
         items = [{
-            "symbol":     c.get("symbol"),
-            "signal":     c.get("signal"),
-            "score":      c.get("score"),
-            "confidence": c.get("confidence"),
-            "breakdown":  c.get("breakdown") or {},
-        } for c in candidates[:3]]
+            "symbol":     p.get("symbol"),
+            "signal":     p.get("signal"),
+            "regime":     p.get("regime"),
+            "score":      p.get("score"),
+            "confidence": p.get("confidence"),
+            "price":      p.get("price"),
+            "breakdown":  p.get("breakdown") or {},
+        } for p in payloads[:3]]
+
         prompt = (
-            "You are a scalping edge filter. Below are 1-3 trade candidates "
-            "from different symbols, each pre-scored 0-100 by a rule engine. "
-            "Pick the SINGLE strongest setup AND estimate the probability "
-            "(0-100) that price moves at least 0.2% in the proposed direction "
-            "within the next 2 minutes. Reply JSON: "
-            '{"symbol":"BTCUSDT|ETHUSDT|SOLUSDT",'
-            '"probability_next_move":0-100,"reason":"<short why>"}. '
-            "Keep reason <100 chars. Bias toward stronger trend + volume; "
-            "penalize sideways tape, weak candles, fake breakouts."
+            "You are a professional crypto scalping analyst.\n"
+            "You receive structured market data for BTCUSDT, ETHUSDT, SOLUSDT.\n"
+            "Your job:\n"
+            " - compare ALL symbols\n"
+            " - choose the single best short-term opportunity for the next "
+            "1-3 minutes\n"
+            " - avoid weak/noisy setups\n"
+            " - reject trades when the market has no edge\n\n"
+            "Return JSON ONLY:\n"
+            "{\"action\":\"TRADE|NO_TRADE\","
+            "\"symbol\":\"BTCUSDT|ETHUSDT|SOLUSDT|NONE\","
+            "\"direction\":\"BUY|SELL|NONE\","
+            "\"probability\":0-100,\"confidence\":0-100,"
+            "\"risk_level\":\"LOW|MEDIUM|HIGH\","
+            "\"reason\":\"short clear reason\"}\n\n"
+            "Rules: If no strong opportunity exists, return NO_TRADE. Do not "
+            "invent certainty. Do not overtrade. Prefer clean momentum + "
+            "volume + structure. Reject sideways/no-volume chop. Reject DEAD "
+            "regime. Keep reason <120 chars."
         )
         try:
             resp = client.chat.completions.create(
@@ -256,34 +271,60 @@ class GPTAdvisor:
                 messages        = [{"role": "system", "content": prompt},
                                    {"role": "user",   "content": json.dumps(items)}],
                 temperature     = 0.2,
-                max_tokens      = 80,
+                max_tokens      = 140,
                 response_format = {"type": "json_object"},
                 timeout         = TIMEOUT_SEC,
             )
-            data    = json.loads(resp.choices[0].message.content or "{}")
-            sym     = str(data.get("symbol", "")).upper().strip()
-            reason  = str(data.get("reason", ""))[:160]
-            try:
-                prob = int(float(data.get("probability_next_move", 0)))
-            except (TypeError, ValueError):
-                prob = 0
+            data       = json.loads(resp.choices[0].message.content or "{}")
+            action     = str(data.get("action", "NO_TRADE")).upper().strip()
+            symbol     = str(data.get("symbol", "NONE")).upper().strip()
+            direction  = str(data.get("direction", "NONE")).upper().strip()
+            risk_level = str(data.get("risk_level", "MEDIUM")).upper().strip()
+            reason     = str(data.get("reason", ""))[:200]
+            try:    prob = int(float(data.get("probability", 0)))
+            except (TypeError, ValueError): prob = 0
+            try:    conf = int(float(data.get("confidence", 0)))
+            except (TypeError, ValueError): conf = 0
             prob = max(0, min(100, prob))
+            conf = max(0, min(100, conf))
         except Exception as e:
             with self._lock:
                 self._total_errors += 1
-                self._last_error    = f"rank: {e}"[:200]
+                self._last_error    = f"global: {e}"[:200]
             return None
-        if sym not in {c.get("symbol") for c in candidates}:
-            return None
-        out = {"symbol": sym, "reason": reason,
-               "probability_next_move": prob}
-        self._last_rank_at = now
-        self._rank_cache   = out
-        self._rank_key     = key
+
+        # Normalize / validate
+        if action not in {"TRADE", "NO_TRADE"}:        action = "NO_TRADE"
+        if action == "NO_TRADE":
+            symbol, direction = "NONE", "NONE"
+        else:
+            if symbol not in {p.get("symbol") for p in payloads}:
+                # GPT made up a symbol — treat as NO_TRADE.
+                action, symbol, direction = "NO_TRADE", "NONE", "NONE"
+                reason = f"(rejected: unknown symbol) {reason}"[:200]
+            if direction not in {"BUY", "SELL"}:
+                action, symbol, direction = "NO_TRADE", "NONE", "NONE"
+                reason = f"(rejected: bad direction) {reason}"[:200]
+        if risk_level not in {"LOW", "MEDIUM", "HIGH"}: risk_level = "MEDIUM"
+
+        out = {
+            "action":      action,
+            "symbol":      symbol,
+            "direction":   direction,
+            "probability": prob,
+            "confidence":  conf,
+            "risk_level":  risk_level,
+            "reason":      reason,
+            # Keep legacy key so any old caller still works.
+            "probability_next_move": prob,
+        }
+        self._rank_cache = out
+        self._rank_key   = "|".join(sorted(f"{p['symbol']}:{p.get('score',0)}"
+                                           for p in payloads))
         with self._lock:
             self._total_calls += 1
             self._last_global_ts = now
-            self._last_symbol    = f"RANK→{sym}"
+            self._last_symbol    = f"GLOBAL→{symbol}/{action}"
         return out
 
 

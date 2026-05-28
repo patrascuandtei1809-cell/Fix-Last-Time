@@ -385,10 +385,14 @@ class SymbolWorker:
         # and the orchestrator can rank across symbols.
         try:
             from strategy import score_market as _score_market
+            from market_regime import classify_regime as _classify_regime
             _df_for_score = df_ind if "df_ind" in locals() else df
-            _score, _bd = _score_market(_df_for_score, signal, confidence)
+            _regime, _rtele = _classify_regime(_df_for_score)
+            _score, _bd     = _score_market(_df_for_score, signal,
+                                            confidence, regime=_regime)
+            _bd["regime_tele"] = _rtele
         except Exception as _se:
-            _score, _bd = 0, {"error": str(_se)[:80]}
+            _score, _bd, _regime = 0, {"error": str(_se)[:80]}, "DEAD"
         self._last_eval = {
             "symbol":     self.symbol,
             "exchange":   self.exchange.name,
@@ -396,14 +400,17 @@ class SymbolWorker:
             "reason":     reason,
             "confidence": confidence,
             "score":      _score,
+            "regime":     _regime,
             "breakdown":  _bd,
             "price":      price,
             "my_open":    my_open,
             "ts":         datetime.now(),
         }
-        self._on_state(self.symbol, score=_score, score_breakdown=_bd)
-        print(f"[SCORE] {self.symbol} score={_score} signal={signal} "
-              f"conf={confidence} bd={_bd}", flush=True)
+        self._on_state(self.symbol, score=_score, score_breakdown=_bd,
+                       regime=_regime)
+        print(f"[SCAN] {self.symbol.replace('USDT','')} score={_score} "
+              f"signal={signal} conf={confidence} regime={_regime} "
+              f"atr%={_bd.get('atr_pct',0)}", flush=True)
 
         if signal == "HOLD":
             # Clear block_reason — HOLD is a strategy decision, not a risk gate.
@@ -470,27 +477,38 @@ class SymbolWorker:
             self._on_state(self.symbol, block_reason=msg)
             return
 
-        # 6. Sizing — SMART ACTIVE SCALPER score-tiered sizing.
-        # Base % from per-symbol risk (sidebar slider), but scale by score:
-        #   score 55–64  → 50% of base   (conservative entry)
-        #   score 65–74  → 75% of base   (standard entry)
-        #   score ≥ 75   → 100% of base  (full conviction)
-        # Floor at $10 (Binance min notional). Ceiling at free_usdt * 0.75
-        # so we always leave 25% buffer for fees/slippage/other symbols.
-        _base_pct = float(getattr(self.risk.settings, "dynamic_size_pct", 0) or 0)
-        _score    = int(ev.get("score") or 0)
-        if   _score >= 75: _tier_mult, _tier_lbl = 1.00, "high"
-        elif _score >= 65: _tier_mult, _tier_lbl = 0.75, "mid"
-        else:              _tier_mult, _tier_lbl = 0.50, "low"
-        _dyn_pct  = _base_pct * _tier_mult
+        # 6. Sizing — SMART AI SCALPING BOT absolute score-tiered sizing.
+        # Spec: 65–74 → 15% of free USDT (medium)
+        #       75–84 → 25% of free USDT (strong)
+        #       ≥ 85  → 40% of free USDT (excellent)
+        # VOLATILE regime → downsize by 25% (per spec: reduce size if risk is
+        # high). Ceiling at free_usdt * 0.75 keeps 25% buffer. $10 floor =
+        # Binance Spot min notional.
+        _score  = int(ev.get("score") or 0)
+        _regime = (ev.get("regime") or "").upper()
+        if   _score >= 85: _dyn_pct, _tier_lbl = 40.0, "excellent"
+        elif _score >= 75: _dyn_pct, _tier_lbl = 25.0, "strong"
+        elif _score >= 65: _dyn_pct, _tier_lbl = 15.0, "medium"
+        else:              _dyn_pct, _tier_lbl =  0.0, "below-min"
+        if _regime == "VOLATILE" and _dyn_pct > 0:
+            _dyn_pct *= 0.75
+            _tier_lbl += "-vol"
         print(f"[BOT] {self.symbol} size tier={_tier_lbl} score={_score} "
-              f"base={_base_pct:.0f}% × {_tier_mult:.2f} → {_dyn_pct:.1f}%",
+              f"regime={_regime} → {_dyn_pct:.1f}% of free USDT",
               flush=True)
-        if _dyn_pct > 0:
-            invested = free_usdt * _dyn_pct / 100.0
-            invested = min(invested, free_usdt * 0.75)
-        else:
-            invested = self.risk.get_invest_amount()
+        # SMART AI SCALPING BOT: absolute tiers ONLY — no legacy fallback.
+        # If score < 65 we MUST NOT trade (orchestrator already filters at the
+        # threshold gate, but anti-idle can lower threshold to 60 → still
+        # block here so we never enter on a sub-spec score).
+        if _dyn_pct <= 0:
+            msg = (f"score={_score} < 65 — below SMART AI min tier "
+                   f"(anti-idle threshold={_score})")
+            print(f"[BOT] {self.symbol} blocked reason={msg} (sizing gate)",
+                  flush=True)
+            self._on_state(self.symbol, block_reason=msg)
+            return
+        invested = free_usdt * _dyn_pct / 100.0
+        invested = min(invested, free_usdt * 0.75)
         # Hard floor at Binance minimum
         if invested < 10.0:
             msg = (f"sizing ${invested:.2f} < $10 Binance min (free USDT "

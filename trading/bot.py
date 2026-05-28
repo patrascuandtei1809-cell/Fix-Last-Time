@@ -66,7 +66,7 @@ def _set_shared_for(symbol: str, *, df=None, price=None, tick=False,
                     ai_decision=None, ai_confidence=None, ai_reason=None,
                     gpt_decision=None, gpt_confidence=None, gpt_reason=None,
                     gpt_age_sec=None, gpt_enabled=None, gpt_active=None,
-                    score=None, score_breakdown=None):
+                    score=None, score_breakdown=None, regime=None):
     """Worker callback target. Writes to _shared_per_symbol[symbol]."""
     with _state_lock:
         s = _ensure_sym(symbol)
@@ -94,6 +94,7 @@ def _set_shared_for(symbol: str, *, df=None, price=None, tick=False,
         # SMART PRIORITY SCALPER — per-symbol score + breakdown for dashboard.
         if score           is not None: s["score"]           = int(score)
         if score_breakdown is not None: s["score_breakdown"] = dict(score_breakdown)
+        if regime          is not None: s["regime"]          = str(regime)
         if block_reason is not None:
             s["block_reason"]    = block_reason
             s["block_reason_at"] = datetime.now()
@@ -182,6 +183,7 @@ def get_all_symbol_state() -> Dict[str, Dict]:
                 # SMART PRIORITY SCALPER — surfaced on the per-symbol cards.
                 "score":           int(s.get("score") or 0),
                 "score_breakdown": s.get("score_breakdown") or {},
+                "regime":          s.get("regime") or "",
             }
             for sym, s in _shared_per_symbol.items()
         }
@@ -435,16 +437,18 @@ class TradingBot:
         self._running:  bool = False
 
         # ── SMART PRIORITY SCALPER state ─────────────────────────────────
-        # SMART ACTIVE SCALPER (May 2026): quality-frequency tuning.
-        # Lower base threshold (55) lets more setups qualify, but a confidence
-        # floor + GPT edge filter keep junk out. Throttle = 20s (active but
-        # not chaotic). Anti-idle floor stays 30.
-        self.score_threshold_base: int = 55   # minimum score to trade
-        self.score_threshold:      int = 55   # current threshold (anti-idle lowers it)
-        self.score_threshold_floor: int = 30  # anti-idle never drops below this
-        self.confidence_floor:     int = 55   # min worker confidence to qualify
-        self.gpt_prob_floor:       int = 55   # min GPT probability_next_move
-        self.global_throttle_sec:   int = 20  # min seconds between any 2 new trades
+        # SMART AI SCALPING BOT (May 28, 2026): quality-first thresholds.
+        # Score 65, confidence 65, GPT probability 65, 10s global throttle.
+        # Anti-idle still lowers the threshold but floor is 60 (NOT 30): a
+        # truly motionless market HOLDs rather than forcing a low-quality
+        # entry. GPT runs as a GLOBAL ANALYST every cycle (≥1 candidate) and
+        # can veto with NO_TRADE.
+        self.score_threshold_base: int = 65   # minimum score to trade
+        self.score_threshold:      int = 65   # current threshold (anti-idle lowers it)
+        self.score_threshold_floor: int = 60  # anti-idle never drops below this
+        self.confidence_floor:     int = 65   # min worker confidence to qualify
+        self.gpt_prob_floor:       int = 65   # min GPT probability
+        self.global_throttle_sec:   int = 10  # min seconds between any 2 new trades
         self._last_global_trade_at: float = 0.0   # unix seconds
         # Candidate queue — workers append their evaluation here via on_candidate;
         # orchestrator picks winner each cycle then clears the queue.
@@ -608,33 +612,65 @@ class TradingBot:
                                           int(c.get("confidence", 0))),
                            reverse=True)
 
-            # GPT = EDGE FILTER (hard gate, not just tiebreak).
-            # Whenever ≥1 setup qualifies and GPT is enabled, ask it to pick the
-            # single best symbol + emit `probability_next_move`. Trade ONLY if
-            # GPT's pick matches our score winner AND probability ≥ floor.
-            # Throttled+cached inside rank_opportunities() so the loop is not
-            # blocked every 2s.
-            winner       = None
-            gpt_block    = ""   # populated when GPT vetoes
+            # GPT = GLOBAL ANALYST (hard edge filter, not just tiebreak).
+            # SMART AI SCALPING BOT: every cycle with ≥1 qualified candidate,
+            # build a full per-symbol payload (BTC + ETH + SOL — ALL three,
+            # not just qualified ones, so GPT can compare) and ask the
+            # analyst for a single decision. Throttled+cached inside
+            # analyze_global() at 10s so the 2s loop isn't blocked.
+            #
+            # Trade ONLY if:
+            #   - GPT returns action=TRADE
+            #   - GPT's symbol == our score winner
+            #   - GPT's direction == our winner's signal
+            #   - GPT's probability >= gpt_prob_floor (65)
+            #
+            # On transient GPT outage (None) → fall back to pure-score winner
+            # (don't kill trading on an API hiccup).
+            winner    = None
+            gpt_block = ""
+            gpt_pick  = None       # for state/dashboard
             if qualified:
                 winner = qualified[0]
                 try:
                     from gpt_advisor import get_advisor as _ga
                     _adv = _ga()
                     if _adv and getattr(_adv, "_enabled", False):
-                        _ranked = _adv.rank_opportunities(qualified[:3])
-                        if _ranked is None:
-                            # Throttled / no client / parse fail — fall back to
-                            # pure score winner (don't block trading on a
-                            # transient GPT outage).
-                            pass
+                        # Build payload for ALL three symbols (richer context).
+                        _by_sym = {c.get("symbol"): c for c in cands}
+                        _global_payload = []
+                        for _s, _c in _by_sym.items():
+                            _global_payload.append({
+                                "symbol":     _s,
+                                "signal":     _c.get("signal"),
+                                "regime":     _c.get("regime"),
+                                "score":      int(_c.get("score") or 0),
+                                "confidence": int(_c.get("confidence") or 0),
+                                "price":      _c.get("price"),
+                                "breakdown":  _c.get("breakdown") or {},
+                            })
+                        _gd = _adv.analyze_global(_global_payload)
+                        if _gd is None:
+                            pass  # throttled / outage → fall back to score winner
                         else:
-                            _gsym  = _ranked.get("symbol", "")
-                            _gprob = int(_ranked.get("probability_next_move", 0))
-                            if _gsym != winner["symbol"]:
+                            gpt_pick = _gd
+                            _act  = _gd.get("action", "NO_TRADE")
+                            _gsym = _gd.get("symbol", "NONE")
+                            _gdir = _gd.get("direction", "NONE")
+                            _gprob = int(_gd.get("probability", 0))
+                            if _act == "NO_TRADE":
+                                gpt_block = (f"GPT NO_TRADE "
+                                             f"({_gd.get('reason','')[:80]})")
+                                winner = None
+                            elif _gsym != winner["symbol"]:
                                 gpt_block = (f"GPT picked {_gsym} "
                                              f"(prob={_gprob}) ≠ score winner "
                                              f"{winner['symbol']}")
+                                winner = None
+                            elif _gdir != winner.get("signal"):
+                                gpt_block = (f"GPT direction {_gdir} ≠ "
+                                             f"winner signal "
+                                             f"{winner.get('signal')}")
                                 winner = None
                             elif _gprob < self.gpt_prob_floor:
                                 gpt_block = (f"GPT prob {_gprob} < "
@@ -642,12 +678,13 @@ class TradingBot:
                                              f"{_gsym}")
                                 winner = None
                             else:
-                                print(f"[RANK] GPT edge ✓ {_gsym} "
-                                      f"prob={_gprob} "
-                                      f"({_ranked.get('reason','')[:80]})",
+                                print(f"[GPT] ✓ {_gsym} {_gdir} "
+                                      f"prob={_gprob} risk="
+                                      f"{_gd.get('risk_level','?')} "
+                                      f"({_gd.get('reason','')[:80]})",
                                       flush=True)
                 except Exception as _re:
-                    print(f"[RANK] GPT rank skipped: {_re}", flush=True)
+                    print(f"[GPT] analyst skipped: {_re}", flush=True)
 
             # Phase C: execute winner if throttle clear + cap not hit.
             now_ts        = time.time()

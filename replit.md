@@ -126,6 +126,41 @@ selection so the bot stops firing simultaneously on all three coins.
 - `execute_entry()` is the new public method that runs the gates+sizing+order+record
   block. Orchestrator calls it on the winner ONLY.
 
+## SMART AI SCALPING BOT (May 28, 2026 — surgical upgrade)
+
+Quality-first layer on top of SMART ACTIVE SCALPER. Same plumbing, tighter
+thresholds, GPT promoted to a global analyst, and a new market-regime gate.
+
+- **New file `trading/market_regime.py`**: `classify_regime(df)` returns one
+  of `DEAD / RANGE / TREND / VOLATILE` from ATR%, EMA9/21 separation,
+  EMA slope, and rolling volume. `apply_regime_to_score(score, regime)`
+  caps DEAD at 30, subtracts 10 in RANGE, adds 5 in TREND, leaves VOLATILE
+  untouched (but downsized — see below).
+- **Thresholds (all bumped 55 → 65)**: `score_threshold_base=65`,
+  `confidence_floor=65`, `gpt_prob_floor=65`. `global_throttle_sec=10`
+  (was 20). Anti-idle floor `60` (was 30) — a truly motionless market
+  HOLDs, never forces a low-quality entry.
+- **Per-symbol cooldown 180 → 30s**. TP 0.5 → 0.6%. SL stays 0.4%, BE arm
+  +0.20%, max 2 open trades total, 1 per symbol.
+- **GPT = GLOBAL ANALYST** (`gpt_advisor.analyze_global`). Every cycle with
+  ≥1 qualified candidate, the orchestrator sends a structured payload for
+  ALL three symbols (signal/regime/score/confidence/price/breakdown) and
+  GPT returns `{action:TRADE|NO_TRADE, symbol, direction, probability,
+  confidence, risk_level, reason}`. Throttled+cached 10s. Trade only if
+  action=TRADE AND symbol==score winner AND direction==winner.signal AND
+  probability ≥ 65. On transient outage (None) → fall back to pure score
+  winner. `rank_opportunities()` kept as a backward-compat shim.
+- **Absolute score-tiered sizing** in `symbol_worker.execute_entry()`
+  (decoupled from the sidebar slider):
+  - score 65–74  → 15% of free USDT (medium)
+  - score 75–84  → 25% of free USDT (strong)
+  - score ≥ 85   → 40% of free USDT (excellent)
+  - VOLATILE regime → ×0.75 (downsize when risk is high)
+  - Floor $10 (Binance min notional), ceiling free × 0.75 (25% buffer).
+- **Per-symbol regime** surfaced on the dashboard card (color-coded:
+  TREND green / RANGE mint / VOLATILE yellow / DEAD red) and logged on
+  every scan: `[SCAN] BTC score=72 signal=BUY conf=68 regime=TREND atr%=0.18`.
+
 ## SMART ACTIVE SCALPER tuning (May 28, 2026)
 
 Quality-frequency refinement on top of SMART PRIORITY SCALPER — trade often
