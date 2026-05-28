@@ -65,7 +65,8 @@ def _set_shared_for(symbol: str, *, df=None, price=None, tick=False,
                     block_reason=None, last_order=None,
                     ai_decision=None, ai_confidence=None, ai_reason=None,
                     gpt_decision=None, gpt_confidence=None, gpt_reason=None,
-                    gpt_age_sec=None, gpt_enabled=None, gpt_active=None):
+                    gpt_age_sec=None, gpt_enabled=None, gpt_active=None,
+                    score=None, score_breakdown=None):
     """Worker callback target. Writes to _shared_per_symbol[symbol]."""
     with _state_lock:
         s = _ensure_sym(symbol)
@@ -90,6 +91,9 @@ def _set_shared_for(symbol: str, *, df=None, price=None, tick=False,
         if gpt_age_sec    is not None: s["gpt_age_sec"]    = gpt_age_sec
         if gpt_enabled    is not None: s["gpt_enabled"]    = bool(gpt_enabled)
         if gpt_active     is not None: s["gpt_active"]     = bool(gpt_active)
+        # SMART PRIORITY SCALPER — per-symbol score + breakdown for dashboard.
+        if score           is not None: s["score"]           = int(score)
+        if score_breakdown is not None: s["score_breakdown"] = dict(score_breakdown)
         if block_reason is not None:
             s["block_reason"]    = block_reason
             s["block_reason_at"] = datetime.now()
@@ -175,6 +179,9 @@ def get_all_symbol_state() -> Dict[str, Dict]:
                 "confidence": s.get("last_confidence", 0),
                 "block":      s.get("block_reason") or "",
                 "updated_at": s.get("updated_at"),
+                # SMART PRIORITY SCALPER — surfaced on the per-symbol cards.
+                "score":           int(s.get("score") or 0),
+                "score_breakdown": s.get("score_breakdown") or {},
             }
             for sym, s in _shared_per_symbol.items()
         }
@@ -427,6 +434,26 @@ class TradingBot:
         self._thread:   Optional[threading.Thread] = None
         self._running:  bool = False
 
+        # ── SMART PRIORITY SCALPER state ─────────────────────────────────
+        self.score_threshold_base: int = 60   # minimum score to trade
+        self.score_threshold:      int = 60   # current threshold (anti-idle lowers it)
+        self.score_threshold_floor: int = 30  # anti-idle never drops below this
+        self.global_throttle_sec:   int = 30  # min seconds between any 2 new trades
+        self._last_global_trade_at: float = 0.0   # unix seconds
+        # Candidate queue — workers append their evaluation here via on_candidate;
+        # orchestrator picks winner each cycle then clears the queue.
+        self._candidates: List[Dict] = []
+        self._cand_lock = threading.Lock()
+        # Wire each worker's candidate hook to ours (workers built by create_bot
+        # already pass on_candidate; this re-binds in case workers were added
+        # via add_worker without it).
+        for _w in self.workers.values():
+            _w._on_candidate = self._collect_candidate
+
+    def _collect_candidate(self, ev: Dict) -> None:
+        with self._cand_lock:
+            self._candidates.append(ev)
+
     # ── Control ──────────────────────────────────────────────────────────────
     def start(self) -> bool:
         if self._thread and self._thread.is_alive():
@@ -512,13 +539,19 @@ class TradingBot:
             # Snapshot count of bot trades opened this session before workers run.
             _before_count = sum(w._session_trades for w in self.workers.values())
 
-            # Iterate workers — refresh state between each so the gate sees
-            # any trades just opened in this same cycle.
+            # ── SMART PRIORITY SCALPER — Phase A: tick all workers ────────
+            # Each worker manages its own open positions (SL/TP/BE/red-exit)
+            # and computes signal + score, then publishes via on_candidate
+            # callback INSTEAD of placing an order. Orders happen below in
+            # Phase B (winner only).
+            with self._cand_lock:
+                self._candidates.clear()
+
             for key, worker in list(self.workers.items()):
                 if not self._running:
                     break
-
-                # Re-snapshot before this worker runs (cheap: file read + lock).
+                # Re-snapshot before this worker runs (positions may have
+                # closed in a previous worker's manage-positions phase).
                 all_open, daily_pct = _refresh_global_state()
 
                 def global_gate(invest: float, sym: str,
@@ -529,17 +562,121 @@ class TradingBot:
                         new_symbol      = sym,
                         daily_loss_pct  = _dp,
                     )
-
                 try:
-                    worker.tick(all_open_trades=all_open, global_gate_fn=global_gate)
+                    worker.tick(all_open_trades=all_open,
+                                global_gate_fn=global_gate)
                 except Exception as exc:
                     log_activity("ERROR", f"Worker {key} crashed: {exc}")
                     _tg_dispatch("error_alert", f"Worker {key} crashed: {exc}")
+
+            # ── SMART PRIORITY SCALPER — Phase B: pick winner ─────────────
+            with self._cand_lock:
+                cands = list(self._candidates)
+
+            # Anti-idle: lower score_threshold by 10 every 5 min idle (floor).
+            _idle_sec = time.time() - (self._last_global_trade_at or 0)
+            if self._last_global_trade_at == 0:
+                # Cold start — give the bot the base threshold.
+                self.score_threshold = self.score_threshold_base
+            elif _idle_sec >= 600:    # 10 min
+                self.score_threshold = max(self.score_threshold_floor,
+                                           self.score_threshold_base - 20)
+            elif _idle_sec >= 300:    # 5 min
+                self.score_threshold = max(self.score_threshold_floor,
+                                           self.score_threshold_base - 10)
+            else:
+                self.score_threshold = self.score_threshold_base
+
+            # Rank summary log — one line per cycle covering all symbols.
+            _rank_bits = " ".join(
+                f"{c['symbol'].replace('USDT','')}={c.get('score',0)}"
+                f"({c.get('signal','?')[0]})"
+                for c in cands)
+
+            qualified = [c for c in cands
+                         if c.get("signal") in ("BUY", "SELL")
+                         and int(c.get("score", 0)) >= self.score_threshold]
+            qualified.sort(key=lambda c: (int(c.get("score", 0)),
+                                          int(c.get("confidence", 0))),
+                           reverse=True)
+
+            # Optional GPT tiebreaker — only if top 2 are within 5 points.
+            winner = None
+            if qualified:
+                winner = qualified[0]
+                if len(qualified) >= 2 and \
+                   (qualified[0]["score"] - qualified[1]["score"]) <= 5:
+                    try:
+                        from gpt_advisor import get_advisor as _ga
+                        _ranked = _ga().rank_opportunities(qualified[:3])
+                        if _ranked and _ranked.get("symbol"):
+                            for c in qualified:
+                                if c["symbol"] == _ranked["symbol"]:
+                                    winner = c
+                                    print(f"[RANK] GPT tiebreak → "
+                                          f"{_ranked['symbol']} ({_ranked.get('reason','')[:80]})",
+                                          flush=True)
+                                    break
+                    except Exception as _re:
+                        print(f"[RANK] GPT rank skipped: {_re}", flush=True)
+
+            # Phase C: execute winner if throttle clear + cap not hit.
+            now_ts        = time.time()
+            secs_since    = now_ts - (self._last_global_trade_at or 0)
+            throttle_left = max(0, self.global_throttle_sec - int(secs_since))
+            cap           = self.global_risk.settings.max_open_trades_total
+
+            if not cands:
+                print(f"[RANK] (no candidates yet) threshold={self.score_threshold} "
+                      f"throttle={throttle_left}s open={len(all_open)}/{cap}",
+                      flush=True)
+            elif winner is None:
+                print(f"[RANK] {_rank_bits} → HOLD "
+                      f"(all < threshold {self.score_threshold}) "
+                      f"throttle={throttle_left}s open={len(all_open)}/{cap}",
+                      flush=True)
+            elif len(all_open) >= cap:
+                print(f"[RANK] {_rank_bits} → SKIP "
+                      f"(max_open {len(all_open)}/{cap}) winner={winner['symbol']}",
+                      flush=True)
+            elif throttle_left > 0:
+                print(f"[RANK] {_rank_bits} → THROTTLED "
+                      f"({throttle_left}s left) winner={winner['symbol']} "
+                      f"score={winner['score']}",
+                      flush=True)
+            else:
+                print(f"[RANK] {_rank_bits} → WINNER={winner['symbol']} "
+                      f"score={winner['score']} threshold={self.score_threshold}",
+                      flush=True)
+                # Re-snapshot once more before the actual order.
+                all_open, daily_pct = _refresh_global_state()
+                def global_gate(invest: float, sym: str,
+                                _all=all_open, _dp=daily_pct):
+                    return self.global_risk.check_global(
+                        all_open_trades = _all,
+                        new_invest_usdt = invest,
+                        new_symbol      = sym,
+                        daily_loss_pct  = _dp,
+                    )
+                key = f"{winner.get('exchange','')}:{winner['symbol']}"
+                w   = self.workers.get(key)
+                if w is None:
+                    # Fallback: lookup by symbol only.
+                    for _k, _w in self.workers.items():
+                        if _w.symbol == winner["symbol"]:
+                            w = _w; break
+                if w is not None:
+                    try:
+                        w.execute_entry(winner, all_open, global_gate)
+                    except Exception as exc:
+                        log_activity("ERROR",
+                            f"execute_entry({winner['symbol']}) crashed: {exc}")
 
             # Did any worker execute a trade this cycle?
             _after_count = sum(w._session_trades for w in self.workers.values())
             if _after_count > _before_count:
                 self._last_trade_executed_at = datetime.now()
+                self._last_global_trade_at   = time.time()
 
             # Idle warning: bot ON, has been running long enough, no trades for
             # idle_warn_secs → force a single log line per warning interval.
@@ -681,6 +818,9 @@ def create_bot(
                 on_open_trade     = add_trade,
                 on_close_trade    = close_trade,
                 on_telegram       = _tg_dispatch,
+                # on_candidate is bound in TradingBot.__init__ after workers
+                # dict is built — leave None here.
+                on_candidate      = None,
                 ai_assist         = ai_assist,
                 ai_aggressiveness = ai_aggressiveness,
             )

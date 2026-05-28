@@ -1,0 +1,141 @@
+NEXT STAGE — SMART PRIORITY SCALPER
+
+DO NOT add more modes or UI.
+
+Current issue:
+Bot trades too aggressively across all symbols simultaneously.
+It reacts fast but lacks trade selection discipline.
+
+GOAL:
+Keep ACTIVE SCALPER speed
+BUT only execute the BEST opportunities.
+
+--------------------------------------------------
+
+1. GLOBAL TRADE RANKING SYSTEM
+
+For every cycle (2s):
+score BTCUSDT
+score ETHUSDT
+score SOLUSDT
+
+Each symbol gets a score from 0–100.
+
+--------------------------------------------------
+
+2. SCORING FACTORS
+
+Add weighted scoring:
+
++ trend strength
++ EMA9 slope
++ EMA9 > EMA21 bonus
++ RSI quality
++ MACD momentum
++ volume expansion
++ candle body strength
++ breakout potential
++ volatility quality
++ recent momentum continuation
+
+Penalty:
+- sideways market
+- low volume
+- weak candles
+- conflicting indicators
+- overextended move
+
+--------------------------------------------------
+
+3. ONLY TRADE THE BEST SETUPS
+
+Rules:
+
+if score < 60:
+    HOLD
+
+if multiple symbols valid:
+    choose ONLY highest score
+
+Example:
+BTC = 74
+ETH = 61
+SOL = 48
+
+→ ONLY BTC trade allowed
+
+--------------------------------------------------
+
+4. GLOBAL DISCIPLINE RULES
+
+Max 2 total open trades
+Max 1 new trade every 30–45 seconds
+
+No simultaneous entries on all symbols.
+
+--------------------------------------------------
+
+5. MARKET CONTEXT FILTER
+
+DO NOT trade when:
+- extremely flat market
+- tiny candles
+- dead volume
+- confidence weak
+
+Allow aggressive entries ONLY during real movement.
+
+--------------------------------------------------
+
+6. GPT ROLE UPGRADE
+
+GPT should NOT simply confirm signals.
+
+GPT must:
+- compare all symbols
+- explain WHY one setup is strongest
+- rank opportunities
+
+Example:
+
+BTC score 74:
+strong EMA slope + momentum continuation
+
+ETH score 61:
+good setup but weaker volume
+
+SOL score 48:
+sideways, low probability
+
+FINAL ACTION:
+BUY BTC ONLY
+
+--------------------------------------------------
+
+7. KEEP EXISTING FEATURES
+
+KEEP:
+- dynamic sizing
+- anti-idle system
+- SL/TP
+- breakeven logic
+- manual trade management
+- fast execution
+
+DO NOT remove ACTIVE SCALPER behavior.
+
+--------------------------------------------------
+
+8. TARGET BEHAVIOR
+
+Bot should behave like:
+
+FAST + SELECTIVE + DISCIPLINED
+
+Not:
+- frozen
+- overtrading
+- random entries
+
+Goal:
+high-quality scalping with continuous activity

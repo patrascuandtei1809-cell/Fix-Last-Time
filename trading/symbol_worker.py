@@ -34,6 +34,7 @@ class SymbolWorker:
         on_open_trade:   Optional[Callable] = None,
         on_close_trade:  Optional[Callable] = None,
         on_telegram:     Optional[Callable] = None,
+        on_candidate:    Optional[Callable] = None,
         ai_assist:       bool = True,
         ai_aggressiveness: str = "Active Scalper",   # ignored — single mode
     ):
@@ -53,6 +54,13 @@ class SymbolWorker:
         self._on_open   = on_open_trade  or (lambda t: t)
         self._on_close  = on_close_trade or (lambda *_a, **_kw: None)
         self._on_tg     = on_telegram   or (lambda *_a, **_kw: None)
+        # SMART PRIORITY SCALPER: if set, tick() does NOT execute orders
+        # itself — it computes signal+score and hands the candidate to the
+        # orchestrator, which picks the cross-symbol winner. Signature:
+        #   on_candidate(eval_dict) -> None
+        self._on_candidate: Optional[Callable] = on_candidate
+        # Last evaluation snapshot (signal/score/etc) for dashboard read.
+        self._last_eval: Dict = {}
 
         # Per-symbol state
         self._last_trade_at:  Optional[datetime] = None
@@ -372,11 +380,69 @@ class SymbolWorker:
             # GPT must NEVER break trading.
             self._log("WARNING", f"{tag} GPT advisor error (ignored): {_ge}")
 
+        # ── SMART PRIORITY SCALPER: compute opportunity score 0–100 ───────
+        # Always computed (even on HOLD → score=0) so the dashboard shows it
+        # and the orchestrator can rank across symbols.
+        try:
+            from strategy import score_market as _score_market
+            _df_for_score = df_ind if "df_ind" in locals() else df
+            _score, _bd = _score_market(_df_for_score, signal, confidence)
+        except Exception as _se:
+            _score, _bd = 0, {"error": str(_se)[:80]}
+        self._last_eval = {
+            "symbol":     self.symbol,
+            "exchange":   self.exchange.name,
+            "signal":     signal,
+            "reason":     reason,
+            "confidence": confidence,
+            "score":      _score,
+            "breakdown":  _bd,
+            "price":      price,
+            "my_open":    my_open,
+            "ts":         datetime.now(),
+        }
+        self._on_state(self.symbol, score=_score, score_breakdown=_bd)
+        print(f"[SCORE] {self.symbol} score={_score} signal={signal} "
+              f"conf={confidence} bd={_bd}", flush=True)
+
         if signal == "HOLD":
             # Clear block_reason — HOLD is a strategy decision, not a risk gate.
             # The per-symbol overview card surfaces the HOLD reason via `last_reason`.
             self._on_state(self.symbol, block_reason="")
+            # Still publish the (empty) candidate so the orchestrator sees
+            # this symbol was evaluated; it will be filtered out by signal!=HOLD.
+            if self._on_candidate is not None:
+                self._on_candidate(self._last_eval)
             return
+
+        # ── SMART PRIORITY SCALPER: defer execution to orchestrator ────────
+        # If a candidate callback is wired, we DO NOT place an order here.
+        # The orchestrator collects all candidates, picks the highest-scoring
+        # one (subject to score_threshold + global throttle + max-open cap),
+        # and calls execute_entry() on the winner only.
+        if self._on_candidate is not None:
+            self._on_candidate(self._last_eval)
+            return
+
+        # Fallback: no orchestrator candidate routing — execute inline.
+        # Preserves backwards-compat with any caller that uses tick() solo.
+        self.execute_entry(self._last_eval, all_open_trades, global_gate_fn)
+
+    # ── Order-placement phase (called by orchestrator on winner only) ─────
+    def execute_entry(self, ev: Dict, all_open_trades: List[Dict],
+                      global_gate_fn: Callable[[float, str], tuple]) -> bool:
+        """Run risk gates, sizing, place LIVE order, record trade.
+        Returns True if an order was actually placed."""
+        signal     = ev["signal"]
+        reason     = ev["reason"]
+        confidence = ev["confidence"]
+        price      = ev["price"]
+        my_open    = ev.get("my_open") or \
+                     [t for t in all_open_trades if t.get("coin") == self.symbol]
+        tag        = f"[{self.symbol}]"
+
+        if signal not in ("BUY", "SELL"):
+            return False
 
         # 4. Per-symbol gate
         ok, block = self.risk.can_open_trade(

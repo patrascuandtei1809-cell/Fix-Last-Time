@@ -297,6 +297,16 @@ def get_signal(df: pd.DataFrame, strategy: str, threshold: float = 0.0003) -> Tu
     return "HOLD", f"Unknown strategy: {strategy}", 0
 
 
+def calculate_macd(series: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9):
+    """Returns (macd_line, signal_line, histogram)."""
+    ema_fast = series.ewm(span=fast,   adjust=False).mean()
+    ema_slow = series.ewm(span=slow,   adjust=False).mean()
+    macd     = ema_fast - ema_slow
+    sig      = macd.ewm(span=signal, adjust=False).mean()
+    hist     = macd - sig
+    return macd, sig, hist
+
+
 def get_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df["ema9"]    = calculate_ema(df["close"], 9)
@@ -305,4 +315,134 @@ def get_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df["stoch_k"], df["stoch_d"] = calculate_stochastic(df)
     df["rsi"]     = calculate_rsi(df["close"])
     df["atr"]     = calculate_atr(df)
+    macd, sigl, hist = calculate_macd(df["close"])
+    df["macd"]      = macd
+    df["macd_sig"]  = sigl
+    df["macd_hist"] = hist
     return df
+
+
+# ── SMART PRIORITY SCALPER — cross-symbol opportunity scoring ─────────────────
+#
+# score_market() rates a symbol's current setup 0–100 by combining 6 weighted
+# components. The orchestrator runs this on every active symbol every tick and
+# trades ONLY the highest-scoring one (if ≥ score_threshold).
+#
+# Weights (sum = 100):
+#   • trend       25  — EMA9 vs EMA21 alignment + EMA9 slope, in trade direction
+#   • momentum    20  — MACD histogram direction + magnitude, in trade direction
+#   • volume      20  — current volume vs 20-bar average
+#   • candle      15  — body/range ratio (strong candles vs dojis)
+#   • rsi_quality 10  — RSI in healthy zone for the trade direction
+#   • volatility  10  — ATR% in sweet spot (0.05–0.5%), penalize flat or spike
+#
+# Returns (score: int 0–100, breakdown: dict).
+# If signal is HOLD, returns 0 (we never trade a HOLD regardless of score).
+def score_market(df: pd.DataFrame, signal: str, base_confidence: int) -> Tuple[int, dict]:
+    if signal not in ("BUY", "SELL") or len(df) < 30:
+        return 0, {"reason": "no signal or insufficient data"}
+
+    d = get_indicators(df) if "macd_hist" not in df.columns else df
+    last = d.iloc[-1]
+    try:
+        ema9   = float(last["ema9"])
+        ema21  = float(last["ema21"])
+        rsi    = float(last["rsi"])
+        atr    = float(last["atr"])
+        price  = float(last["close"])
+        opn    = float(last["open"])
+        high   = float(last["high"])
+        low    = float(last["low"])
+        vol    = float(last["volume"])
+        mhist  = float(last["macd_hist"])
+        ema9_3 = float(d["ema9"].iloc[-4]) if len(d) >= 4 else ema9
+    except Exception:
+        return 0, {"reason": "indicator NaN"}
+
+    is_buy = signal == "BUY"
+
+    # ── 1. Trend (25): EMA9 vs EMA21 alignment + slope direction ────────────
+    ema_aligned = (ema9 > ema21) if is_buy else (ema9 < ema21)
+    slope_pct   = ((ema9 - ema9_3) / ema9_3 * 100) if ema9_3 else 0.0
+    slope_aligned = (slope_pct > 0) if is_buy else (slope_pct < 0)
+    trend_score = 0
+    if ema_aligned:   trend_score += 15
+    if slope_aligned:
+        # 0..10 scaled by |slope| up to 0.05% (clamped)
+        trend_score += min(10, abs(slope_pct) / 0.05 * 10)
+
+    # ── 2. Momentum (20): MACD histogram in trade direction ─────────────────
+    mom_aligned = (mhist > 0) if is_buy else (mhist < 0)
+    mom_strength = abs(mhist) / max(price * 0.0005, 1e-9)   # normalize vs 0.05% of price
+    mom_score = 0
+    if mom_aligned:
+        mom_score = min(20, 10 + mom_strength * 10)
+
+    # ── 3. Volume (20): current vs 20-bar avg ───────────────────────────────
+    try:
+        avg_vol = float(d["volume"].rolling(20).mean().iloc[-1])
+    except Exception:
+        avg_vol = 0.0
+    vol_ratio = (vol / avg_vol) if avg_vol > 0 else 0.0
+    # 1.0× = neutral 10pts, 2.0× = max 20pts, <0.5× = 0
+    vol_score = 0
+    if vol_ratio >= 0.5:
+        vol_score = min(20, (vol_ratio - 0.5) / 1.5 * 20)
+
+    # ── 4. Candle body (15): strong body in trade direction ────────────────
+    rng = max(high - low, 1e-9)
+    body = abs(price - opn)
+    body_ratio = body / rng
+    body_aligned = (price > opn) if is_buy else (price < opn)
+    cdl_score = 0
+    if body_aligned:
+        cdl_score = min(15, body_ratio * 15)
+    elif body_ratio < 0.2:
+        # tiny doji — neutral, half credit
+        cdl_score = 4
+
+    # ── 5. RSI quality (10): healthy zone for direction ─────────────────────
+    rsi_score = 0
+    if is_buy:
+        if   50 <= rsi <= 70: rsi_score = 10
+        elif 40 <= rsi < 50:  rsi_score = 6
+        elif 70 < rsi <= 80:  rsi_score = 5      # overbought drift
+        elif rsi > 80:        rsi_score = 1      # extreme — likely fade
+        elif rsi < 30:        rsi_score = 7      # oversold bounce
+    else:  # SELL
+        if   30 <= rsi <= 50: rsi_score = 10
+        elif 50 < rsi <= 60:  rsi_score = 6
+        elif 20 <= rsi < 30:  rsi_score = 5
+        elif rsi < 20:        rsi_score = 1
+        elif rsi > 70:        rsi_score = 7
+
+    # ── 6. Volatility quality (10): ATR% in sweet spot ──────────────────────
+    atr_pct = (atr / price * 100) if price else 0.0
+    if   0.05 <= atr_pct <= 0.50: vol_q = 10
+    elif 0.02 <= atr_pct < 0.05:  vol_q = 5       # tight but tradeable
+    elif 0.50 < atr_pct <= 1.00:  vol_q = 6       # choppy
+    elif atr_pct < 0.02:          vol_q = 0       # flat — penalty
+    else:                          vol_q = 2       # spike — penalty
+
+    total = int(round(trend_score + mom_score + vol_score + cdl_score + rsi_score + vol_q))
+    total = max(0, min(100, total))
+
+    # Slight nudge from rule confidence (already factored in via signal existing).
+    # Cap at 100. Confidence < 40 caps the total at 75 (low-conviction signals
+    # cannot win against high-conviction ones from another symbol).
+    if base_confidence < 40:
+        total = min(total, 75)
+
+    breakdown = {
+        "trend":    round(trend_score, 1),
+        "momentum": round(mom_score, 1),
+        "volume":   round(vol_score, 1),
+        "candle":   round(cdl_score, 1),
+        "rsi":      round(rsi_score, 1),
+        "vol_q":    round(vol_q, 1),
+        "atr_pct":  round(atr_pct, 3),
+        "vol_ratio": round(vol_ratio, 2),
+        "ema_slope_pct": round(slope_pct, 4),
+        "macd_hist":     round(mhist, 6),
+    }
+    return total, breakdown

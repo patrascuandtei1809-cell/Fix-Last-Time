@@ -99,6 +99,33 @@ Hardcoded spec:
 
 Target throughput: 50–150 trades/day across all three symbols.
 
+## SMART PRIORITY SCALPER (May 2026 addition)
+
+Layer on top of ACTIVE SCALPER — keeps the speed but adds cross-symbol
+selection so the bot stops firing simultaneously on all three coins.
+
+- **Every cycle**, each worker computes a `score 0–100` (`strategy.score_market`)
+  combining: trend 25 (EMA9 vs EMA21 + slope), momentum 20 (MACD histogram),
+  volume 20 (vs 20-bar avg), candle body 15, RSI quality 10, volatility quality 10.
+- **MACD added** to `get_indicators()` — needed for momentum weight.
+- **Workers no longer place orders themselves** when an orchestrator candidate
+  hook is wired. They publish `{symbol, signal, score, confidence, breakdown}`
+  to the orchestrator via `_on_candidate` and return.
+- **Orchestrator picks ONE winner per cycle:** non-HOLD signal AND
+  `score >= score_threshold` (base 60), highest score wins. Ties within 5 pts
+  may be resolved by `gpt_advisor.rank_opportunities()` (one short GPT call,
+  cached 15s, throttled).
+- **Global throttle:** ≥ 30 s between any two new trades, regardless of symbol.
+- **Max 2 open trades total** (was 3) — `risk.GlobalRiskSettings.max_open_trades_total`.
+- **Anti-idle lowers the THRESHOLD, never bypasses it:** 5 min idle → 50, 10 min
+  idle → 40, floor 30. A truly flat market still results in HOLD across all
+  symbols rather than forcing a low-quality entry.
+- Rank line per cycle: `[RANK] BTC=74(B) ETH=61(B) SOL=48(H) → WINNER=BTCUSDT score=74`
+  or `→ HOLD (all < threshold 60)` / `→ THROTTLED (18s left)` / `→ SKIP (max_open 2/2)`.
+- Dashboard per-symbol card now shows `SCORE` row (colored by quality tier).
+- `execute_entry()` is the new public method that runs the gates+sizing+order+record
+  block. Orchestrator calls it on the winner ONLY.
+
 ## Multi-symbol bot UX (May 2026)
 
 - Default `active_symbols` = **BTC + ETH + SOL** — the orchestrator scans all three each tick.

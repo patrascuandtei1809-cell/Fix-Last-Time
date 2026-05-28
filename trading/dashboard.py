@@ -1488,12 +1488,22 @@ if bot_running:
         else:
             _block_s, _block_col = "—", "#6e7681"
 
+        # SMART PRIORITY SCALPER — score display
+        _score = int(_st.get("score") or 0)
+        if   _score >= 75: _score_col = "#26a69a"   # green
+        elif _score >= 60: _score_col = "#7ce0c2"   # mint
+        elif _score >= 40: _score_col = "#e3b341"   # yellow
+        else:              _score_col = "#6e7681"   # grey
         _cards += (
             f'<div style="flex:1 1 0;min-width:220px;background:#0d1117;border:1px solid #1e2736;'
             f'border-radius:8px;padding:10px 12px;">'
             f'  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
             f'    <span style="font-size:12px;font-weight:800;color:#f0f6fc;font-family:\'JetBrains Mono\',monospace;">{_s.replace("USDT","")}</span>'
             f'    <span style="font-size:11px;font-weight:800;color:{_sc};font-family:\'JetBrains Mono\',monospace;">{_sig}</span>'
+            f'  </div>'
+            f'  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+            f'    <span style="font-size:9px;color:#484f58;font-family:\'JetBrains Mono\',monospace;">SCORE</span>'
+            f'    <span style="font-size:14px;font-weight:800;color:{_score_col};font-family:\'JetBrains Mono\',monospace;">{_score}</span>'
             f'  </div>'
             f'  <div style="font-size:10px;color:#8b949e;line-height:1.55;">'
             f'    <div><span style="color:#484f58;">LAST CHECK</span> <span style="color:#c9d1d9;font-family:\'JetBrains Mono\',monospace;">{_last_check_s}</span></div>'

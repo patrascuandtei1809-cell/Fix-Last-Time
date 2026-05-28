@@ -198,6 +198,81 @@ class GPTAdvisor:
                           confidence=conf, reason=reason, ts=time.time())
 
 
+    # ── public: rank top-K opportunities (SMART PRIORITY SCALPER tiebreak) ──
+    def rank_opportunities(self, candidates: list) -> Optional[Dict[str, Any]]:
+        """Synchronous, short-call ranker used as a tiebreaker when 2+
+        symbols score within 5 points of each other.
+
+        Returns {"symbol": str, "reason": str} or None if disabled / error.
+        Cached for 20s on the full input set, throttled to 1 call per 15s.
+        """
+        if not self._enabled or not candidates:
+            return None
+        now = time.time()
+        # Per-instance throttle for ranking calls (separate from per-symbol).
+        if not hasattr(self, "_last_rank_at"):
+            self._last_rank_at = 0.0
+            self._rank_cache:  Optional[Dict[str, Any]] = None
+            self._rank_key:    str = ""
+        key = "|".join(sorted(f"{c['symbol']}:{c.get('score',0)}" for c in candidates))
+        # True global throttle: within the window we NEVER call the API again,
+        # even if candidate scores shifted. Return last cached pick if it still
+        # refers to one of the current candidates, otherwise return None and
+        # let the orchestrator fall back to pure-score tiebreak.
+        if (now - self._last_rank_at) < 15.0:
+            if self._rank_cache and \
+               self._rank_cache.get("symbol") in {c.get("symbol") for c in candidates}:
+                return self._rank_cache
+            return None
+        client = self._get_client()
+        if client is None:
+            return None
+        # Build slim payload
+        items = [{
+            "symbol":     c.get("symbol"),
+            "signal":     c.get("signal"),
+            "score":      c.get("score"),
+            "confidence": c.get("confidence"),
+            "breakdown":  c.get("breakdown") or {},
+        } for c in candidates[:3]]
+        prompt = (
+            "You are a scalping co-pilot. Below are 2-3 trade candidates from "
+            "different symbols, each pre-scored 0-100 by a rule engine. Pick "
+            "the SINGLE strongest setup. Reply JSON: "
+            '{"symbol":"BTCUSDT|ETHUSDT|SOLUSDT","reason":"<short why>"}. '
+            "Keep reason <100 chars. Bias toward stronger trend + volume."
+        )
+        try:
+            resp = client.chat.completions.create(
+                model           = MODEL,
+                messages        = [{"role": "system", "content": prompt},
+                                   {"role": "user",   "content": json.dumps(items)}],
+                temperature     = 0.2,
+                max_tokens      = 80,
+                response_format = {"type": "json_object"},
+                timeout         = TIMEOUT_SEC,
+            )
+            data    = json.loads(resp.choices[0].message.content or "{}")
+            sym     = str(data.get("symbol", "")).upper().strip()
+            reason  = str(data.get("reason", ""))[:160]
+        except Exception as e:
+            with self._lock:
+                self._total_errors += 1
+                self._last_error    = f"rank: {e}"[:200]
+            return None
+        if sym not in {c.get("symbol") for c in candidates}:
+            return None
+        out = {"symbol": sym, "reason": reason}
+        self._last_rank_at = now
+        self._rank_cache   = out
+        self._rank_key     = key
+        with self._lock:
+            self._total_calls += 1
+            self._last_global_ts = now
+            self._last_symbol    = f"RANK→{sym}"
+        return out
+
+
 # Singleton accessor
 _advisor: Optional[GPTAdvisor] = None
 _singleton_lock = threading.Lock()
