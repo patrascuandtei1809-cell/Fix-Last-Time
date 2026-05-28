@@ -1,0 +1,56 @@
+
+*** System restart required ***
+Last login: Thu May 28 09:29:59 2026 from 162.243.188.66
+root@AlphaTrade-bot:~# cd /root/trading-bot-clean
+root@AlphaTrade-bot:~/trading-bot-clean# git pull
+remote: Enumerating objects: 47, done.
+remote: Counting objects: 100% (47/47), done.
+remote: Compressing objects: 100% (14/14), done.
+remote: Total 35 (delta 32), reused 24 (delta 21), pack-reused 0 (from 0)
+Unpacking objects: 100% (35/35), 26.60 KiB | 419.00 KiB/s, done.
+From https://github.com/patrascuandtei1809-cell/Fix-Last-Time
+   29f409a..f2efa9c  main       -> origin/main
+Auto packing the repository in background for optimum performance.
+See "git help gc" for manual housekeeping.
+Updating 29f409a..f2efa9c
+error: Your local changes to the following files would be overwritten by merge:
+        trading/data/settings.json
+Please commit your changes or stash them before you merge.
+Aborting
+root@AlphaTrade-bot:~/trading-bot-clean# /root/restart-bot.sh
+[1/5] Stashing local settings.json and pulling...
+Saved working directory and index state On main: droplet-local-1779957152
+Auto packing the repository in background for optimum performance.
+See "git help gc" for manual housekeeping.
+Updating 29f409a..f2efa9c
+Fast-forward
+Auto packing the repository in background for optimum performance.
+See "git help gc" for manual housekeeping.
+ attached_assets/Pasted-FULL-ARCHITECTURE-RESET-SMART-AI-SCALPING-BOT-We-need-a_1779956182448.txt | 463 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ attached_assets/Pasted-NEXT-STAGE-SMART-PRIORITY-SCALPER-DO-NOT-add-more-modes_1779954405516.txt | 141 ++++++++++++++++++++++++++++++++
+ replit.md                                                                                        |  86 ++++++++++++++++++++
+ trading/bot.py                                                                                   | 222 +++++++++++++++++++++++++++++++++++++++++++++++++--
+ trading/dashboard.py                                                                             |  36 ++++++++-
+ trading/data/settings.json                                                                       |   6 +-
+ trading/gpt_advisor.py                                                                           | 130 ++++++++++++++++++++++++++++++
+ trading/market_regime.py                                                                         | 107 +++++++++++++++++++++++++
+ trading/risk.py                                                                                  |   9 ++-
+ trading/strategy.py                                                                              | 159 +++++++++++++++++++++++++++++++++++++
+ trading/symbol_worker.py                                                                         | 115 ++++++++++++++++++++++++---
+ 11 files changed, 1447 insertions(+), 27 deletions(-)
+ create mode 100644 attached_assets/Pasted-FULL-ARCHITECTURE-RESET-SMART-AI-SCALPING-BOT-We-need-a_1779956182448.txt
+ create mode 100644 attached_assets/Pasted-NEXT-STAGE-SMART-PRIORITY-SCALPER-DO-NOT-add-more-modes_1779954405516.txt
+ create mode 100644 trading/market_regime.py
+[2/5] Killing port 8501...
+ 646432[3/5] OPENAI_API_KEY in shell: NO
+[4/5] Launching streamlit...
+[5/5] PID=718439  OPENAI in process: 0
+2026-05-28 09:32:36.635 Uvicorn server started on 0.0.0.0:8501
+
+  You can now view your Streamlit app in your browser.
+
+  Local URL: http://localhost:8501
+  Network URL: http://134.122.107.236:8501
+  External URL: http://134.122.107.236:8501
+
+root@AlphaTrade-bot:~/trading-bot-clean# 
