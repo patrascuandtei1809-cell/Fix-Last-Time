@@ -1,0 +1,463 @@
+FULL ARCHITECTURE RESET — SMART AI SCALPING BOT
+
+We need a complete professional architecture for a LIVE Binance crypto scalping bot.
+
+This is NOT a random rule bot anymore.
+This must become a SMART GLOBAL DECISION SYSTEM.
+
+MAIN GOAL:
+The bot must trade BTCUSDT, ETHUSDT and SOLUSDT actively, but intelligently.
+It must not spam trades.
+It must not stay frozen.
+It must scan all 3 coins, understand market context, rank opportunities, choose the best trade, enter with proper size, and exit fast.
+
+IMPORTANT:
+AI must NOT be decoration.
+AI must be used as a global market analyst / opportunity selector.
+The strategy engine stays fast.
+GPT is used to improve decision quality, not to slow execution.
+
+==================================================
+CORE PRINCIPLE
+==================================================
+
+Every 2 seconds:
+
+1. Fetch live market data for BTC, ETH, SOL
+2. Analyze each coin
+3. Detect market regime
+4. Score each opportunity
+5. Compare all coins together
+6. Ask AI to rank/validate the best setup
+7. Execute only the best valid trade
+8. Manage exits automatically
+
+The bot must behave like:
+
+FAST + SMART + SELECTIVE + CONTROLLED
+
+Not:
+- random
+- passive
+- overtrading
+- all coins at once
+- fake AI
+
+==================================================
+FILES / STRUCTURE
+==================================================
+
+trading_bot/
+├── main.py
+├── config.py
+├── data_fetcher.py
+├── signal_engine.py
+├── market_regime.py
+├── scorer.py
+├── gpt_analyst.py
+├── opportunity_selector.py
+├── filters.py
+├── trade_manager.py
+├── risk_manager.py
+├── position_manager.py
+├── dashboard.py
+└── logger.py
+
+==================================================
+CONFIG
+==================================================
+
+SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+
+LOOP_INTERVAL_SECONDS = 2
+
+MAX_OPEN_TRADES = 2
+MAX_OPEN_PER_SYMBOL = 1
+
+MIN_SECONDS_BETWEEN_ENTRIES = 10
+SYMBOL_COOLDOWN_SECONDS = 30
+
+MIN_SCORE = 65
+MIN_PROBABILITY = 65
+
+CAPITAL_RESERVE_PCT = 0.25
+
+POSITION_SIZE_TIERS = {
+    "medium": {
+        "score_min": 65,
+        "score_max": 75,
+        "capital_pct": 0.15
+    },
+    "strong": {
+        "score_min": 75,
+        "score_max": 85,
+        "capital_pct": 0.25
+    },
+    "excellent": {
+        "score_min": 85,
+        "score_max": 100,
+        "capital_pct": 0.40
+    }
+}
+
+STOP_LOSS_PCT = 0.004
+TAKE_PROFIT_PCT = 0.006
+BREAKEVEN_TRIGGER_PCT = 0.002
+
+OPENAI_MODEL = "gpt-4o-mini"
+GPT_ENABLED = True
+GPT_TIMEOUT_SECONDS = 4
+GPT_MIN_SECONDS_BETWEEN_CALLS = 10
+
+==================================================
+MARKET REGIME SYSTEM
+==================================================
+
+Create market_regime.py.
+
+The bot must classify market state:
+
+- DEAD
+- RANGE
+- TREND
+- VOLATILE
+
+Rules:
+
+DEAD:
+- very low ATR
+- tiny candles
+- low volume
+→ no trade
+
+RANGE:
+- sideways market
+- mixed candles
+→ only allow very high score trades
+
+TREND:
+- EMA structure clear
+- momentum continuing
+→ allow normal aggressive scalping
+
+VOLATILE:
+- large candles
+- volume spike
+→ allow trades but reduce size if risk is high
+
+The bot must NOT treat every market the same.
+
+==================================================
+SIGNAL ENGINE
+==================================================
+
+signal_engine.py must calculate per symbol:
+
+- current price
+- EMA9
+- EMA21
+- EMA50
+- EMA slope
+- RSI
+- MACD/momentum
+- ATR %
+- volume ratio
+- candle body strength
+- wick size
+- last 3 candle direction
+- price change over 1m / 3m / 5m
+
+Output structured data per coin.
+
+==================================================
+SCORING SYSTEM
+==================================================
+
+scorer.py must create a 0–100 score per symbol.
+
+Score factors:
+
+1. EMA structure
+- EMA9 above EMA21 for BUY
+- EMA9 below EMA21 for SELL
+- slope strength
+
+2. Momentum
+- current momentum
+- momentum acceleration
+- continuation strength
+
+3. Candle quality
+- strong body
+- low opposite wick
+- continuation candles
+
+4. Volume
+- current volume vs average
+- volume expansion
+
+5. Volatility
+- ATR rising
+- enough movement to scalp
+
+6. Market regime bonus/penalty
+- TREND = bonus
+- RANGE = penalty
+- DEAD = reject
+
+7. Fake move penalty
+- big wick
+- sudden reversal candle
+- weak volume breakout
+
+Output:
+
+{
+  "symbol": "BTCUSDT",
+  "direction": "BUY/SELL/HOLD",
+  "score": 0-100,
+  "probability": 0-100,
+  "regime": "TREND/RANGE/DEAD/VOLATILE",
+  "reason": "short explanation"
+}
+
+==================================================
+GLOBAL OPPORTUNITY SELECTOR
+==================================================
+
+Do NOT trade symbols independently.
+
+Create opportunity_selector.py.
+
+It must compare BTC, ETH, SOL together.
+
+Logic:
+
+- collect all valid candidates
+- remove candidates with score < 65
+- remove candidates with probability < 65
+- sort by score + probability
+- choose best 1
+- allow second trade only if score is also strong and risk allows it
+
+Example:
+
+BTC score 58 → reject
+ETH score 78 → candidate
+SOL score 71 → candidate
+
+Choose ETH first.
+Do not blindly open all 3.
+
+==================================================
+GPT ANALYST
+==================================================
+
+GPT must analyze ALL symbols together.
+
+It must NOT just confirm one signal.
+
+Prompt:
+
+You are a professional crypto scalping analyst.
+
+You receive structured market data for BTCUSDT, ETHUSDT and SOLUSDT.
+
+Your job:
+- compare all symbols
+- choose the best short-term opportunity for the next 1–3 minutes
+- avoid weak/noisy setups
+- reject trades when the market has no edge
+
+Return JSON only:
+
+{
+  "action": "TRADE" or "NO_TRADE",
+  "symbol": "BTCUSDT/ETHUSDT/SOLUSDT/NONE",
+  "direction": "BUY/SELL/NONE",
+  "probability": 0-100,
+  "confidence": 0-100,
+  "risk_level": "LOW/MEDIUM/HIGH",
+  "reason": "short clear reason"
+}
+
+Rules:
+- If no strong opportunity exists, return NO_TRADE.
+- Do not invent certainty.
+- Do not overtrade.
+- Prefer clean momentum + volume + structure.
+- Reject sideways/no-volume chop.
+
+GPT decision is used as SMART FILTER + RANKING CONFIRMATION.
+
+==================================================
+FINAL ENTRY LOGIC
+==================================================
+
+The bot enters only if:
+
+- strategy score >= 65
+- probability >= 65
+- GPT agrees OR GPT says the same symbol is best
+- market is not DEAD
+- risk manager allows it
+- cooldown allows it
+- max open trades not exceeded
+
+Pseudo:
+
+scan all symbols
+score all symbols
+rank candidates
+send candidates to GPT
+get best AI decision
+
+if AI says NO_TRADE:
+    HOLD
+
+if AI selects valid symbol:
+    execute best trade
+
+No random entries.
+No 3 entries instantly.
+No low-confidence trades.
+
+==================================================
+POSITION SIZING
+==================================================
+
+Position size must depend on quality.
+
+score 65–75:
+    use 15% of available USDT
+
+score 75–85:
+    use 25% of available USDT
+
+score 85+:
+    use 40% of available USDT
+
+Always keep 25% USDT reserve.
+
+Never all-in.
+Never below Binance minimum.
+Never exceed available balance.
+
+==================================================
+RISK MANAGEMENT
+==================================================
+
+For every trade:
+
+Stop loss:
+0.4%
+
+Take profit:
+0.5%–0.7%
+
+Move SL to breakeven:
+at +0.2%
+
+Early exit if:
+- momentum dies
+- reversal candle appears
+- 2 opposite candles form
+- GPT/strategy flips against position
+- price stalls too long
+
+The bot must close 100% of the position on exit.
+
+Manual positions:
+If user manually buys BTC/ETH/SOL, bot must detect it and manage it with the same exit logic.
+
+==================================================
+ANTI-IDLE SYSTEM
+==================================================
+
+The bot should not stay dead all day.
+
+If no trades for 10 minutes:
+- slightly lower score threshold from 65 to 60
+- still require market movement
+- still reject DEAD market
+
+Anti-idle must NOT force stupid trades.
+It only relaxes thresholds slightly.
+
+==================================================
+DASHBOARD REQUIREMENTS
+==================================================
+
+Dashboard must clearly show:
+
+- AI MODE = GLOBAL SMART SCALPER
+- GPT status: ACTIVE / IDLE / ERROR
+- current best symbol
+- score per coin
+- probability per coin
+- reason for BUY / SELL / HOLD
+- reason why trade was blocked
+- position size before order
+- capital used
+- available balance
+- current exposure
+- active positions
+- SL / TP / BE status
+
+No fake “AI” labels.
+If GPT is not active, show clearly:
+GPT OFF / API KEY MISSING.
+
+==================================================
+LOGGING
+==================================================
+
+Logs must show:
+
+[SCAN] BTC score=62 probability=60 regime=RANGE
+[SCAN] ETH score=78 probability=74 regime=TREND
+[SCAN] SOL score=55 probability=50 regime=DEAD
+
+[SELECTOR] Best candidate ETH BUY score=78
+
+[GPT] TRADE ETH BUY probability=76 confidence=73 reason=momentum + volume expansion
+
+[TRADE] Executed ETH BUY size=$XX SL=0.4% TP=0.6%
+
+[EXIT] ETH closed reason=take profit / stop loss / reversal / breakeven
+
+==================================================
+DO NOT DO
+==================================================
+
+Do NOT add more modes.
+Do NOT add random buttons.
+Do NOT rewrite UI cosmetics.
+Do NOT make GPT block the whole bot if it fails.
+Do NOT trade all 3 symbols blindly.
+Do NOT enter on confidence under 60.
+Do NOT pretend AI predicts the future.
+
+==================================================
+FINAL TARGET
+==================================================
+
+The bot must be:
+
+- active
+- fast
+- global
+- selective
+- AI-assisted
+- risk controlled
+- able to choose the best trade between BTC, ETH and SOL
+
+This is not “trade less”.
+This is “trade smart”.
+
+Implement this as one clean architecture upgrade.
+Before coding, explain the plan.
+Then implement.
+Then run syntax checks.
+Then restart dashboard.
+Then verify logs show scan → ranking → GPT decision → execution.
