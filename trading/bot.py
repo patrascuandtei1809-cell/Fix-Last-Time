@@ -448,7 +448,7 @@ class TradingBot:
         self.score_threshold_floor: int = 55  # anti-idle never drops below this
         self.confidence_floor:     int = 60   # min worker confidence to qualify
         self.gpt_prob_floor:       int = 55   # min GPT probability (filter, not predictor)
-        self.global_throttle_sec:   int = 10  # min seconds between any 2 new trades
+        self.global_throttle_sec:   int = 5   # min seconds between any 2 new trades
         self._last_global_trade_at: float = 0.0   # unix seconds
         # Candidate queue — workers append their evaluation here via on_candidate;
         # orchestrator picks winner each cycle then clears the queue.

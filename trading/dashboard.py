@@ -700,13 +700,13 @@ if not st.session_state.get("_settings_loaded"):
                 _rs.dynamic_size_pct = 40.0
             _rs.stop_loss_pct    = 0.4
             _rs.take_profit_pct  = 0.6
-            _rs.max_per_symbol   = 5
-            _rs.max_open_trades  = 5
+            _rs.max_per_symbol   = 99
+            _rs.max_open_trades  = 99
             _rs.cooldown_seconds = 5
         except Exception:
             pass
     try:
-        st.session_state.global_risk.max_open_trades_total = 20
+        st.session_state.global_risk.max_open_trades_total = 10
         st.session_state.global_risk.max_exposure_per_symbol_pct = 100.0
     except Exception:
         pass

@@ -19,7 +19,7 @@
   "global_risk": {
     "max_total_exposure_usdt": 300.0,
     "max_exposure_per_symbol_pct": 100,
-    "max_open_trades_total": 3,
+    "max_open_trades_total": 10,
     "max_daily_loss_pct": 5.0
   },
   "per_symbol_risk": {},

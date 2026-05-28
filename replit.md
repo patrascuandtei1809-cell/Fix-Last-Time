@@ -152,11 +152,20 @@ Goal: enter BEFORE the move, accept more small losses to catch early turns.
   NOT a trend prediction. Trade only if probability ≥ 65. Return shape
   unchanged so orchestrator gating is unchanged.
 
+- **Strict EARLY-ONLY entry gates (v2 — late entries blocked):**
+  - HARD RULE: skip if last candle move > **0.3%** (move already happened).
+  - **BUY = ALL of:** RSI<40 AND rising · MACD hist flipping up · vol≥1.3×avg
+    · price ≤ EMA9 (not extended)
+  - **SELL = ALL of:** RSI>60 AND falling · MACD hist flipping down · vol≥1.3×avg
+    · price ≥ EMA9 (stretched)
+  - Failed-gate diagnostic logged on every HOLD: `no BUY (failed: vol≥1.3×avg, price ≤ EMA9)`.
+
 - **Faster execution / higher concurrency (AGGRESSIVE):**
-  - Per-symbol cooldown 15 → **5 s** (faster re-entries)
-  - `max_open_trades_total` 3 → **20** (only balance + cooldown gates limit)
-  - `max_per_symbol` 1 → **5** (stacked reversal entries allowed)
-  - GPT prob floor 65 → **55** (filter, not predictor; reject only clearly bad)
+  - Per-symbol cooldown **5 s**, global throttle **5 s** between any 2 entries.
+  - `max_open_trades_total` = **10** (only balance + cooldown + global cap limit).
+  - **Per-symbol cap removed** (`max_per_symbol = max_open_trades = 99`) — global
+    cap is the only ceiling.
+  - GPT prob floor 65 → **55** (filter, not predictor; reject only clearly bad).
   - Score threshold stays 60, 2 s loop unchanged.
 
 - **Aggressive sizing tiers** (smaller per-trade since we allow up to 20
