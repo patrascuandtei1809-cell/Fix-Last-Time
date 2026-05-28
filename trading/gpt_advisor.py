@@ -227,6 +227,10 @@ class GPTAdvisor:
         client = self._get_client()
         if client is None:
             return None
+        # Set throttle BEFORE the call so transient errors / invalid responses
+        # also enter the 15s backoff window. Otherwise a failing GPT would be
+        # retried on every 2s loop tick and could hammer OpenAI.
+        self._last_rank_at = now
         # Build slim payload
         items = [{
             "symbol":     c.get("symbol"),
@@ -236,11 +240,15 @@ class GPTAdvisor:
             "breakdown":  c.get("breakdown") or {},
         } for c in candidates[:3]]
         prompt = (
-            "You are a scalping co-pilot. Below are 2-3 trade candidates from "
-            "different symbols, each pre-scored 0-100 by a rule engine. Pick "
-            "the SINGLE strongest setup. Reply JSON: "
-            '{"symbol":"BTCUSDT|ETHUSDT|SOLUSDT","reason":"<short why>"}. '
-            "Keep reason <100 chars. Bias toward stronger trend + volume."
+            "You are a scalping edge filter. Below are 1-3 trade candidates "
+            "from different symbols, each pre-scored 0-100 by a rule engine. "
+            "Pick the SINGLE strongest setup AND estimate the probability "
+            "(0-100) that price moves at least 0.2% in the proposed direction "
+            "within the next 2 minutes. Reply JSON: "
+            '{"symbol":"BTCUSDT|ETHUSDT|SOLUSDT",'
+            '"probability_next_move":0-100,"reason":"<short why>"}. '
+            "Keep reason <100 chars. Bias toward stronger trend + volume; "
+            "penalize sideways tape, weak candles, fake breakouts."
         )
         try:
             resp = client.chat.completions.create(
@@ -255,6 +263,11 @@ class GPTAdvisor:
             data    = json.loads(resp.choices[0].message.content or "{}")
             sym     = str(data.get("symbol", "")).upper().strip()
             reason  = str(data.get("reason", ""))[:160]
+            try:
+                prob = int(float(data.get("probability_next_move", 0)))
+            except (TypeError, ValueError):
+                prob = 0
+            prob = max(0, min(100, prob))
         except Exception as e:
             with self._lock:
                 self._total_errors += 1
@@ -262,7 +275,8 @@ class GPTAdvisor:
             return None
         if sym not in {c.get("symbol") for c in candidates}:
             return None
-        out = {"symbol": sym, "reason": reason}
+        out = {"symbol": sym, "reason": reason,
+               "probability_next_move": prob}
         self._last_rank_at = now
         self._rank_cache   = out
         self._rank_key     = key

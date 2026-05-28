@@ -470,11 +470,22 @@ class SymbolWorker:
             self._on_state(self.symbol, block_reason=msg)
             return
 
-        # 6. Sizing — ACTIVE SCALPER dynamic sizing:
-        # If dynamic_size_pct > 0: invested = free_usdt * pct / 100.
+        # 6. Sizing — SMART ACTIVE SCALPER score-tiered sizing.
+        # Base % from per-symbol risk (sidebar slider), but scale by score:
+        #   score 55–64  → 50% of base   (conservative entry)
+        #   score 65–74  → 75% of base   (standard entry)
+        #   score ≥ 75   → 100% of base  (full conviction)
         # Floor at $10 (Binance min notional). Ceiling at free_usdt * 0.75
-        # to always leave 25% buffer for fees/slippage/other symbols.
-        _dyn_pct = float(getattr(self.risk.settings, "dynamic_size_pct", 0) or 0)
+        # so we always leave 25% buffer for fees/slippage/other symbols.
+        _base_pct = float(getattr(self.risk.settings, "dynamic_size_pct", 0) or 0)
+        _score    = int(ev.get("score") or 0)
+        if   _score >= 75: _tier_mult, _tier_lbl = 1.00, "high"
+        elif _score >= 65: _tier_mult, _tier_lbl = 0.75, "mid"
+        else:              _tier_mult, _tier_lbl = 0.50, "low"
+        _dyn_pct  = _base_pct * _tier_mult
+        print(f"[BOT] {self.symbol} size tier={_tier_lbl} score={_score} "
+              f"base={_base_pct:.0f}% × {_tier_mult:.2f} → {_dyn_pct:.1f}%",
+              flush=True)
         if _dyn_pct > 0:
             invested = free_usdt * _dyn_pct / 100.0
             invested = min(invested, free_usdt * 0.75)

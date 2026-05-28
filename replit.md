@@ -126,6 +126,30 @@ selection so the bot stops firing simultaneously on all three coins.
 - `execute_entry()` is the new public method that runs the gates+sizing+order+record
   block. Orchestrator calls it on the winner ONLY.
 
+## SMART ACTIVE SCALPER tuning (May 28, 2026)
+
+Quality-frequency refinement on top of SMART PRIORITY SCALPER — trade often
+but only when there's an edge.
+
+- **Thresholds**: `score_threshold_base = 55`, `confidence_floor = 55`,
+  `gpt_prob_floor = 55`, `global_throttle_sec = 20` (was 30). Anti-idle floor
+  unchanged at 30.
+- **GPT = HARD edge filter** (was tiebreak only). Whenever ≥1 setup qualifies
+  AND GPT is enabled, `rank_opportunities()` is called every cycle (cached 15s
+  inside the advisor). GPT must return BOTH its pick AND
+  `probability_next_move 0-100`. Trade ONLY if GPT's pick matches our score
+  winner AND `probability_next_move >= 55`. Otherwise HOLD with reason
+  `GPT veto: …`. If GPT is throttled/cached/disabled, fall back to pure-score
+  winner (don't block on transient GPT outage).
+- **Score-tiered sizing** in `symbol_worker.execute_entry()`:
+  - score 55–64  → 50% × sidebar `% of free USDT` slider (conservative)
+  - score 65–74  → 75% × slider (standard)
+  - score ≥ 75   → 100% × slider (full conviction)
+  Logged per entry: `[BOT] BTCUSDT size tier=mid score=68 base=40% × 0.75 → 30.0%`.
+- **Max 2 open trades total** unchanged. With max_open=2 + score winner per
+  cycle + 20s throttle, the "if 3 valid → trade only TOP 2" rule emerges
+  naturally over consecutive cycles.
+
 ## Multi-symbol bot UX (May 2026)
 
 - Default `active_symbols` = **BTC + ETH + SOL** — the orchestrator scans all three each tick.

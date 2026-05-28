@@ -435,10 +435,16 @@ class TradingBot:
         self._running:  bool = False
 
         # ── SMART PRIORITY SCALPER state ─────────────────────────────────
-        self.score_threshold_base: int = 60   # minimum score to trade
-        self.score_threshold:      int = 60   # current threshold (anti-idle lowers it)
+        # SMART ACTIVE SCALPER (May 2026): quality-frequency tuning.
+        # Lower base threshold (55) lets more setups qualify, but a confidence
+        # floor + GPT edge filter keep junk out. Throttle = 20s (active but
+        # not chaotic). Anti-idle floor stays 30.
+        self.score_threshold_base: int = 55   # minimum score to trade
+        self.score_threshold:      int = 55   # current threshold (anti-idle lowers it)
         self.score_threshold_floor: int = 30  # anti-idle never drops below this
-        self.global_throttle_sec:   int = 30  # min seconds between any 2 new trades
+        self.confidence_floor:     int = 55   # min worker confidence to qualify
+        self.gpt_prob_floor:       int = 55   # min GPT probability_next_move
+        self.global_throttle_sec:   int = 20  # min seconds between any 2 new trades
         self._last_global_trade_at: float = 0.0   # unix seconds
         # Candidate queue — workers append their evaluation here via on_candidate;
         # orchestrator picks winner each cycle then clears the queue.
@@ -593,32 +599,55 @@ class TradingBot:
                 f"({c.get('signal','?')[0]})"
                 for c in cands)
 
+            # SMART ACTIVE SCALPER filter: signal + score + confidence floors.
             qualified = [c for c in cands
                          if c.get("signal") in ("BUY", "SELL")
-                         and int(c.get("score", 0)) >= self.score_threshold]
+                         and int(c.get("score", 0))      >= self.score_threshold
+                         and int(c.get("confidence", 0)) >= self.confidence_floor]
             qualified.sort(key=lambda c: (int(c.get("score", 0)),
                                           int(c.get("confidence", 0))),
                            reverse=True)
 
-            # Optional GPT tiebreaker — only if top 2 are within 5 points.
-            winner = None
+            # GPT = EDGE FILTER (hard gate, not just tiebreak).
+            # Whenever ≥1 setup qualifies and GPT is enabled, ask it to pick the
+            # single best symbol + emit `probability_next_move`. Trade ONLY if
+            # GPT's pick matches our score winner AND probability ≥ floor.
+            # Throttled+cached inside rank_opportunities() so the loop is not
+            # blocked every 2s.
+            winner       = None
+            gpt_block    = ""   # populated when GPT vetoes
             if qualified:
                 winner = qualified[0]
-                if len(qualified) >= 2 and \
-                   (qualified[0]["score"] - qualified[1]["score"]) <= 5:
-                    try:
-                        from gpt_advisor import get_advisor as _ga
-                        _ranked = _ga().rank_opportunities(qualified[:3])
-                        if _ranked and _ranked.get("symbol"):
-                            for c in qualified:
-                                if c["symbol"] == _ranked["symbol"]:
-                                    winner = c
-                                    print(f"[RANK] GPT tiebreak → "
-                                          f"{_ranked['symbol']} ({_ranked.get('reason','')[:80]})",
-                                          flush=True)
-                                    break
-                    except Exception as _re:
-                        print(f"[RANK] GPT rank skipped: {_re}", flush=True)
+                try:
+                    from gpt_advisor import get_advisor as _ga
+                    _adv = _ga()
+                    if _adv and getattr(_adv, "_enabled", False):
+                        _ranked = _adv.rank_opportunities(qualified[:3])
+                        if _ranked is None:
+                            # Throttled / no client / parse fail — fall back to
+                            # pure score winner (don't block trading on a
+                            # transient GPT outage).
+                            pass
+                        else:
+                            _gsym  = _ranked.get("symbol", "")
+                            _gprob = int(_ranked.get("probability_next_move", 0))
+                            if _gsym != winner["symbol"]:
+                                gpt_block = (f"GPT picked {_gsym} "
+                                             f"(prob={_gprob}) ≠ score winner "
+                                             f"{winner['symbol']}")
+                                winner = None
+                            elif _gprob < self.gpt_prob_floor:
+                                gpt_block = (f"GPT prob {_gprob} < "
+                                             f"{self.gpt_prob_floor} for "
+                                             f"{_gsym}")
+                                winner = None
+                            else:
+                                print(f"[RANK] GPT edge ✓ {_gsym} "
+                                      f"prob={_gprob} "
+                                      f"({_ranked.get('reason','')[:80]})",
+                                      flush=True)
+                except Exception as _re:
+                    print(f"[RANK] GPT rank skipped: {_re}", flush=True)
 
             # Phase C: execute winner if throttle clear + cap not hit.
             now_ts        = time.time()
@@ -631,8 +660,10 @@ class TradingBot:
                       f"throttle={throttle_left}s open={len(all_open)}/{cap}",
                       flush=True)
             elif winner is None:
-                print(f"[RANK] {_rank_bits} → HOLD "
-                      f"(all < threshold {self.score_threshold}) "
+                _why = (f"GPT veto: {gpt_block}" if gpt_block
+                        else f"all < threshold {self.score_threshold} "
+                             f"or conf < {self.confidence_floor}")
+                print(f"[RANK] {_rank_bits} → HOLD ({_why}) "
                       f"throttle={throttle_left}s open={len(all_open)}/{cap}",
                       flush=True)
             elif len(all_open) >= cap:
