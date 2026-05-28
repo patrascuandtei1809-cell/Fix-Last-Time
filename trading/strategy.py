@@ -316,9 +316,10 @@ def get_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df["rsi"]     = calculate_rsi(df["close"])
     df["atr"]     = calculate_atr(df)
     macd, sigl, hist = calculate_macd(df["close"])
-    df["macd"]      = macd
-    df["macd_sig"]  = sigl
-    df["macd_hist"] = hist
+    df["macd"]        = macd
+    df["macd_signal"] = sigl   # canonical name used by dashboard + ai_engine
+    df["macd_sig"]    = sigl   # alias kept for backward compat
+    df["macd_hist"]   = hist
     return df
 
 
