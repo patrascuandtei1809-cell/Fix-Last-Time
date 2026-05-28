@@ -670,7 +670,7 @@ if not st.session_state.get("_settings_loaded"):
     # The persisted settings.json on disk may pre-date the FULL RESET (e.g.
     # contains BTCUSDT only, 15s tick, 0.05% threshold, 50/100 risk). The
     # operator has no UI to change these in the new build, so override.
-    st.session_state.strategy           = "Active Scalper"
+    st.session_state.strategy           = "Reversal Scalper"
     st.session_state.interval           = "1m"
     st.session_state.check_every        = 2
     st.session_state.threshold          = 0.01
@@ -700,13 +700,13 @@ if not st.session_state.get("_settings_loaded"):
                 _rs.dynamic_size_pct = 40.0
             _rs.stop_loss_pct    = 0.4
             _rs.take_profit_pct  = 0.6
-            _rs.max_per_symbol   = 1
-            _rs.max_open_trades  = 1
-            _rs.cooldown_seconds = 15
+            _rs.max_per_symbol   = 5
+            _rs.max_open_trades  = 5
+            _rs.cooldown_seconds = 5
         except Exception:
             pass
     try:
-        st.session_state.global_risk.max_open_trades_total = 3
+        st.session_state.global_risk.max_open_trades_total = 20
         st.session_state.global_risk.max_exposure_per_symbol_pct = 100.0
     except Exception:
         pass
@@ -1764,7 +1764,7 @@ with st.sidebar:
     st.session_state.interval = intv_sel
 
     # ACTIVE SCALPER MODE — single hardcoded strategy, no dropdown.
-    st.session_state.strategy = "Active Scalper"
+    st.session_state.strategy = "Reversal Scalper"
     strat_sel = "Active Scalper"
     st.markdown(
         '<div style="background:#1a2e1a;border:1px solid #2ea043;border-radius:6px;'

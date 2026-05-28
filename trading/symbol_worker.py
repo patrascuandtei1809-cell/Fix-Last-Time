@@ -477,19 +477,20 @@ class SymbolWorker:
             self._on_state(self.symbol, block_reason=msg)
             return
 
-        # 6. Sizing — SMART AI SCALPING BOT absolute score-tiered sizing.
-        # Spec (Nov 2026 tuning, flatter & larger): 30–50% of free USDT.
-        #       60–69 → 30% (standard — meets min score)
-        #       70–79 → 40% (strong)
-        #       ≥ 80  → 50% (excellent)
+        # 6. Sizing — AGGRESSIVE EARLY REVERSAL score-tiered sizing.
+        # Spec: smaller per-trade size because we allow MANY concurrent
+        # positions (max 20 total, 5 per symbol). 25% reserve preserved.
+        #       60–69 → 10% (standard — meets min score)
+        #       70–79 → 20% (strong)
+        #       ≥ 80  → 30% (excellent)
         # VOLATILE regime → downsize by 25% (reduce size if risk is high).
         # Ceiling at free_usdt * 0.75 keeps 25% reserve. $10 floor = Binance
         # Spot min notional.
         _score  = int(ev.get("score") or 0)
         _regime = (ev.get("regime") or "").upper()
-        if   _score >= 80: _dyn_pct, _tier_lbl = 50.0, "excellent"
-        elif _score >= 70: _dyn_pct, _tier_lbl = 40.0, "strong"
-        elif _score >= 60: _dyn_pct, _tier_lbl = 30.0, "standard"
+        if   _score >= 80: _dyn_pct, _tier_lbl = 30.0, "excellent"
+        elif _score >= 70: _dyn_pct, _tier_lbl = 20.0, "strong"
+        elif _score >= 60: _dyn_pct, _tier_lbl = 10.0, "standard"
         else:              _dyn_pct, _tier_lbl =  0.0, "below-min"
         if _regime == "VOLATILE" and _dyn_pct > 0:
             _dyn_pct *= 0.75

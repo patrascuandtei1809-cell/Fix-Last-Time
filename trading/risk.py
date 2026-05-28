@@ -24,9 +24,9 @@ class SymbolRiskSettings:
     # a quick exit (still throttled at the global 10 s level in bot._loop).
     stop_loss_pct:    float = 0.4
     take_profit_pct:  float = 0.6
-    max_open_trades:  int   = 1          # max open trades for THIS symbol
-    max_per_symbol:   int   = 1          # 1 trade per symbol at a time (no stacking)
-    cooldown_seconds: int   = 15         # per-symbol cooldown (global throttle = bot._loop)
+    max_open_trades:  int   = 5          # max open trades for THIS symbol
+    max_per_symbol:   int   = 5          # up to 5 stacked entries per symbol (aggressive)
+    cooldown_seconds: int   = 5          # per-symbol cooldown (REVERSAL: faster re-entries)
     emergency_stop:   bool  = False      # per-symbol kill switch
 
     # ── Position sizing ───────────────────────────────────────────────────────
@@ -149,7 +149,7 @@ class GlobalRiskSettings:
     max_total_exposure_usdt:    float = 1000.0  # sum of all open invested USDT
     max_exposure_per_symbol_pct: float = 100.0  # 100 = disabled (no concentration cap)
     max_daily_loss_pct:         float = 5.0     # auto-halt if today P&L ≤ -X% of initial balance
-    max_open_trades_total:      int   = 3       # one per active symbol (BTC/ETH/SOL)
+    max_open_trades_total:      int   = 20      # AGGRESSIVE: only balance/cooldown gates
     emergency_stop:             bool  = False   # GLOBAL kill switch
 
 

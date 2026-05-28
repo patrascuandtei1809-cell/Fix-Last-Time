@@ -245,14 +245,16 @@ class GPTAdvisor:
         } for p in payloads[:3]]
 
         prompt = (
-            "You are a professional crypto scalping analyst.\n"
+            "You are an EARLY REVERSAL crypto scalping FILTER.\n"
             "You receive structured market data for BTCUSDT, ETHUSDT, SOLUSDT.\n"
+            "You DO NOT predict the future. You evaluate the CURRENT structure\n"
+            "and reject low-quality reversal setups.\n\n"
             "Your job:\n"
             " - compare ALL symbols\n"
-            " - choose the single best short-term opportunity for the next "
-            "1-3 minutes\n"
-            " - avoid weak/noisy setups\n"
-            " - reject trades when the market has no edge\n\n"
+            " - choose the single best short-term REVERSAL (RSI extreme + "
+            "wick rejection + volume spike + MACD hist sign-flip) for the "
+            "next 1-3 minutes\n"
+            " - reject setups with no edge (chop, no volume, no extreme)\n\n"
             "Return JSON ONLY:\n"
             "{\"action\":\"TRADE|NO_TRADE\","
             "\"symbol\":\"BTCUSDT|ETHUSDT|SOLUSDT|NONE\","
@@ -260,10 +262,9 @@ class GPTAdvisor:
             "\"probability\":0-100,\"confidence\":0-100,"
             "\"risk_level\":\"LOW|MEDIUM|HIGH\","
             "\"reason\":\"short clear reason\"}\n\n"
-            "Rules: If no strong opportunity exists, return NO_TRADE. Do not "
-            "invent certainty. Do not overtrade. Prefer clean momentum + "
-            "volume + structure. Reject sideways/no-volume chop. Reject DEAD "
-            "regime. Keep reason <120 chars."
+            "Rules: probability = your confidence in a SHORT-TERM REVERSAL, "
+            "NOT a trend prediction. If <55 → NO_TRADE. Reject sideways chop, "
+            "no-volume bars, DEAD regime. Keep reason <120 chars."
         )
         try:
             resp = client.chat.completions.create(

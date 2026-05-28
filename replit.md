@@ -126,6 +126,46 @@ selection so the bot stops firing simultaneously on all three coins.
 - `execute_entry()` is the new public method that runs the gates+sizing+order+record
   block. Orchestrator calls it on the winner ONLY.
 
+## EARLY REVERSAL SCALPER (May 28, 2026 — predictive entry)
+
+Converted from lagging trend-confirmation to **early-reversal** scalping.
+Goal: enter BEFORE the move, accept more small losses to catch early turns.
+
+- **New signal `reversal_signal()` in `trading/strategy.py`** (registered as
+  strategy name `"Reversal Scalper"` in `get_signal()`). Fires on ANY of:
+  - RSI <35 (BUY oversold) / >65 (SELL overbought)
+  - MACD hist sign-flip vs previous bar (momentum shift)
+  - Volume > 1.5× 20-bar average (BUY if green candle, SELL if red)
+  - Wick rejection: lower_wick ≥ 2× body AND > 40% of bar → BUY;
+    symmetric upper_wick → SELL
+  Confidence 50 + 10 per extra trigger (+10 if volume spike), cap 90.
+
+- **`score_market()` reweighted (sum = 100):**
+  - reversal  40 — RSI extreme (0-15) + MACD sign-flip (0-15) + wick (0-10)
+  - volume    25 — vol_ratio ≥1.0 ramps to 25 pts at 2.5×
+  - momentum  20 — MACD hist direction matches the trade
+  - trend     15 — EMA9/EMA21 alignment (minor — we catch turns, not trends)
+  Regime adjustment kept (DEAD cap 30, RANGE −10, TREND +5, VOLATILE 0).
+
+- **GPT role rewritten** (`gpt_advisor.analyze_global` prompt). It is now an
+  EARLY REVERSAL FILTER: probability = confidence in a short-term reversal,
+  NOT a trend prediction. Trade only if probability ≥ 65. Return shape
+  unchanged so orchestrator gating is unchanged.
+
+- **Faster execution / higher concurrency (AGGRESSIVE):**
+  - Per-symbol cooldown 15 → **5 s** (faster re-entries)
+  - `max_open_trades_total` 3 → **20** (only balance + cooldown gates limit)
+  - `max_per_symbol` 1 → **5** (stacked reversal entries allowed)
+  - GPT prob floor 65 → **55** (filter, not predictor; reject only clearly bad)
+  - Score threshold stays 60, 2 s loop unchanged.
+
+- **Aggressive sizing tiers** (smaller per-trade since we allow up to 20
+  concurrent positions): 60-69 → 10%, 70-79 → 20%, ≥80 → 30% of free USDT.
+  VOLATILE ×0.75, ceiling free×0.75 (25% reserve), $10 floor.
+
+- **Default strategy on cold start = `"Reversal Scalper"`** (dashboard
+  force-snap). Sidebar still hides the dropdown.
+
 ## SMART AI SCALPING BOT (May 28, 2026 — surgical upgrade)
 
 Quality-first layer on top of SMART ACTIVE SCALPER. Same plumbing, tighter

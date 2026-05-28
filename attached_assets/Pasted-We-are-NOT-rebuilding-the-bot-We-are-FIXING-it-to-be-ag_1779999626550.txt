@@ -1,0 +1,118 @@
+We are NOT rebuilding the bot. We are FIXING it to be aggressive, fast, and predictive.
+
+APPLY THESE CHANGES EXACTLY:
+
+========================
+1. TRADE FREQUENCY (VERY IMPORTANT)
+========================
+MAX_OPEN_TRADES = 20
+MAX_TRADES_PER_SYMBOL = 5
+
+REMOVE any hard limit of 1 trade per symbol.
+
+DO NOT block trades globally unless balance is insufficient.
+
+========================
+2. ENTRY LOGIC (CRITICAL FIX)
+========================
+STOP using lagging confirmation entries.
+
+REPLACE with EARLY ENTRY logic:
+
+ENTER BUY when:
+- RSI < 35
+- Momentum is turning UP (was negative, now increasing)
+- Volume spike > 1.5x average
+- Candle has strong lower wick (rejection)
+
+ENTER SELL when:
+- RSI > 65
+- Momentum turning DOWN
+- Volume spike
+- Upper wick rejection
+
+Goal: ENTER BEFORE the move, not after.
+
+========================
+3. SCORING SYSTEM UPDATE
+========================
+Change weights:
+
+REVERSAL SIGNALS = 40
+VOLUME = 25
+MOMENTUM SHIFT = 20
+EMA TREND = 15
+
+EMA should NOT dominate scoring anymore.
+
+========================
+4. GPT ROLE CHANGE
+========================
+GPT must NOT confirm trend.
+
+GPT must:
+- Evaluate reversal probability (0–100)
+- Reject bad trades
+- Pick BEST symbol only
+
+BLOCK trade if:
+- probability < 55
+
+========================
+5. SPEED / EXECUTION
+========================
+MIN_SECONDS_BETWEEN_ENTRIES = 5
+LOOP_INTERVAL_SECONDS = 2
+
+Bot must react FAST.
+
+========================
+6. POSITION SIZING
+========================
+Keep dynamic sizing but allow more aggressive use:
+
+60–70 score → 10%
+70–80 score → 20%
+80+ score → 30%
+
+Keep 25% reserve.
+
+========================
+7. UI / DASHBOARD FIX (IMPORTANT)
+========================
+ALL settings must persist after refresh:
+
+- Max open trades slider (must NOT reset to 1)
+- RSI, MACD, Stoch, Volume (always enabled)
+- Chart indicators must NEVER disappear
+
+Store in:
+- session state OR
+- config file OR
+- local storage
+
+NO RESET ON REFRESH OR RESTART.
+
+========================
+8. CORE GOAL
+========================
+We want:
+- MORE trades
+- FASTER entries
+- EARLY entries (before move)
+
+We ACCEPT:
+- more small losses
+
+We WANT:
+- catching moves early
+
+========================
+FINAL NOTE
+========================
+Do NOT redesign architecture.
+Apply ONLY these logic changes.
+
+Bot must become:
+AGGRESSIVE + FAST + EARLY ENTRY
+NOT slow and not late.

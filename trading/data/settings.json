@@ -6,7 +6,7 @@
     "SOLUSDT"
   ],
   "bot_was_running": false,
-  "strategy": "Active Scalper",
+  "strategy": "Reversal Scalper",
   "interval": "1m",
   "check_every": 2,
   "threshold": 0.01,

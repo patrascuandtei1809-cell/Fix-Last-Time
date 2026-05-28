@@ -283,8 +283,66 @@ def active_scalper_signal(
 
 # ── Dispatcher ────────────────────────────────────────────────────────────────
 
+def reversal_signal(df: pd.DataFrame) -> Tuple[str, str, int]:
+    """EARLY REVERSAL SCALPER — fires BEFORE the move, not after.
+
+    Triggers (ANY one qualifies, multiple stack confidence):
+      • RSI extreme: <35 → BUY (oversold), >65 → SELL (overbought)
+      • Momentum shift: MACD hist sign-flip vs previous bar
+      • Volume spike: current vol > 1.5× 20-bar average
+      • Wick rejection: lower_wick ≥ 2× body → BUY, upper_wick ≥ 2× body → SELL
+    """
+    d = get_indicators(df) if "macd_hist" not in df.columns else df
+    if len(d) < 22:
+        return "HOLD", "insufficient bars for reversal", 0
+    try:
+        last = d.iloc[-1]; prev = d.iloc[-2]
+        rsi  = float(last["rsi"])
+        mh   = float(last["macd_hist"]); mh_p = float(prev["macd_hist"])
+        opn  = float(last["open"]);  cls = float(last["close"])
+        high = float(last["high"]);  low = float(last["low"])
+        vol  = float(last["volume"])
+        avg_vol = float(d["volume"].rolling(20).mean().iloc[-1] or 0)
+    except Exception:
+        return "HOLD", "indicator NaN (reversal)", 0
+
+    rng = max(high - low, 1e-9); body = abs(cls - opn)
+    upper_wick = high - max(opn, cls); lower_wick = min(opn, cls) - low
+    vol_ratio = (vol / avg_vol) if avg_vol > 0 else 0.0
+
+    buy_trig: list = []; sell_trig: list = []
+    if rsi < 35: buy_trig.append(f"RSI {rsi:.0f}<35 oversold")
+    if rsi > 65: sell_trig.append(f"RSI {rsi:.0f}>65 overbought")
+    if mh_p <= 0 and mh > 0: buy_trig.append("MACD hist flip ↑")
+    if mh_p >= 0 and mh < 0: sell_trig.append("MACD hist flip ↓")
+    if vol_ratio >= 1.5:
+        spike = f"vol {vol_ratio:.2f}×avg"
+        if cls >= opn: buy_trig.append(spike + " (green)")
+        else:          sell_trig.append(spike + " (red)")
+    if lower_wick >= 2 * body and lower_wick / rng > 0.4:
+        buy_trig.append(f"lower wick rejection ({lower_wick/rng*100:.0f}% of bar)")
+    if upper_wick >= 2 * body and upper_wick / rng > 0.4:
+        sell_trig.append(f"upper wick rejection ({upper_wick/rng*100:.0f}% of bar)")
+
+    if buy_trig and not sell_trig:
+        conf = min(90, 50 + 10 * (len(buy_trig) - 1) + (10 if vol_ratio >= 1.5 else 0))
+        return "BUY",  "REVERSAL BUY: "  + " | ".join(buy_trig),  conf
+    if sell_trig and not buy_trig:
+        conf = min(90, 50 + 10 * (len(sell_trig) - 1) + (10 if vol_ratio >= 1.5 else 0))
+        return "SELL", "REVERSAL SELL: " + " | ".join(sell_trig), conf
+    if buy_trig and sell_trig:
+        # Conflicting — pick stronger side by trigger count.
+        if len(buy_trig) > len(sell_trig):
+            return "BUY",  "REVERSAL BUY (mixed): "  + " | ".join(buy_trig),  55
+        if len(sell_trig) > len(buy_trig):
+            return "SELL", "REVERSAL SELL (mixed): " + " | ".join(sell_trig), 55
+    return "HOLD", "no reversal trigger (no RSI extreme / no flip / no spike / no wick)", 0
+
+
 def get_signal(df: pd.DataFrame, strategy: str, threshold: float = 0.0003) -> Tuple[str, str, int]:
     """Returns (signal, reason, confidence_0_100)."""
+    if strategy == "Reversal Scalper":
+        return reversal_signal(df)
     if strategy == "Active Scalper":
         # `threshold` is fractional (0.0001 = 0.01%); convert to percent.
         return active_scalper_signal(df, threshold_pct=max(threshold, 0.00001) * 100)
@@ -323,19 +381,19 @@ def get_indicators(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-# ── SMART PRIORITY SCALPER — cross-symbol opportunity scoring ─────────────────
+# ── EARLY REVERSAL SCALPER — cross-symbol opportunity scoring ─────────────────
 #
-# score_market() rates a symbol's current setup 0–100 by combining 6 weighted
-# components. The orchestrator runs this on every active symbol every tick and
-# trades ONLY the highest-scoring one (if ≥ score_threshold).
+# score_market() rates a symbol's current REVERSAL setup 0–100 by combining 4
+# weighted components. The orchestrator runs this on every active symbol every
+# tick and trades ONLY the highest-scoring one (if ≥ score_threshold).
 #
-# Weights (sum = 100):
-#   • trend       25  — EMA9 vs EMA21 alignment + EMA9 slope, in trade direction
-#   • momentum    20  — MACD histogram direction + magnitude, in trade direction
-#   • volume      20  — current volume vs 20-bar average
-#   • candle      15  — body/range ratio (strong candles vs dojis)
-#   • rsi_quality 10  — RSI in healthy zone for the trade direction
-#   • volatility  10  — ATR% in sweet spot (0.05–0.5%), penalize flat or spike
+# Weights (sum = 100) — REVERSAL-FIRST:
+#   • reversal    40  — RSI extreme + wick rejection + MACD hist sign-flip
+#                       (rewards being EARLY, not late)
+#   • volume      25  — current volume vs 20-bar average (spike confirms turn)
+#   • momentum    20  — MACD hist direction matches trade (post-flip alignment)
+#   • ema_trend   15  — EMA9 vs EMA21 alignment (minor — we're catching turns,
+#                       NOT confirming trend)
 #
 # Returns (score: int 0–100, breakdown: dict).
 # If signal is HOLD, returns 0 (we never trade a HOLD regardless of score).
@@ -369,71 +427,70 @@ def score_market(df: pd.DataFrame, signal: str, base_confidence: int,
         return 0, {"reason": "indicator NaN"}
 
     is_buy = signal == "BUY"
+    try:
+        mhist_p = float(d["macd_hist"].iloc[-2])
+    except Exception:
+        mhist_p = mhist
+    atr_pct = (atr / price * 100) if price else 0.0
+    rng = max(high - low, 1e-9)
+    body = abs(price - opn)
+    upper_wick = high - max(opn, price)
+    lower_wick = min(opn, price) - low
 
-    # ── 1. Trend (25): EMA9 vs EMA21 alignment + slope direction ────────────
-    ema_aligned = (ema9 > ema21) if is_buy else (ema9 < ema21)
-    slope_pct   = ((ema9 - ema9_3) / ema9_3 * 100) if ema9_3 else 0.0
-    slope_aligned = (slope_pct > 0) if is_buy else (slope_pct < 0)
-    trend_score = 0
-    if ema_aligned:   trend_score += 15
-    if slope_aligned:
-        # 0..10 scaled by |slope| up to 0.05% (clamped)
-        trend_score += min(10, abs(slope_pct) / 0.05 * 10)
+    # ── 1. REVERSAL (40): RSI extreme + wick rejection + MACD sign-flip ─────
+    rev_score = 0.0
+    if is_buy:
+        # RSI oversold (0-15)
+        if   rsi < 25: rev_score += 15
+        elif rsi < 30: rev_score += 12
+        elif rsi < 35: rev_score += 8
+        # MACD hist sign-flip up (0-15)
+        if mhist_p <= 0 and mhist > 0: rev_score += 15
+        elif mhist > mhist_p and mhist_p < 0: rev_score += 8   # turning up still negative
+        # Lower wick rejection (0-10)
+        if body > 0 and lower_wick >= 2 * body:
+            rev_score += min(10, (lower_wick / rng) * 15)
+    else:  # SELL
+        if   rsi > 75: rev_score += 15
+        elif rsi > 70: rev_score += 12
+        elif rsi > 65: rev_score += 8
+        if mhist_p >= 0 and mhist < 0: rev_score += 15
+        elif mhist < mhist_p and mhist_p > 0: rev_score += 8
+        if body > 0 and upper_wick >= 2 * body:
+            rev_score += min(10, (upper_wick / rng) * 15)
+    rev_score = min(40, rev_score)
 
-    # ── 2. Momentum (20): MACD histogram in trade direction ─────────────────
-    mom_aligned = (mhist > 0) if is_buy else (mhist < 0)
-    mom_strength = abs(mhist) / max(price * 0.0005, 1e-9)   # normalize vs 0.05% of price
-    mom_score = 0
-    if mom_aligned:
-        mom_score = min(20, 10 + mom_strength * 10)
-
-    # ── 3. Volume (20): current vs 20-bar avg ───────────────────────────────
+    # ── 2. VOLUME (25): spike vs 20-bar avg confirms the turn ───────────────
     try:
         avg_vol = float(d["volume"].rolling(20).mean().iloc[-1])
     except Exception:
         avg_vol = 0.0
     vol_ratio = (vol / avg_vol) if avg_vol > 0 else 0.0
-    # 1.0× = neutral 10pts, 2.0× = max 20pts, <0.5× = 0
-    vol_score = 0
-    if vol_ratio >= 0.5:
-        vol_score = min(20, (vol_ratio - 0.5) / 1.5 * 20)
+    # <1.0× = 0, 1.5× = 15pts, 2.5× = max 25pts
+    if vol_ratio >= 1.0:
+        vol_score = min(25, (vol_ratio - 1.0) / 1.5 * 25)
+    else:
+        vol_score = 0
 
-    # ── 4. Candle body (15): strong body in trade direction ────────────────
-    rng = max(high - low, 1e-9)
-    body = abs(price - opn)
-    body_ratio = body / rng
-    body_aligned = (price > opn) if is_buy else (price < opn)
-    cdl_score = 0
-    if body_aligned:
-        cdl_score = min(15, body_ratio * 15)
-    elif body_ratio < 0.2:
-        # tiny doji — neutral, half credit
-        cdl_score = 4
+    # ── 3. MOMENTUM (20): MACD hist direction matches the trade ─────────────
+    mom_aligned = (mhist > 0) if is_buy else (mhist < 0)
+    mom_strength = abs(mhist) / max(price * 0.0005, 1e-9)
+    mom_score = min(20, 8 + mom_strength * 12) if mom_aligned else 0
 
-    # ── 5. RSI quality (10): healthy zone for direction ─────────────────────
-    rsi_score = 0
-    if is_buy:
-        if   50 <= rsi <= 70: rsi_score = 10
-        elif 40 <= rsi < 50:  rsi_score = 6
-        elif 70 < rsi <= 80:  rsi_score = 5      # overbought drift
-        elif rsi > 80:        rsi_score = 1      # extreme — likely fade
-        elif rsi < 30:        rsi_score = 7      # oversold bounce
-    else:  # SELL
-        if   30 <= rsi <= 50: rsi_score = 10
-        elif 50 < rsi <= 60:  rsi_score = 6
-        elif 20 <= rsi < 30:  rsi_score = 5
-        elif rsi < 20:        rsi_score = 1
-        elif rsi > 70:        rsi_score = 7
+    # ── 4. EMA TREND (15): alignment only — minor, we're catching turns ─────
+    ema_aligned = (ema9 > ema21) if is_buy else (ema9 < ema21)
+    slope_pct   = ((ema9 - ema9_3) / ema9_3 * 100) if ema9_3 else 0.0
+    trend_score = 0
+    if ema_aligned: trend_score += 10
+    if (slope_pct > 0 and is_buy) or (slope_pct < 0 and not is_buy):
+        trend_score += min(5, abs(slope_pct) / 0.05 * 5)
 
-    # ── 6. Volatility quality (10): ATR% in sweet spot ──────────────────────
-    atr_pct = (atr / price * 100) if price else 0.0
-    if   0.05 <= atr_pct <= 0.50: vol_q = 10
-    elif 0.02 <= atr_pct < 0.05:  vol_q = 5       # tight but tradeable
-    elif 0.50 < atr_pct <= 1.00:  vol_q = 6       # choppy
-    elif atr_pct < 0.02:          vol_q = 0       # flat — penalty
-    else:                          vol_q = 2       # spike — penalty
+    # Back-compat keys for dashboard (no weight, just informational)
+    cdl_score = 0.0
+    rsi_score = 0.0
+    vol_q     = 0.0
 
-    total = int(round(trend_score + mom_score + vol_score + cdl_score + rsi_score + vol_q))
+    total = int(round(rev_score + vol_score + mom_score + trend_score))
     total = max(0, min(100, total))
 
     # Slight nudge from rule confidence (already factored in via signal existing).
@@ -452,9 +509,10 @@ def score_market(df: pd.DataFrame, signal: str, base_confidence: int,
             pass
 
     breakdown = {
-        "trend":    round(trend_score, 1),
-        "momentum": round(mom_score, 1),
+        "reversal": round(rev_score, 1),
         "volume":   round(vol_score, 1),
+        "momentum": round(mom_score, 1),
+        "trend":    round(trend_score, 1),
         "candle":   round(cdl_score, 1),
         "rsi":      round(rsi_score, 1),
         "vol_q":    round(vol_q, 1),

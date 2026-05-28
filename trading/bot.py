@@ -447,7 +447,7 @@ class TradingBot:
         self.score_threshold:      int = 60   # current threshold (anti-idle lowers it)
         self.score_threshold_floor: int = 55  # anti-idle never drops below this
         self.confidence_floor:     int = 60   # min worker confidence to qualify
-        self.gpt_prob_floor:       int = 65   # min GPT probability (filter, not predictor)
+        self.gpt_prob_floor:       int = 55   # min GPT probability (filter, not predictor)
         self.global_throttle_sec:   int = 10  # min seconds between any 2 new trades
         self._last_global_trade_at: float = 0.0   # unix seconds
         # Candidate queue — workers append their evaluation here via on_candidate;
@@ -623,7 +623,7 @@ class TradingBot:
             #   - GPT returns action=TRADE
             #   - GPT's symbol == our score winner
             #   - GPT's direction == our winner's signal
-            #   - GPT's probability >= gpt_prob_floor (65)
+            #   - GPT's probability >= gpt_prob_floor (55)
             #
             # On transient GPT outage (None) → fall back to pure-score winner
             # (don't kill trading on an API hiccup).
