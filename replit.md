@@ -141,7 +141,8 @@ thresholds, GPT promoted to a global analyst, and a new market-regime gate.
   `gpt_prob_floor=60`. `global_throttle_sec=10`. Anti-idle floor `55`
   (was 60) — a truly motionless market still HOLDs.
 - **Per-symbol cooldown 30 → 15s**. TP 0.6%, SL 0.4%, BE arm +0.20%,
-  max 2 open trades total, 1 per symbol.
+  **max 3 open trades total** (one per active symbol — BTC/ETH/SOL),
+  1 per symbol.
 - **GPT = GLOBAL ANALYST** (`gpt_advisor.analyze_global`). Every cycle with
   ≥1 qualified candidate, the orchestrator sends a structured payload for
   ALL three symbols (signal/regime/score/confidence/price/breakdown) and

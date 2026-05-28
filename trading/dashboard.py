@@ -702,11 +702,11 @@ if not st.session_state.get("_settings_loaded"):
             _rs.take_profit_pct  = 0.6
             _rs.max_per_symbol   = 1
             _rs.max_open_trades  = 1
-            _rs.cooldown_seconds = 30
+            _rs.cooldown_seconds = 15
         except Exception:
             pass
     try:
-        st.session_state.global_risk.max_open_trades_total = 2
+        st.session_state.global_risk.max_open_trades_total = 3
         st.session_state.global_risk.max_exposure_per_symbol_pct = 100.0
     except Exception:
         pass
