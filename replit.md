@@ -138,7 +138,8 @@ thresholds, GPT promoted to a global analyst, and a new market-regime gate.
   untouched (but downsized — see below).
 - **Thresholds (Nov 2026 retune — all 65 → 60 to trade more often while
   staying smart)**: `score_threshold_base=60`, `confidence_floor=60`,
-  `gpt_prob_floor=60`. `global_throttle_sec=10`. Anti-idle floor `55`
+  `gpt_prob_floor=65` (GPT = filter, not predictor — reject low-confidence
+  setups). `global_throttle_sec=10`. Anti-idle floor `55`
   (was 60) — a truly motionless market still HOLDs.
 - **Per-symbol cooldown 30 → 15s**. TP 0.6%, SL 0.4%, BE arm +0.20%,
   **max 3 open trades total** (one per active symbol — BTC/ETH/SOL),
@@ -149,7 +150,7 @@ thresholds, GPT promoted to a global analyst, and a new market-regime gate.
   GPT returns `{action:TRADE|NO_TRADE, symbol, direction, probability,
   confidence, risk_level, reason}`. Throttled+cached 10s. Trade only if
   action=TRADE AND symbol==score winner AND direction==winner.signal AND
-  probability ≥ 60. On transient outage (None) → fall back to pure score
+  probability ≥ 65. On transient outage (None) → fall back to pure score
   winner. `rank_opportunities()` kept as a backward-compat shim.
 - **Absolute score-tiered sizing** in `symbol_worker.execute_entry()`
   (decoupled from the sidebar slider — Nov 2026 retune, flatter & larger):
