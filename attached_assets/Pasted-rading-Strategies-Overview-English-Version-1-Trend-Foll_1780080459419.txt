@@ -1,0 +1,370 @@
+rading Strategies Overview (English Version)
+1. Trend Following
+Idea:
+Buy when the market is going up, sell/short when it’s going down.
+
+Indicators:
+
+EMA
+
+SMA
+
+MACD
+
+ADX
+
+Example:
+EMA 50 crosses above EMA 200 → BUY
+→ called “Golden Cross”
+
+Works best: in trending markets
+Fails: in sideways/choppy markets
+
+2. Scalping
+Idea:
+Many fast trades with small profits.
+
+Targets:
+0.1% – 1% per trade
+
+Timeframes:
+1m, 5m
+
+Uses:
+
+Order flow
+
+Volume spikes
+
+VWAP
+
+Liquidity zones
+
+Requires:
+
+Fast execution
+
+Low fees
+
+High discipline
+
+3. Day Trading
+Open and close positions within the same day.
+
+Uses:
+
+Support/resistance
+
+RSI
+
+Volume
+
+Patterns
+
+Advantage:
+No overnight risk
+
+4. Swing Trading
+Hold trades for days or weeks.
+
+Focus:
+
+Bigger moves
+
+Indicators:
+
+Fibonacci
+
+EMA
+
+MACD
+
+Market structure
+
+More relaxed than scalping.
+
+5. Mean Reversion
+Idea:
+Price returns to the average.
+
+Buy when:
+
+price is “too low”
+
+Sell when:
+
+price is “too high”
+
+Indicators:
+
+Bollinger Bands
+
+RSI
+
+Z-score
+
+6. Breakout Trading
+Enter when price breaks:
+
+resistance
+
+support
+
+consolidation
+
+Look for:
+
+High volume
+
+Strong momentum
+
+Risk:
+Fake breakouts
+
+7. Arbitrage
+Profit from price differences between exchanges.
+
+Types:
+
+Spatial arbitrage
+
+Triangular arbitrage
+
+Funding arbitrage
+
+Requires:
+
+Speed
+
+Capital
+
+Good API
+
+8. Market Making
+Place:
+
+buy orders
+
+sell orders
+
+Profit = spread
+
+Risk: volatility spikes
+
+Used by:
+
+HFT firms
+
+9. Grid Trading
+Bot places orders at fixed intervals.
+
+Example:
+Buy every $100 drop
+
+Works: in sideways markets
+Fails: in strong trends
+
+10. Momentum Trading
+Buy assets that are already moving strongly.
+
+Uses:
+
+Volume
+
+Breakouts
+
+Relative strength
+
+Common in crypto/meme coins.
+
+11. News Trading
+Trade based on:
+
+News
+
+Listings
+
+CPI
+
+FED
+
+ETF approvals
+
+Very volatile.
+
+12. Funding Rate Strategy
+Used in futures.
+
+Exploit:
+
+Positive/negative funding
+
+Popular on:
+
+Binance Futures
+
+Bybit
+
+13. Statistical Arbitrage
+Math-based strategies:
+
+Pair trading
+
+Cointegration
+
+Regression
+
+Used by quantitative funds.
+
+14. Pair Trading
+Example:
+
+ETH & BTC move similarly
+
+If one deviates → trade the difference
+
+15. DCA (Dollar Cost Averaging)
+Buy fixed amounts regularly.
+
+Example:
+
+$100 BTC weekly
+
+Reduces volatility impact.
+
+16. AI / Machine Learning Trading
+Uses:
+
+LSTM
+
+XGBoost
+
+Reinforcement Learning
+
+Data:
+
+Price
+
+Volume
+
+Sentiment
+
+Order book
+
+Reality: hard to make consistent profit.
+
+17. Order Flow Trading
+Analyze:
+
+Liquidity
+
+Bids/asks
+
+Footprint
+
+Heatmaps
+
+Tools:
+
+Bookmap
+
+TensorCharts
+
+18. Smart Money Concepts (SMC)
+Popular online.
+
+Concepts:
+
+Liquidity grabs
+
+Order blocks
+
+Fair value gaps
+
+BOS / CHOCH
+
+19. Price Action
+Minimal indicators.
+
+Focus on:
+
+Candles
+
+Support/resistance
+
+Market structure
+
+20. Sniper / Meme Coin Bots
+Popular on:
+
+Solana
+
+Base
+
+BSC
+
+Bot:
+
+detects new tokens
+
+buys instantly
+
+Risk:
+
+Rugs
+
+Honeypots
+
+MEV
+
+🔥 What Profitable Traders Actually Use
+Most combine:
+
+Trend
+
+Volume
+
+Risk management
+
+Positioning
+
+Discipline
+
+👉 NOT indicators alone.
+
+📊 Risk/Reward Formula
+RR = Profit Potential / Potential Loss
+Good traders aim for:
+
+RR ≥ 2:1
+Example:
+
+Risk $100
+
+Target $200+
+
+🚀 What Works Best for Bots (2026)
+Most used:
+
+Trend following
+
+Market making
+
+Grid trading
+
+Funding arbitrage
+
+Momentum
+
+AI + sentiment
+
+💣 IMPORTANT (for you)
+👉 Your bot right now = mix of:
+
+bad trend following
+
+delayed scalping
+
+👉 What you ACTUALLY need:
+
+Momentum + early entry + risk control
