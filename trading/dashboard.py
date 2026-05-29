@@ -751,6 +751,17 @@ if not st.session_state.get("_settings_loaded"):
     if _persisted:
         print(f"[SETTINGS] loaded {len(_persisted)} keys from disk "
               f"(risk numbers persisted, not force-snapped)", flush=True)
+    # FIX FINAL (May 29 2026): surface the effective max-open caps at startup so
+    # the operator can confirm settings.json was loaded BEFORE the bot starts.
+    try:
+        print(f"[SETTINGS] max_open_trades (per-symbol)="
+              f"{st.session_state.risk.max_open_trades} | "
+              f"max_open_trades_total (global)="
+              f"{st.session_state.global_risk.max_open_trades_total} | "
+              f"manage_manual_trades="
+              f"{st.session_state.global_risk.manage_manual_trades}", flush=True)
+    except Exception:
+        pass
     tg.configure(
         token   = st.session_state.get("tg_token",   ""),
         chat_id = st.session_state.get("tg_chat_id", ""),
@@ -844,35 +855,51 @@ except Exception:
 bot_inst    = bot_module.get_bot()
 bot_running = bot_inst.is_running() if bot_inst else False
 
-_bot_df = get_shared_df(symbol=st.session_state.symbol) if bot_running else None
-if _bot_df is not None and len(_bot_df) > 5:
-    df_chart     = _bot_df
-    chart_source = "bot-live"
-    # Also use bot's price if available
+# Chart history depth — fetch a deep candle set so "Zoom out" can reveal the
+# full available history, not just the last few hours. Binance is paginated
+# under the hood (1000/req) so this may be several REST calls on cold render.
+CHART_CANDLES = 2000
+
+# Cached so we don't re-download 2000 candles on every 5s Streamlit rerun.
+# TTL 10s keeps the chart fresh enough for scalping while collapsing the
+# repeated paginated REST calls into one fetch per symbol/interval window.
+@st.cache_data(ttl=10, show_spinner=False)
+def _deep_chart_df(sym: str, interval: str, use_auth: bool, limit: int):
+    if use_auth and _cl():
+        raw = _cl().get_klines(sym, interval, limit=limit)
+    else:
+        raw = public_klines(sym, interval, limit=limit)
+    return get_indicators(raw)
+
+# Always fetch a DEEP candle set for the chart display (auth if connected,
+# else public). The bot's shared df is only ~150 candles (kept small for
+# signal speed), so using it for the chart capped zoom-out at a few hours.
+df_chart = None
+_use_auth = bool(st.session_state.connected and _cl())
+try:
+    df_chart     = _deep_chart_df(sym, interval, _use_auth, CHART_CANDLES)
+    chart_source = "auth" if _use_auth else "public"
+except Exception:
+    df_chart = None
+
+# Live price: prefer the bot's cached price, else the authed ticker.
+if bot_running:
     _bot_price = get_shared_price(symbol=st.session_state.symbol)
     if _bot_price:
         live_price = _bot_price
-else:
-    # Fall back: fetch fresh from public API every rerun
+elif st.session_state.connected and _cl():
     try:
-        df_raw   = public_klines(sym, interval, limit=200)
-        df_chart = get_indicators(df_raw)
-        chart_source = "public"
+        live_price = _cl().get_symbol_price(sym)
     except Exception:
         pass
 
-    # Authenticated client overrides for live price + auth klines
-    if st.session_state.connected and _cl():
-        try:
-            live_price = _cl().get_symbol_price(sym)
-        except Exception:
-            pass
-        try:
-            df_raw2  = _cl().get_klines(sym, interval, limit=200)
-            df_chart = get_indicators(df_raw2)
-            chart_source = "auth"
-        except Exception:
-            pass
+# Fallback: if the deep fetch failed, use the bot's live df so the chart
+# still renders something rather than going blank.
+if df_chart is None and bot_running:
+    _bot_df = get_shared_df(symbol=st.session_state.symbol)
+    if _bot_df is not None and len(_bot_df) > 5:
+        df_chart     = _bot_df
+        chart_source = "bot-live"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

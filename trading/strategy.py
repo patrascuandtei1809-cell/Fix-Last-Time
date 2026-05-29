@@ -327,7 +327,9 @@ def reversal_signal(df: pd.DataFrame) -> Tuple[str, str, int]:
         return "HOLD", f"LATE — last bar moved {move_pct:.2f}% > {MAX_LAST_CANDLE_MOVE_PCT}% (move already happened)", 0
 
     vol_ratio = (vol / avg_vol) if avg_vol > 0 else 0.0
-    vol_ok = vol_ratio >= 1.5   # momentum-strength: require a real volume spike
+    # FIX FINAL (May 29 2026): relaxed 1.5× → 1.1× so the bot isn't starved of
+    # entries by an over-strict volume gate.
+    vol_ok = vol_ratio >= 1.1   # only need a mild volume uptick
 
     # Candle body strength — reject weak/doji candles (body ≥ 50% of range).
     rng = max(high - low, 1e-9)
@@ -347,12 +349,12 @@ def reversal_signal(df: pd.DataFrame) -> Tuple[str, str, int]:
     buy_checks = {
         "RSI<40 rising":      rsi < 40 and rsi > rsi_p,
         "momentum flipping ↑": mom_up,
-        "vol≥1.5×avg":         vol_ok,
+        "vol≥1.1×avg":         vol_ok,
         "strong green body":   strong_green,
         "price ≤ EMA9":        near_or_below_ema,
     }
     if all(buy_checks.values()):
-        conf = min(95, 60 + int(min(20, (vol_ratio - 1.5) * 20)) + int(body_ratio * 10) + (10 if rsi < 30 else 0))
+        conf = min(95, 60 + int(min(20, max(0, (vol_ratio - 1.1)) * 20)) + int(body_ratio * 10) + (10 if rsi < 30 else 0))
         reason = (f"REVERSAL BUY: RSI {rsi:.1f}↑ (was {rsi_p:.1f}) | "
                   f"MACD hist {mh_p:+.5f}→{mh:+.5f} | vol {vol_ratio:.2f}×avg | "
                   f"body {body_ratio*100:.0f}% | price {cls:.4f} ≤ EMA9 {ema9:.4f}")
@@ -362,12 +364,12 @@ def reversal_signal(df: pd.DataFrame) -> Tuple[str, str, int]:
     sell_checks = {
         "RSI>60 falling":      rsi > 60 and rsi < rsi_p,
         "momentum flipping ↓": mom_down,
-        "vol≥1.5×avg":         vol_ok,
+        "vol≥1.1×avg":         vol_ok,
         "strong red body":     strong_red,
         "price ≥ EMA9":        stretched_above_ema,
     }
     if all(sell_checks.values()):
-        conf = min(95, 60 + int(min(20, (vol_ratio - 1.5) * 20)) + int(body_ratio * 10) + (10 if rsi > 70 else 0))
+        conf = min(95, 60 + int(min(20, max(0, (vol_ratio - 1.1)) * 20)) + int(body_ratio * 10) + (10 if rsi > 70 else 0))
         reason = (f"REVERSAL SELL: RSI {rsi:.1f}↓ (was {rsi_p:.1f}) | "
                   f"MACD hist {mh_p:+.5f}→{mh:+.5f} | vol {vol_ratio:.2f}×avg | "
                   f"body {body_ratio*100:.0f}% | price {cls:.4f} ≥ EMA9 {ema9:.4f}")

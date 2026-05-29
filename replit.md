@@ -141,6 +141,41 @@ Operator-facing safety + persistence pass. Four changes:
    horizontal blocks so columns stack vertically, makes buttons full-width,
    and caps plotly charts / dataframes / images to viewport width.
 
+## FIX FINAL — anti-overfilter + full-history chart (May 29, 2026)
+
+Operator reported the bot wasn't trading (over-filtered) and the chart only
+showed a few hours. Six changes:
+
+1. **`max_open_trades_total` default = 30** and the dev seed `settings.json`
+   bumped 10→30. Risk numbers load from `settings.json` BEFORE the bot starts
+   (`risk_manager.settings` is synced from persisted `risk` *before*
+   `_maybe_resume_bot()`), so an auto-resumed worker never ticks with stale
+   defaults.
+2. **Startup log** prints the effective caps:
+   `[SETTINGS] max_open_trades (per-symbol)=… | max_open_trades_total (global)=… | manage_manual_trades=…`.
+3. **Loosened filtering so the bot actually trades** (in `bot.py`
+   `TradingBot.__init__`): `score_threshold_base 60→50`,
+   `score_threshold_floor 55→40`, `confidence_floor 60→50`,
+   `gpt_prob_floor 55→50`. `strategy.reversal_signal()` volume gate
+   **1.5×→1.1×** (conf math uses `max(0, vol_ratio-1.1)`). **GPT prompt
+   reworded to DEFAULT-TO-TRADE** — only returns `NO_TRADE` for obviously-bad
+   / dead / no-volume markets; it is a light filter, not a gatekeeper.
+4. **Full-history chart.** `binance_client.public_klines` and
+   `BinanceClient.get_klines` now **paginate backward** (`endTime`, 1000/req
+   chunks) so they can return thousands of candles; `_klines_to_df` dedupes by
+   `open_time` and sorts oldest→newest. The dashboard chart always fetches
+   `CHART_CANDLES = 2000` (auth if connected, else public) and prefers that
+   deep set over the ~150-candle bot shared df (which is kept small for signal
+   speed); falls back to the bot df only if the deep fetch fails. Zoom-out
+   (already capped at 720h) now reveals the full fetched history instead of a
+   few hours.
+5. **Chart fetch is cached** (`@st.cache_data(ttl=10)`) so the 2000-candle
+   paginated download doesn't re-run on every 5s Streamlit rerun. NOTE: cache
+   params must NOT be `_`-prefixed — Streamlit treats leading-underscore args
+   as *unhashed*, which would collapse all symbols/intervals to one cache key.
+6. **Manual-trade protection unchanged** — bot still never sells manual
+   positions unless "Allow bot to manage manual trades" is ON.
+
 ## SMART PRIORITY SCALPER (May 2026 addition)
 
 Layer on top of ACTIVE SCALPER — keeps the speed but adds cross-symbol

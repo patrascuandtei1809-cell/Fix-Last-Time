@@ -443,11 +443,13 @@ class TradingBot:
         # truly motionless market HOLDs rather than forcing a low-quality
         # entry. GPT runs as a GLOBAL ANALYST every cycle (≥1 candidate) and
         # can veto with NO_TRADE.
-        self.score_threshold_base: int = 60   # minimum score to trade
-        self.score_threshold:      int = 60   # current threshold (anti-idle lowers it)
-        self.score_threshold_floor: int = 55  # anti-idle never drops below this
-        self.confidence_floor:     int = 60   # min worker confidence to qualify
-        self.gpt_prob_floor:       int = 55   # min GPT probability (filter, not predictor)
+        # FIX FINAL (May 29 2026): loosened so the bot actually trades. GPT is a
+        # filter that rejects only obviously-bad setups, NOT a gatekeeper.
+        self.score_threshold_base: int = 50   # minimum score to trade
+        self.score_threshold:      int = 50   # current threshold (anti-idle lowers it)
+        self.score_threshold_floor: int = 40  # anti-idle never drops below this
+        self.confidence_floor:     int = 50   # min worker confidence to qualify
+        self.gpt_prob_floor:       int = 50   # min GPT probability (filter, not predictor)
         self.global_throttle_sec:   int = 5   # min seconds between any 2 new trades
         self._last_global_trade_at: float = 0.0   # unix seconds
         # Candidate queue — workers append their evaluation here via on_candidate;

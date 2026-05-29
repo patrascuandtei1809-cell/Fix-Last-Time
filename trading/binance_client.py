@@ -53,31 +53,62 @@ def extract_fill(order: dict) -> tuple[float, float]:
     )
 
 
-def public_klines(symbol: str, interval: str = "5m", limit: int = 200) -> pd.DataFrame:
-    """Fetch OHLCV candles using the public REST API — no API key required."""
-    try:
-        r = requests.get(
-            f"{_PUBLIC_BASE}/klines",
-            params={"symbol": symbol, "interval": interval, "limit": limit},
-            timeout=10,
-        )
-        r.raise_for_status()
-        raw = r.json()
-    except Exception as e:
-        raise RuntimeError(f"Public klines fetch failed: {e}")
+_KLINE_COLS = [
+    "open_time", "open", "high", "low", "close", "volume",
+    "close_time", "quote_volume", "trades",
+    "taker_buy_base", "taker_buy_quote", "ignore",
+]
 
-    df = pd.DataFrame(raw, columns=[
-        "open_time", "open", "high", "low", "close", "volume",
-        "close_time", "quote_volume", "trades",
-        "taker_buy_base", "taker_buy_quote", "ignore",
-    ])
+
+def _klines_to_df(rows: list) -> pd.DataFrame:
+    """Build the standard OHLCV DataFrame from raw Binance kline rows."""
+    df = pd.DataFrame(rows, columns=_KLINE_COLS)
     df["open_time"]  = (pd.to_datetime(df["open_time"],  unit="ms", utc=True)
                           .dt.tz_convert("Europe/London").dt.tz_localize(None))
     df["close_time"] = (pd.to_datetime(df["close_time"], unit="ms", utc=True)
                           .dt.tz_convert("Europe/London").dt.tz_localize(None))
     for col in ["open", "high", "low", "close", "volume"]:
         df[col] = df[col].astype(float)
+    # Defensive: pagination can in theory overlap at page boundaries — dedupe
+    # by candle open_time and keep strictly increasing (oldest→newest) order.
+    df = (df.drop_duplicates(subset="open_time")
+            .sort_values("open_time")
+            .reset_index(drop=True))
     return df
+
+
+def public_klines(symbol: str, interval: str = "5m", limit: int = 200) -> pd.DataFrame:
+    """Fetch OHLCV candles using the public REST API — no API key required.
+
+    Binance caps each /klines request at 1000 candles. When ``limit`` exceeds
+    that we paginate backwards via ``endTime`` so the chart can show thousands
+    of candles (full available history), not just the last few hours.
+    """
+    rows: list = []
+    remaining = max(1, int(limit))
+    end_time = None  # most-recent first; then walk backwards
+    try:
+        while remaining > 0:
+            chunk = min(1000, remaining)
+            params = {"symbol": symbol, "interval": interval, "limit": chunk}
+            if end_time is not None:
+                params["endTime"] = end_time
+            r = requests.get(f"{_PUBLIC_BASE}/klines", params=params, timeout=10)
+            r.raise_for_status()
+            batch = r.json()
+            if not batch:
+                break
+            rows = batch + rows  # prepend older candles
+            remaining -= len(batch)
+            # Next page ends just before the oldest candle we just got.
+            end_time = int(batch[0][0]) - 1
+            if len(batch) < chunk:
+                break  # no more history available
+    except Exception as e:
+        raise RuntimeError(f"Public klines fetch failed: {e}")
+    if not rows:
+        raise RuntimeError("Public klines fetch returned no data")
+    return _klines_to_df(rows)
 
 
 def public_price(symbol: str) -> float:
@@ -142,19 +173,27 @@ class BinanceClient:
 
     def get_klines(self, symbol: str, interval: str = "5m",
                    limit: int = 200) -> pd.DataFrame:
-        raw = self.client.get_klines(symbol=symbol, interval=interval, limit=limit)
-        df = pd.DataFrame(raw, columns=[
-            "open_time", "open", "high", "low", "close", "volume",
-            "close_time", "quote_volume", "trades",
-            "taker_buy_base", "taker_buy_quote", "ignore",
-        ])
-        df["open_time"]  = (pd.to_datetime(df["open_time"],  unit="ms", utc=True)
-                              .dt.tz_convert("Europe/London").dt.tz_localize(None))
-        df["close_time"] = (pd.to_datetime(df["close_time"], unit="ms", utc=True)
-                              .dt.tz_convert("Europe/London").dt.tz_localize(None))
-        for col in ["open", "high", "low", "close", "volume"]:
-            df[col] = df[col].astype(float)
-        return df
+        # Binance caps each request at 1000 candles; paginate backwards via
+        # endTime when more are requested (chart full-history view).
+        rows: list = []
+        remaining = max(1, int(limit))
+        end_time = None
+        while remaining > 0:
+            chunk = min(1000, remaining)
+            kw = dict(symbol=symbol, interval=interval, limit=chunk)
+            if end_time is not None:
+                kw["endTime"] = end_time
+            batch = self.client.get_klines(**kw)
+            if not batch:
+                break
+            rows = batch + rows
+            remaining -= len(batch)
+            end_time = int(batch[0][0]) - 1
+            if len(batch) < chunk:
+                break
+        if not rows:
+            raise RuntimeError("get_klines returned no data")
+        return _klines_to_df(rows)
 
     # ── Account ───────────────────────────────────────────────────────────────
     def get_account_balance(self, asset: str = "USDT") -> dict:

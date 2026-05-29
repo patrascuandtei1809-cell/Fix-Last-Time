@@ -254,7 +254,10 @@ class GPTAdvisor:
             " - choose the single best short-term REVERSAL (RSI extreme + "
             "wick rejection + volume spike + MACD hist sign-flip) for the "
             "next 1-3 minutes\n"
-            " - reject setups with no edge (chop, no volume, no extreme)\n\n"
+            " - DEFAULT TO TRADE. Only return NO_TRADE for OBVIOUSLY bad "
+            "setups (dead/flat market, zero volume, no edge at all). When in "
+            "doubt, allow the trade — you are a light filter, not a "
+            "gatekeeper.\n\n"
             "Return JSON ONLY:\n"
             "{\"action\":\"TRADE|NO_TRADE\","
             "\"symbol\":\"BTCUSDT|ETHUSDT|SOLUSDT|NONE\","
@@ -263,8 +266,9 @@ class GPTAdvisor:
             "\"risk_level\":\"LOW|MEDIUM|HIGH\","
             "\"reason\":\"short clear reason\"}\n\n"
             "Rules: probability = your confidence in a SHORT-TERM REVERSAL, "
-            "NOT a trend prediction. If <55 → NO_TRADE. Reject sideways chop, "
-            "no-volume bars, DEAD regime. Keep reason <120 chars."
+            "NOT a trend prediction. Only return NO_TRADE (or probability "
+            "<50) for clearly bad setups — dead/flat market with no volume. "
+            "Otherwise TRADE. Keep reason <120 chars."
         )
         try:
             resp = client.chat.completions.create(

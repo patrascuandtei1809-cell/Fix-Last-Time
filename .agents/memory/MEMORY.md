@@ -1,1 +1,2 @@
 - [Settings persistence clobber](alphatrade-settings-persistence.md) — AlphaTrade dashboard cold-start "force-snap" block silently overwrites persisted settings.json; check it before adding any persisted setting.
+- [Streamlit cache_data underscore gotcha](streamlit-cache-data-args.md) — leading-underscore args are excluded from the cache key; never `_`-prefix params you need cached-per-value (e.g. symbol/interval).
