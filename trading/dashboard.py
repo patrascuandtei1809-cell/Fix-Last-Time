@@ -699,7 +699,7 @@ if not st.session_state.get("_settings_loaded"):
             if not hasattr(_rs, "dynamic_size_pct") or not _rs.dynamic_size_pct:
                 _rs.dynamic_size_pct = 40.0
             _rs.stop_loss_pct    = 0.4
-            _rs.take_profit_pct  = 0.6
+            _rs.take_profit_pct  = 0.8
             _rs.max_per_symbol   = 99
             _rs.max_open_trades  = 99
             _rs.cooldown_seconds = 5

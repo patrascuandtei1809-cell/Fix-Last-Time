@@ -295,13 +295,15 @@ def reversal_signal(df: pd.DataFrame) -> Tuple[str, str, int]:
       • RSI < 40 AND rising vs previous bar
       • MACD hist flipping positive (prev ≤ 0, now > 0)  OR  momentum turning
         up from below (mh > mh_p, mh_p < 0)
-      • Volume spike: current vol > 1.3× 20-bar average
+      • Volume spike: current vol ≥ 1.5× 20-bar average
+      • Candle body strength: body ≥ 50% of range AND green (no weak/doji)
       • Price near/below EMA9 (price ≤ EMA9 × 1.0005) — not extended
 
     SELL requires ALL (symmetric):
       • RSI > 60 AND falling
       • MACD hist flipping negative or momentum rolling over from above
-      • Volume spike
+      • Volume spike ≥ 1.5×
+      • Candle body strength: body ≥ 50% of range AND red (no weak/doji)
       • Price stretched above EMA9 (price ≥ EMA9 × 0.9995)
     """
     d = get_indicators(df) if "ema9" not in df.columns else df
@@ -312,6 +314,7 @@ def reversal_signal(df: pd.DataFrame) -> Tuple[str, str, int]:
         rsi    = float(last["rsi"]);       rsi_p  = float(prev["rsi"])
         mh     = float(last["macd_hist"]); mh_p   = float(prev["macd_hist"])
         opn    = float(last["open"]);      cls    = float(last["close"])
+        high   = float(last["high"]);      low    = float(last["low"])
         ema9   = float(last["ema9"])
         vol    = float(last["volume"])
         avg_vol = float(d["volume"].rolling(20).mean().iloc[-1] or 0)
@@ -324,7 +327,13 @@ def reversal_signal(df: pd.DataFrame) -> Tuple[str, str, int]:
         return "HOLD", f"LATE — last bar moved {move_pct:.2f}% > {MAX_LAST_CANDLE_MOVE_PCT}% (move already happened)", 0
 
     vol_ratio = (vol / avg_vol) if avg_vol > 0 else 0.0
-    vol_ok = vol_ratio >= 1.3
+    vol_ok = vol_ratio >= 1.5   # momentum-strength: require a real volume spike
+
+    # Candle body strength — reject weak/doji candles (body ≥ 50% of range).
+    rng = max(high - low, 1e-9)
+    body_ratio = abs(cls - opn) / rng
+    strong_green = body_ratio >= 0.5 and cls > opn
+    strong_red   = body_ratio >= 0.5 and cls < opn
 
     # Momentum turning up: hist flipped sign OR rising from below zero.
     mom_up   = (mh_p <= 0 and mh > 0) or (mh > mh_p and mh_p < 0)
@@ -338,28 +347,30 @@ def reversal_signal(df: pd.DataFrame) -> Tuple[str, str, int]:
     buy_checks = {
         "RSI<40 rising":      rsi < 40 and rsi > rsi_p,
         "momentum flipping ↑": mom_up,
-        "vol≥1.3×avg":         vol_ok,
+        "vol≥1.5×avg":         vol_ok,
+        "strong green body":   strong_green,
         "price ≤ EMA9":        near_or_below_ema,
     }
     if all(buy_checks.values()):
-        conf = min(90, 60 + int(min(20, (1.3 if vol_ratio < 1.3 else vol_ratio - 1.3) * 20)) + (10 if rsi < 30 else 0))
+        conf = min(95, 60 + int(min(20, (vol_ratio - 1.5) * 20)) + int(body_ratio * 10) + (10 if rsi < 30 else 0))
         reason = (f"REVERSAL BUY: RSI {rsi:.1f}↑ (was {rsi_p:.1f}) | "
                   f"MACD hist {mh_p:+.5f}→{mh:+.5f} | vol {vol_ratio:.2f}×avg | "
-                  f"price {cls:.4f} ≤ EMA9 {ema9:.4f}")
+                  f"body {body_ratio*100:.0f}% | price {cls:.4f} ≤ EMA9 {ema9:.4f}")
         return "BUY", reason, conf
 
     # ── SELL: ALL must be true ─────────────────────────────────────────────
     sell_checks = {
         "RSI>60 falling":      rsi > 60 and rsi < rsi_p,
         "momentum flipping ↓": mom_down,
-        "vol≥1.3×avg":         vol_ok,
+        "vol≥1.5×avg":         vol_ok,
+        "strong red body":     strong_red,
         "price ≥ EMA9":        stretched_above_ema,
     }
     if all(sell_checks.values()):
-        conf = min(90, 60 + int(min(20, (1.3 if vol_ratio < 1.3 else vol_ratio - 1.3) * 20)) + (10 if rsi > 70 else 0))
+        conf = min(95, 60 + int(min(20, (vol_ratio - 1.5) * 20)) + int(body_ratio * 10) + (10 if rsi > 70 else 0))
         reason = (f"REVERSAL SELL: RSI {rsi:.1f}↓ (was {rsi_p:.1f}) | "
                   f"MACD hist {mh_p:+.5f}→{mh:+.5f} | vol {vol_ratio:.2f}×avg | "
-                  f"price {cls:.4f} ≥ EMA9 {ema9:.4f}")
+                  f"body {body_ratio*100:.0f}% | price {cls:.4f} ≥ EMA9 {ema9:.4f}")
         return "SELL", reason, conf
 
     # Diagnostic HOLD — show which gate(s) failed for the closer side.

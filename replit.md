@@ -152,13 +152,16 @@ Goal: enter BEFORE the move, accept more small losses to catch early turns.
   NOT a trend prediction. Trade only if probability ≥ 65. Return shape
   unchanged so orchestrator gating is unchanged.
 
-- **Strict EARLY-ONLY entry gates (v2 — late entries blocked):**
+- **Strict EARLY-ONLY entry gates (v3 — quality filter):**
   - HARD RULE: skip if last candle move > **0.3%** (move already happened).
-  - **BUY = ALL of:** RSI<40 AND rising · MACD hist flipping up · vol≥1.3×avg
-    · price ≤ EMA9 (not extended)
-  - **SELL = ALL of:** RSI>60 AND falling · MACD hist flipping down · vol≥1.3×avg
-    · price ≥ EMA9 (stretched)
-  - Failed-gate diagnostic logged on every HOLD: `no BUY (failed: vol≥1.3×avg, price ≤ EMA9)`.
+  - **BUY = ALL of:** RSI<40 AND rising · MACD hist flipping up · vol≥**1.5×**avg
+    · **strong green body (≥50% of range)** · price ≤ EMA9 (not extended)
+  - **SELL = ALL of:** RSI>60 AND falling · MACD hist flipping down · vol≥**1.5×**avg
+    · **strong red body (≥50% of range)** · price ≥ EMA9 (stretched)
+  - Momentum-strength filter (vol≥1.5× + body strength) → fewer, higher-quality
+    trades. Failed-gate diagnostic logged on every HOLD.
+
+- **Risk/reward ~2:1:** SL 0.4% / TP **0.8%** (was 0.6%) — let winners run.
 
 - **Faster execution / higher concurrency (AGGRESSIVE):**
   - Per-symbol cooldown **5 s**, global throttle **5 s** between any 2 entries.
