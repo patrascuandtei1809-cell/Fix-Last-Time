@@ -1,0 +1,1 @@
+- [Settings persistence clobber](alphatrade-settings-persistence.md) — AlphaTrade dashboard cold-start "force-snap" block silently overwrites persisted settings.json; check it before adding any persisted setting.

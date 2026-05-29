@@ -81,8 +81,10 @@ Hardcoded spec:
   (Binance min notional). Set via sidebar "% of free USDT per trade" slider.
 - **Caps**: 1 open trade per symbol, 3 total open across BTC/ETH/SOL.
   Concentration cap REMOVED (`max_exposure_per_symbol_pct = 100`). SL=0.4%, TP=0.5%.
-- **Manages manual trades** the same as bot trades — SL/TP filter is by
-  symbol only, not `type=="bot"`.
+- **Manual trades are PROTECTED by default** (see "MANUAL TRADE PROTECTION"
+  section below). The bot only manages (`SL/TP`/breakeven/red-exit) trades it
+  opened itself (`type=="bot"`) unless the operator turns ON "Allow bot to
+  manage manual trades".
 - **Post-entry**: breakeven SL armed at +0.20%, exits on 2 consecutive red
   candles (constants `AS_BE_ARM_PCT` / `AS_MAX_RED_AFTER_ENTRY` in
   `symbol_worker.py`).
@@ -98,6 +100,46 @@ Hardcoded spec:
   gets a directional verdict.
 
 Target throughput: 50–150 trades/day across all three symbols.
+
+## MANUAL TRADE PROTECTION + SETTINGS PERSISTENCE (May 29, 2026)
+
+Operator-facing safety + persistence pass. Four changes:
+
+1. **MANUAL TRADE PROTECTION (default ON).**
+   - New flag `GlobalRiskSettings.manage_manual_trades` (default **False**).
+   - `SymbolWorker` takes `manage_manual_trades` and filters the SL/TP/exit
+     loop: `my_open` now keeps a trade only if `manage_manual_trades` OR
+     `trade["type"]=="bot"`. With the default OFF, the bot **never** closes
+     positions the operator opened manually (no SL/TP, breakeven, or
+     red-candle exit). It still *displays* them.
+   - Threaded through `bot.create_bot(manage_manual_trades=...)` and passed at
+     all three dashboard `create_bot` call sites from the global-risk flag.
+   - Sidebar toggle "**Allow bot to manage manual trades**" in the 🌐 Global
+     risk expander, with a 🔒/⚠️ caption. Persisted in `settings.json`.
+
+2. **ALL dashboard settings persist** across refresh/restart. Added the chart
+   indicator toggles (`show_ema/volume/rsi/macd/stoch/old_trades/sl_tp`) to
+   `_init` defaults, `_PERSIST_KEYS`, and `_collect_settings_snapshot()`.
+   SL/TP/max-open/cooldown/exposure/timeframe/active-symbols already persisted
+   via the `risk`/`global_risk`/top-level snapshot.
+
+3. **No more force-snap of risk numbers.** The old cold-start block that
+   re-wrote `max_open_trades`, SL/TP, cooldown, and `max_open_trades_total`
+   on every load (which caused "max trades keeps resetting to 1") is REMOVED.
+   Only the *strategy-mode* invariants (strategy name, interval, 2s tick,
+   threshold, AI on, BTC+ETH+SOL re-instate) are still snapped. Risk numbers
+   now load from `settings.json` and win.
+
+4. **Indicator defaults = ALL ON** (RSI/EMA/MACD/Stoch/Volume/Trades/SL-TP).
+   **`max_open_trades_total` default = 30** (was 10). Per-symbol "Max open
+   trades" slider range widened 1–20 → 1–50. The "Reset to … defaults" button
+   now snaps to TP 0.8 / per-symbol cap off / 30 total / cooldown 5s (no
+   longer resets to 1).
+
+5. **MOBILE UI.** Added a `@media (max-width:768px)` block: kills horizontal
+   overflow (`overflow-x:hidden`, `max-width:100vw`), wraps Streamlit
+   horizontal blocks so columns stack vertically, makes buttons full-width,
+   and caps plotly charts / dataframes / images to viewport width.
 
 ## SMART PRIORITY SCALPER (May 2026 addition)
 

@@ -16,11 +16,19 @@
   "tg_enabled": false,
   "tg_token": "",
   "tg_chat_id": "",
+  "show_ema": true,
+  "show_volume": true,
+  "show_rsi": true,
+  "show_macd": true,
+  "show_stoch": true,
+  "show_old_trades": true,
+  "show_sl_tp": true,
   "global_risk": {
     "max_total_exposure_usdt": 300.0,
     "max_exposure_per_symbol_pct": 100,
-    "max_open_trades_total": 10,
-    "max_daily_loss_pct": 5.0
+    "max_open_trades_total": 30,
+    "max_daily_loss_pct": 5.0,
+    "manage_manual_trades": false
   },
   "per_symbol_risk": {},
   "risk": {

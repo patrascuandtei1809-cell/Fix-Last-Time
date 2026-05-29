@@ -37,6 +37,7 @@ class SymbolWorker:
         on_candidate:    Optional[Callable] = None,
         ai_assist:       bool = True,
         ai_aggressiveness: str = "Active Scalper",   # ignored — single mode
+        manage_manual_trades: bool = False,          # OFF = never touch manual trades
     ):
         self.exchange   = exchange
         self.symbol     = symbol
@@ -46,6 +47,10 @@ class SymbolWorker:
         self.threshold  = price_threshold
         self._base_threshold = price_threshold     # restored after anti-idle force
         self.ai_assist  = bool(ai_assist)
+        # MANUAL TRADES PROTECTION: when False (default) the bot NEVER manages
+        # (SL/TP/breakeven/red-candle exit) positions opened manually by the
+        # operator. It only ever closes trades it opened itself (type=="bot").
+        self.manage_manual_trades = bool(manage_manual_trades)
         # ACTIVE SCALPER MODE is the only profile; accept legacy arg for compat.
         self.ai_aggressiveness = "Active Scalper"
 
@@ -111,11 +116,16 @@ class SymbolWorker:
             return
         self._on_state(self.symbol, price=price, tick=True)
 
-        # 2. Manage open positions (SL/TP) — INCLUDES manual trades.
-        # ACTIVE SCALPER spec: bot must monitor and close manual BTC/ETH/SOL
-        # positions using the same SL/TP rules. Filter is by symbol only,
-        # not by type=="bot".
-        my_open = [t for t in all_open_trades if t.get("coin") == self.symbol]
+        # 2. Manage open positions (SL/TP).
+        # MANUAL TRADES PROTECTION: by default the bot only manages trades it
+        # opened itself (type=="bot"). Manual trades are left untouched — no
+        # SL/TP, breakeven, or red-candle exit — unless the operator turns ON
+        # "Allow bot to manage manual trades" (manage_manual_trades=True).
+        my_open = [
+            t for t in all_open_trades
+            if t.get("coin") == self.symbol
+            and (self.manage_manual_trades or t.get("type") == "bot")
+        ]
         # ACTIVE SCALPER hardcoded post-entry behavior (no profile lookup).
         _be_arm_pct   = AS_BE_ARM_PCT
         _max_red      = AS_MAX_RED_AFTER_ENTRY

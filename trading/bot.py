@@ -825,6 +825,7 @@ def create_bot(
     # AI assist (extra decision layer)
     ai_assist:             bool = True,         # ACTIVE SCALPER — AI always on
     ai_aggressiveness:     str  = "Active Scalper",  # ignored — single hardcoded mode
+    manage_manual_trades:  bool = False,        # OFF = bot never closes manual trades
 ) -> TradingBot:
     """Build (or rebuild) the singleton bot. LIVE Binance Mainnet only."""
     global _bot, _primary_symbol
@@ -891,6 +892,7 @@ def create_bot(
                 on_candidate      = None,
                 ai_assist         = ai_assist,
                 ai_aggressiveness = ai_aggressiveness,
+                manage_manual_trades = manage_manual_trades,
             )
             workers[f"{exchange.name}:{sym}"] = w
 

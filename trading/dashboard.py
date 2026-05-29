@@ -475,6 +475,31 @@ section[data-testid="stSidebar"] * { color: #c9d1d9 !important; }
   .mob-val.dn   { color: #ef5350; }
   .mob-val.gray { color: #8b949e; }
 }
+
+/* ── MOBILE LAYOUT: no horizontal overflow, controls fit, buttons stack ── */
+html, body, [data-testid="stAppViewContainer"] { overflow-x: hidden !important; max-width: 100vw; }
+@media (max-width: 768px) {
+  /* Kill horizontal scroll everywhere */
+  .main .block-container { padding-left: .6rem !important; padding-right: .6rem !important;
+    max-width: 100vw !important; overflow-x: hidden !important; }
+  [data-testid="stHorizontalBlock"] { flex-wrap: wrap !important; gap: .35rem !important; }
+  /* Each column takes full width and stacks vertically */
+  [data-testid="stHorizontalBlock"] > [data-testid="stColumn"],
+  [data-testid="stHorizontalBlock"] > [data-testid="column"] {
+    flex: 1 1 100% !important; width: 100% !important; min-width: 0 !important; }
+  /* Buttons full-width + tappable */
+  .stButton > button { width: 100% !important; }
+  /* Charts / plotly / dataframes never exceed viewport */
+  .js-plotly-plot, .plotly, [data-testid="stPlotlyChart"],
+  [data-testid="stDataFrame"], [data-testid="stTable"], img {
+    max-width: 100% !important; }
+  [data-testid="stPlotlyChart"] > div { width: 100% !important; }
+  /* Market strip + metric tiles wrap instead of scrolling sideways */
+  .mkt-strip { flex-wrap: wrap !important; overflow-x: hidden !important; }
+  [data-testid="stMetric"] { min-width: 0 !important; }
+  /* Tables scroll inside their own container, not the whole page */
+  [data-testid="stDataFrame"] > div { overflow-x: auto !important; }
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -509,6 +534,14 @@ def _init():
         "tg_enabled":          False,
         "tg_token":            "",
         "tg_chat_id":          "",
+        # Chart indicator toggles — ALL ON by default; persisted in settings.json.
+        "show_ema":            True,
+        "show_volume":         True,
+        "show_rsi":            True,
+        "show_macd":           True,
+        "show_stoch":          True,
+        "show_old_trades":     True,
+        "show_sl_tp":          True,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -618,6 +651,8 @@ def _maybe_resume_bot():
             initial_balance   = st.session_state.initial_balance,
             ai_assist         = True,                 # ACTIVE SCALPER — always on
             ai_aggressiveness = "Active Scalper",     # ignored — single mode
+            manage_manual_trades = bool(getattr(st.session_state.global_risk,
+                                                "manage_manual_trades", False)),
         )
         b._initial_balance = st.session_state.initial_balance
         b.start()
@@ -639,6 +674,9 @@ if not st.session_state.get("_settings_loaded"):
         "refresh_secs", "tg_enabled", "tg_token", "tg_chat_id",
         "active_symbols", "bot_was_running",
         "ai_assist", "ai_aggressiveness",
+        # Chart indicator toggles
+        "show_ema", "show_volume", "show_rsi", "show_macd",
+        "show_stoch", "show_old_trades", "show_sl_tp",
     )
     for _k in _PERSIST_KEYS:
         if _k in _persisted:
@@ -680,41 +718,39 @@ if not st.session_state.get("_settings_loaded"):
     _syms_persist = st.session_state.get("active_symbols") or []
     if len(_syms_persist) < 2:
         st.session_state.active_symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
-    # SMART AI SCALPING BOT (May 28, 2026): force-snap risk to spec
-    # (SL 0.4 / TP 0.6 / cooldown 30 / 1 open per symbol / 2 total).
-    # Persisted settings.json on disk may be older — override every cold start.
+    # ── Risk numbers PERSIST — no force-snap. ────────────────────────────────
+    # The operator now controls SL/TP/max-open/cooldown/exposure from the
+    # sidebar and these are saved to settings.json. We must NOT clobber the
+    # persisted values on cold start (that was the "max_open keeps resetting"
+    # bug). We only (a) ensure new fields exist on sessions migrated from an
+    # older build, and (b) keep the concentration cap disabled by default.
     try:
         _r = st.session_state.risk
-        if not hasattr(_r, "dynamic_size_pct") or not _r.dynamic_size_pct:
+        if not getattr(_r, "dynamic_size_pct", 0):
             _r.dynamic_size_pct = 40.0
-        _r.stop_loss_pct    = 0.4
-        _r.take_profit_pct  = 0.6
-        _r.max_per_symbol   = 1
-        _r.max_open_trades  = 1
-        _r.cooldown_seconds = 30
     except Exception:
         pass
     for _sym, _rs in (st.session_state.get("per_symbol_risk") or {}).items():
         try:
-            if not hasattr(_rs, "dynamic_size_pct") or not _rs.dynamic_size_pct:
+            if not getattr(_rs, "dynamic_size_pct", 0):
                 _rs.dynamic_size_pct = 40.0
-            _rs.stop_loss_pct    = 0.4
-            _rs.take_profit_pct  = 0.8
-            _rs.max_per_symbol   = 99
-            _rs.max_open_trades  = 99
-            _rs.cooldown_seconds = 5
         except Exception:
             pass
+
+    # Sync the shared RiskManager to the freshly-loaded persisted RiskSettings
+    # BEFORE auto-resuming the bot. The sidebar also does this (risk_manager
+    # .settings = r) but that runs later in the script — without this line an
+    # auto-resumed worker would tick with stale/default risk until the sidebar
+    # rendered. Workers for non-overridden symbols share this object.
     try:
-        st.session_state.global_risk.max_open_trades_total = 10
-        st.session_state.global_risk.max_exposure_per_symbol_pct = 100.0
+        st.session_state.risk_manager.settings = st.session_state.risk
     except Exception:
         pass
 
     st.session_state._settings_loaded = True
     if _persisted:
         print(f"[SETTINGS] loaded {len(_persisted)} keys from disk "
-              f"(ACTIVE SCALPER overrides applied)", flush=True)
+              f"(risk numbers persisted, not force-snapped)", flush=True)
     tg.configure(
         token   = st.session_state.get("tg_token",   ""),
         chat_id = st.session_state.get("tg_chat_id", ""),
@@ -1806,43 +1842,44 @@ with st.sidebar:
     # ── Preset buttons removed — ACTIVE SCALPER MODE is the single profile.
 
 
-    if st.button("🔄 Reset to ACTIVE SCALPER defaults",
+    if st.button("🔄 Reset to REVERSAL SCALPER defaults",
                  width="stretch", key="reset_scalp_defaults_btn",
                  help="Snap check=2s, threshold=0.01%, size=40% of free USDT, "
-                      "SL=0.4%, TP=0.5%, max_open=1/sym, 3 total, cooldown=0. Keeps API keys."):
+                      "SL=0.4%, TP=0.8%, per-symbol cap off, 30 total, cooldown=5s. "
+                      "Keeps API keys."):
         st.session_state.check_every    = 2
         st.session_state.threshold      = 0.01
         st.session_state.manual_amount  = 10.0
         try:
             st.session_state.risk.dynamic_size_pct  = 40.0
             st.session_state.risk.stop_loss_pct     = 0.4
-            st.session_state.risk.take_profit_pct   = 0.5
-            st.session_state.risk.max_per_symbol    = 1
-            st.session_state.risk.max_open_trades   = 1
-            st.session_state.risk.cooldown_seconds  = 0
+            st.session_state.risk.take_profit_pct   = 0.8
+            st.session_state.risk.max_per_symbol    = 99
+            st.session_state.risk.max_open_trades   = 30
+            st.session_state.risk.cooldown_seconds  = 5
         except Exception:
             pass
         for _sym, _rs in (st.session_state.get("per_symbol_risk") or {}).items():
             try:
                 _rs.dynamic_size_pct  = 40.0
                 _rs.stop_loss_pct     = 0.4
-                _rs.take_profit_pct   = 0.5
-                _rs.max_per_symbol    = 1
-                _rs.max_open_trades   = 1
-                _rs.cooldown_seconds  = 0
+                _rs.take_profit_pct   = 0.8
+                _rs.max_per_symbol    = 99
+                _rs.max_open_trades   = 30
+                _rs.cooldown_seconds  = 5
             except Exception:
                 pass
         try:
-            st.session_state.global_risk.max_open_trades_total      = 3
+            st.session_state.global_risk.max_open_trades_total      = 30
             st.session_state.global_risk.max_exposure_per_symbol_pct = 100.0
             st.session_state.global_risk.max_total_exposure_usdt    = 1000.0
         except Exception:
             pass
         log_activity("INFO",
-                     "⚡ ACTIVE SCALPER defaults applied — check=2s · "
-                     "threshold=0.01% · size=40% of free USDT · 1/sym · 3 total · "
-                     "SL=0.4% · TP=0.5% · cooldown=0")
-        st.success("✅ ACTIVE SCALPER defaults applied. Restart the bot for "
+                     "⚡ REVERSAL SCALPER defaults applied — check=2s · "
+                     "threshold=0.01% · size=40% of free USDT · per-symbol cap off · "
+                     "30 total · SL=0.4% · TP=0.8% · cooldown=5s")
+        st.success("✅ REVERSAL SCALPER defaults applied. Restart the bot for "
                    "the 2s tick to take effect.")
         st.rerun()
 
@@ -1872,6 +1909,8 @@ with st.sidebar:
                     initial_balance=st.session_state.initial_balance,
                     ai_assist=True,                       # ACTIVE SCALPER — always on
                     ai_aggressiveness="Active Scalper",   # ignored — single mode
+                    manage_manual_trades=bool(getattr(st.session_state.global_risk,
+                                                      "manage_manual_trades", False)),
                 )
                 b._initial_balance = st.session_state.initial_balance
                 b.start()
@@ -2053,7 +2092,8 @@ with st.sidebar:
     r.take_profit_pct    = st.slider("Take profit %",   0.1, 50.0,
         max(0.1, float(r.take_profit_pct)), 0.1)
     r.max_daily_loss_pct = st.slider("Max daily loss %",1.0, 30.0, float(r.max_daily_loss_pct), 0.5)
-    r.max_open_trades    = st.slider("Max open trades", 1,   20,   int(r.max_open_trades),      1)
+    r.max_open_trades    = st.slider("Max open trades", 1,   50,
+        min(50, max(1, int(r.max_open_trades))),      1)
     st.session_state.risk_manager.settings = r
 
     # ── Global (account-wide) risk caps — applies across all symbols ──────────
@@ -2073,12 +2113,27 @@ with st.sidebar:
         g.max_open_trades_total = st.slider(
             "Max open trades (total, all symbols)",
             1, 50, int(g.max_open_trades_total), 1,
+            help="Hard cap on simultaneous open positions across all symbols. "
+                 "Saved automatically and kept across refresh/restart.",
         )
         g.max_daily_loss_pct = st.slider(
             "Global max daily loss %",
             1.0, 30.0, float(g.max_daily_loss_pct), 0.5,
             help="Auto-stop the orchestrator when today's PnL ≤ −X%.",
         )
+        # ── MANUAL TRADES PROTECTION ──────────────────────────────────────────
+        g.manage_manual_trades = st.checkbox(
+            "Allow bot to manage manual trades",
+            value=bool(getattr(g, "manage_manual_trades", False)),
+            key="cb_manage_manual",
+            help="OFF (default & recommended): the bot NEVER closes positions "
+                 "you opened manually — no auto-SL/TP/exit on them. ON: the bot "
+                 "manages your manual trades with the same SL/TP rules as its own.",
+        )
+        if not g.manage_manual_trades:
+            st.caption("🔒 Manual trades are protected — the bot will not close them.")
+        else:
+            st.caption("⚠️ Bot WILL auto-close your manual trades on SL/TP/exit.")
 
     # ── Per-symbol risk overrides ─────────────────────────────────────────────
     with st.expander("🎯 Per-symbol risk overrides", expanded=False):
@@ -2414,6 +2469,8 @@ with st.container():
                             initial_balance=st.session_state.initial_balance,
                             ai_assist=bool(st.session_state.get("ai_assist", False)),
                             ai_aggressiveness="Active Scalper",   # ACTIVE SCALPER MODE — ignored
+                            manage_manual_trades=bool(getattr(st.session_state.global_risk,
+                                                              "manage_manual_trades", False)),
                         )
                         b._initial_balance = st.session_state.initial_balance
                         b.start()
@@ -2934,8 +2991,8 @@ with st.container():
 
             # ── Indicator toggles + view controls ───────────────────────────────
             _ind_defaults = {"show_volume": True, "show_ema": True,
-                             "show_rsi": False, "show_macd": False, "show_stoch": False,
-                             "show_old_trades": False, "show_sl_tp": False}
+                             "show_rsi": True, "show_macd": True, "show_stoch": True,
+                             "show_old_trades": True, "show_sl_tp": True}
             for _k,_v in _ind_defaults.items():
                 if _k not in st.session_state: st.session_state[_k] = _v
 
@@ -3592,11 +3649,20 @@ def _collect_settings_snapshot() -> dict:
         "tg_enabled":      st.session_state.tg_enabled,
         "tg_token":        st.session_state.tg_token,
         "tg_chat_id":      st.session_state.tg_chat_id,
+        # Chart indicator toggles — persisted so they survive refresh/restart.
+        "show_ema":        bool(st.session_state.get("show_ema", True)),
+        "show_volume":     bool(st.session_state.get("show_volume", True)),
+        "show_rsi":        bool(st.session_state.get("show_rsi", True)),
+        "show_macd":       bool(st.session_state.get("show_macd", True)),
+        "show_stoch":      bool(st.session_state.get("show_stoch", True)),
+        "show_old_trades": bool(st.session_state.get("show_old_trades", True)),
+        "show_sl_tp":      bool(st.session_state.get("show_sl_tp", True)),
         "global_risk": {
             "max_total_exposure_usdt":     _gr.max_total_exposure_usdt,
             "max_exposure_per_symbol_pct": _gr.max_exposure_per_symbol_pct,
             "max_open_trades_total":       _gr.max_open_trades_total,
             "max_daily_loss_pct":          _gr.max_daily_loss_pct,
+            "manage_manual_trades":        bool(getattr(_gr, "manage_manual_trades", False)),
         },
         "per_symbol_risk": _pso_dump,
         "risk": {
