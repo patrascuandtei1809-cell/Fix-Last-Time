@@ -1,0 +1,141 @@
+Update my AlphaTrade dashboard and bot with the following fixes, without removing any existing features or making the UI basic.
+
+GOALS:
+- Keep the professional dark AlphaTrade UI
+- Fix duplicate/ghost rendering on scroll
+- Make the chart load correctly and update live
+- Use Europe/London time everywhere
+- Show real Binance data when connected
+- Keep PAPER mode as default
+- Require confirmation before LIVE trading
+- Use only selected USDT amount for every trade
+- Protect manual trades from bot interference
+- Make the bot run continuously in the background
+
+FIXES REQUIRED:
+
+1) DASHBOARD / UI
+- Fix duplicated UI rendering on scroll.
+- Remove any repeated layout blocks, repeated function calls, or multiple render passes.
+- Do not render the same section inside both a function and outside it.
+- Avoid aggressive st.rerun loops that stack UI.
+- Ensure the page ends cleanly after the last section.
+- Keep the current AlphaTrade branding and premium dark style.
+
+2) CHART
+- Fix the chart so it loads real market data.
+- If Binance keys are not connected, use public Binance klines/ticker.
+- Convert all timestamps to Europe/London time before display.
+- Make the x-axis show London time correctly.
+- Remove any invalid Plotly properties, especially:
+  - spikewidth -> replace with spikethickness
+  - or remove if not needed
+- Show live candles, EMA 9, EMA 21, and indicator overlays.
+- Show trade markers on chart:
+  - BOT BUY
+  - BOT SELL
+  - MANUAL BUY
+  - MANUAL SELL
+
+3) TIME DISPLAY
+- Use Europe/London for all displayed times.
+- “Last updated” must show London time.
+- Trade logs and activity logs must show London time.
+
+4) BINANCE CONNECTION
+- Show Binance API connection clearly in the sidebar and also in the main dashboard.
+- Add fields:
+  - Binance API Key
+  - Binance API Secret
+  - TESTNET / LIVE switch
+  - Connect to Binance button
+- Show connection status:
+  - Connected / Disconnected
+- Show real USDT balance when connected to TESTNET or LIVE.
+- In PAPER mode, show simulated balance.
+- Do not keep equity fixed at $1000 when Binance is connected.
+
+5) TRADE CONTROL
+- Add a clear “Amount (USDT)” input.
+- ALL trades, manual and bot, must use only the selected USDT amount.
+- Never use full balance automatically.
+- Show exact estimated quantity before executing a trade.
+- Add max trade limit per trade for safety.
+
+6) LIVE TRADING SAFETY
+- LIVE trading must require a confirmation step before execution.
+- Show:
+  - BUY/SELL
+  - amount in USDT
+  - estimated quantity
+  - current price
+  - warning: REAL MONEY TRADE
+- Keep PAPER as the default mode.
+- LIVE should never trigger automatically without confirmation.
+
+7) BOT LOGIC
+- Make the bot visibly run in the background.
+- Add Bot ON/OFF control.
+- Show:
+  - running / waiting / error
+  - last bot check time
+  - current signal: BUY / SELL / HOLD
+  - active strategy name
+  - reason for decision
+- Bot must continuously scan market every 3–5 seconds.
+- Bot must use the selected strategy and selected USDT amount only.
+- Add a “Force BOT Trade (Paper)” button to verify bot execution.
+- Add TP/SL system:
+  - show TP and SL on chart
+  - apply them automatically after a trade opens
+- Add strategy selector:
+  - EMA Crossover
+  - RSI
+  - MACD
+  - Scalping
+- Show active strategy clearly on the dashboard.
+
+8) MANUAL TRADES
+- Keep manual BUY/SELL buttons.
+- Manual trades must be labeled clearly as MANUAL BUY / MANUAL SELL.
+- Bot must not close or modify manual trades unless explicitly allowed.
+
+9) LOGGING
+- Log every action clearly:
+  - time
+  - price
+  - amount
+  - reason
+  - bot/manual
+- Show activity log in the dashboard.
+- Show trade history and stats.
+- Log bot checks:
+  - “Checking market...”
+  - “Signal detected: YES/NO”
+  - reason for decision
+  - trade opened / TP hit / SL hit
+
+10) CODE QUALITY
+- Fix any missing or broken functions such as:
+  - get_trend
+  - log
+  - RiskManager
+- Remove unused functions if they are not needed.
+- Make sure the app runs with:
+  streamlit run dashboard.py
+- Return full updated code for all changed files.
+- Do not give demo UI.
+- Do not simplify the layout.
+- Do not remove any current features.
+
+IMPORTANT:
+- Keep the premium crypto trading UI.
+- Fix functionality without breaking the current AlphaTrade design.
+- Make the dashboard stable on desktop and mobile.
+- Avoid duplicate rendering and broken scroll behavior.
+- Make sure the bot can run 24/7 even if my PC/phone is closed.
+
+After updating, show me:
+- updated dashboard.py
+- any changed bot/strategy files
+- the exact fixes made for chart, time, connection, and duplicate rendering

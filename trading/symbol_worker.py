@@ -122,10 +122,14 @@ class SymbolWorker:
         # opened itself (type=="bot"). Manual trades are left untouched — no
         # SL/TP, breakeven, or red-candle exit — unless the operator turns ON
         # "Allow bot to manage manual trades" (manage_manual_trades=True).
+        # A trade is bot-managed only when it is a bot trade AND not flagged
+        # manual. Manual positions (manual=True, or any non-bot type) are
+        # NEVER touched unless the operator turns ON manage_manual_trades.
         my_open = [
             t for t in all_open_trades
             if t.get("coin") == self.symbol
-            and (self.manage_manual_trades or t.get("type") == "bot")
+            and (self.manage_manual_trades
+                 or (t.get("type") == "bot" and not t.get("manual", False)))
         ]
         # ACTIVE SCALPER hardcoded post-entry behavior (no profile lookup).
         _be_arm_pct   = AS_BE_ARM_PCT
@@ -394,19 +398,67 @@ class SymbolWorker:
             # GPT must NEVER break trading.
             self._log("WARNING", f"{tag} GPT advisor error (ignored): {_ge}")
 
-        # ── SMART PRIORITY SCALPER: compute opportunity score 0–100 ───────
-        # Always computed (even on HOLD → score=0) so the dashboard shows it
-        # and the orchestrator can rank across symbols.
+        # ── REGIME + WEIGHTED DECISION ENGINE (replaces hard HOLD veto) ────
+        # We classify the regime, then run a 6-factor WEIGHTED decision (AI
+        # confidence, RSI, EMA trend, MACD momentum, volume spike, candle
+        # structure) that scores BOTH directions and picks the stronger side.
+        # Only a HARD risk veto (volatility blowout / flat-dead tape / no data)
+        # forces HOLD — we no longer blanket-veto just because the rule strategy
+        # said HOLD. Balance, max-open and throttle stay enforced downstream as
+        # real gates. This is the "reactive, simple, controlled" behavior asked
+        # for: trade on a real weighted edge, veto only on danger.
+        _weighted_decision = None
+        _df_for_score = df_ind if "df_ind" in locals() else df
         try:
-            from strategy import score_market as _score_market
+            from strategy import weighted_decision as _weighted_decision
             from market_regime import classify_regime as _classify_regime
-            _df_for_score = df_ind if "df_ind" in locals() else df
             _regime, _rtele = _classify_regime(_df_for_score)
-            _score, _bd     = _score_market(_df_for_score, signal,
-                                            confidence, regime=_regime)
-            _bd["regime_tele"] = _rtele
         except Exception as _se:
-            _score, _bd, _regime = 0, {"error": str(_se)[:80]}, "DEAD"
+            _regime, _rtele = "DEAD", {"error": str(_se)[:80]}
+
+        # Weighted directional decision + hard risk veto. The 6-factor weighted
+        # score IS the canonical qualification metric (the orchestrator ranks on
+        # `score`). The breakdown carries regime-adjusted `bull`/`bear` so we can
+        # read the conviction in whichever direction we END UP trading.
+        w_signal, w_score, w_bd, w_veto = signal, 0, {}, ""
+        if _weighted_decision is None:
+            # The weighted engine is the ONLY edge gate now. If it can't even be
+            # imported, we must NOT fall through to the AI-confidence sizing tier
+            # and place a LIVE order unprotected — fail closed (hard HOLD).
+            w_veto = "weighted engine unavailable"
+        else:
+            try:
+                w_signal, w_score, w_bd, w_veto = _weighted_decision(
+                    _df_for_score, ai_signal=signal,
+                    ai_confidence=confidence, regime=_regime)
+            except Exception as _we:
+                # A throwing weighted engine = no edge protection → fail closed.
+                w_bd   = {"error": str(_we)[:80]}
+                w_veto = "weighted engine error"
+        _bull = int(w_bd.get("bull", 0) or 0)
+        _bear = int(w_bd.get("bear", 0) or 0)
+
+        # If rule+AI produced HOLD but the weighted engine sees a directional
+        # edge AND there is no hard veto → adopt the weighted direction.
+        if (signal == "HOLD" and not w_veto
+                and w_signal in ("BUY", "SELL") and w_score > 0):
+            _old = signal
+            signal     = w_signal
+            confidence = max(int(confidence), int(min(w_score, 90)))
+            reason     = (f"⚖️ weighted {w_signal} score={w_score} "
+                          f"(bull={_bull} bear={_bear})")
+            self._on_state(self.symbol, signal=signal, reason=reason,
+                           confidence=confidence)
+
+        # Canonical score = the weighted conviction in the FINAL signal's
+        # direction (never the losing side), so we never rank a BUY by a SELL's
+        # score. A non-finite or vetoed read collapses to 0 (HOLD/blocked below).
+        if   signal == "BUY":  _score = _bull
+        elif signal == "SELL": _score = _bear
+        else:                  _score = 0
+        _bd = dict(w_bd)
+        _bd["regime_tele"] = _rtele
+
         self._last_eval = {
             "symbol":     self.symbol,
             "exchange":   self.exchange.name,
@@ -422,16 +474,41 @@ class SymbolWorker:
         }
         self._on_state(self.symbol, score=_score, score_breakdown=_bd,
                        regime=_regime)
-        print(f"[SCAN] {self.symbol.replace('USDT','')} score={_score} "
-              f"signal={signal} conf={confidence} regime={_regime} "
-              f"atr%={_bd.get('atr_pct',0)}", flush=True)
+
+        # ── CONSOLIDATED DECISION LOG (per symbol, every tick) ─────────────
+        # AI output · strategy score · weighted score · veto reason · final.
+        try:
+            _ai_dec  = _ai.decision   if "_ai" in locals() and _ai else "-"
+            _ai_conf = _ai.confidence if "_ai" in locals() and _ai else confidence
+        except Exception:
+            _ai_dec, _ai_conf = "-", confidence
+        print(f"[DECISION] {self.symbol.replace('USDT','')} "
+              f"ai={_ai_dec}/{_ai_conf} score={_score} "
+              f"weighted={w_score}({w_signal}) regime={_regime} "
+              f"veto={w_veto or '-'} → {signal}", flush=True)
+        self._log("DECISION",
+                  f"{tag} ⚖️ ai={_ai_dec}/{_ai_conf} | score={_score} | "
+                  f"weighted={w_score}({w_signal}) | regime={_regime} | "
+                  f"veto={w_veto or '-'} → FINAL {signal}")
+
+        # ── HARD RISK VETO — the ONLY thing that forces HOLD ───────────────
+        if w_veto:
+            signal = "HOLD"
+            _msg = f"risk veto: {w_veto}"
+            self._on_state(self.symbol, signal="HOLD", block_reason=_msg)
+            print(f"[VETO] {self.symbol} HARD risk veto → HOLD ({w_veto})",
+                  flush=True)
+            self._log("RISK", f"{tag} ⛔ HARD risk veto → HOLD | {w_veto}")
+            if self._on_candidate is not None:
+                self._last_eval.update(signal="HOLD", reason=_msg, score=0)
+                self._on_candidate(self._last_eval)
+            return
 
         if signal == "HOLD":
-            # Clear block_reason — HOLD is a strategy decision, not a risk gate.
-            # The per-symbol overview card surfaces the HOLD reason via `last_reason`.
+            # No directional edge this tick (weighted score flat) — NOT a veto.
+            # Publish the (empty) candidate so the orchestrator still sees this
+            # symbol was evaluated; it is filtered out by signal!=HOLD upstream.
             self._on_state(self.symbol, block_reason="")
-            # Still publish the (empty) candidate so the orchestrator sees
-            # this symbol was evaluated; it will be filtered out by signal!=HOLD.
             if self._on_candidate is not None:
                 self._on_candidate(self._last_eval)
             return
@@ -463,6 +540,18 @@ class SymbolWorker:
         tag        = f"[{self.symbol}]"
 
         if signal not in ("BUY", "SELL"):
+            return False
+
+        # INVARIANT: the weighted engine is the canonical edge gate. score>0 is
+        # required end-to-end — score==0 means no weighted conviction or a hard
+        # veto fired. The orchestrator already enforces this, but guard here too
+        # so a direct/manual execute_entry() can never bypass the weighted edge.
+        if int(ev.get("score", 0)) <= 0:
+            _msg = "no weighted edge (score=0)"
+            print(f"[BOT] {self.symbol} blocked reason={_msg} (sizing gate)", flush=True)
+            self._log("INFO", f"{tag} ⏸️ {_msg}")
+            self._on_state(self.symbol, block_reason=_msg)
+            self._last_block_reason = _msg
             return False
 
         # 4. Per-symbol gate
@@ -599,6 +688,7 @@ class SymbolWorker:
             "coin":            self.symbol,
             "exchange":        self.exchange.name,
             "type":            "bot",
+            "manual":          False,   # bot-opened — managed by SL/TP/exit rules
             "strategy":        self.strategy,
             "side":            signal,
             "entry_price":     fill_price,

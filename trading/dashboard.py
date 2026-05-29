@@ -2630,6 +2630,7 @@ with st.container():
                                             "coin":            _ftb_sym,
                                             "exchange":        "binance",
                                             "type":            "manual",
+                                            "manual":          True,   # operator-opened — protected by default
                                             "strategy":        "ForceTestBuy",
                                             "side":            "BUY",
                                             "entry_price":     _exec_price,
@@ -2793,6 +2794,7 @@ with st.container():
                                             "coin":            _bn_sym,
                                             "exchange":        "binance",
                                             "type":            "manual",
+                                            "manual":          True,   # operator-opened — protected by default
                                             "strategy":        "BuyNow90",
                                             "side":            "BUY",
                                             "entry_price":     _exec_price,
@@ -2888,6 +2890,7 @@ with st.container():
                             "coin":            st.session_state.symbol,
                             "exchange":        "binance",
                             "type":            "manual",
+                            "manual":          True,   # operator-opened — protected by default
                             "strategy":        "Manual",
                             "side":            _plt_side,
                             "entry_price":     _exec_price,

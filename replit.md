@@ -141,6 +141,39 @@ Operator-facing safety + persistence pass. Four changes:
    horizontal blocks so columns stack vertically, makes buttons full-width,
    and caps plotly charts / dataframes / images to viewport width.
 
+## WEIGHTED SCORING — stop over-filtering, fail closed (May 29, 2026)
+
+Replaced the hard "strategy HOLD → blanket veto" with a **6-factor weighted
+decision** that is now the **single canonical** edge engine.
+
+1. **`strategy.weighted_decision(df, ai_signal, ai_confidence, regime)`** scores
+   BOTH directions from 6 weighted factors (sum 100): AI confidence 20, RSI 15,
+   EMA trend 20 (align 12 + slope 8), MACD 20 (sign 10 + flip/turn 10/4),
+   volume spike 15, candle structure 10. Regime-adjusts **both** bull & bear
+   (`apply_regime_to_score`) and returns them in the breakdown.
+2. **HARD risk veto ONLY for dangerous conditions** — insufficient data,
+   non-finite/NaN indicators (`np.isfinite` guard — `float(np.nan)` does NOT
+   raise), `atr% > DANGER_ATR_PCT (2.0)`, or `DEAD` regime + flat move
+   < `FLAT_PCT (0.005%)`. Everything else gets a directional score; trade when
+   `score >= threshold`.
+3. **Weighted score IS canonical end-to-end.** `score_market()` is no longer
+   used by the worker (kept in `strategy.py`, unused). In `symbol_worker.tick()`
+   the candidate `score` = weighted conviction in the **FINAL** signal direction
+   (`BUY→bull`, `SELL→bear`) — never ranked by the losing side. Orchestrator
+   qualifies on this score; `execute_entry()` sizing mirrors it.
+4. **FAIL CLOSED.** If `weighted_decision` is unimportable → `w_veto="weighted
+   engine unavailable"`; if it throws → `w_veto="weighted engine error"`. Either
+   forces HOLD (score=0) before any execution — a broken engine can never place
+   a LIVE order via the AI-confidence path. Orchestrator also requires
+   `score > 0`, and `execute_entry()` guards `score>0` as an invariant (blocks
+   direct/manual bypass).
+5. **Consolidated per-symbol decision log** every tick: `[DECISION] BTC
+   ai=BUY/62 score=58 weighted=58(BUY) regime=TREND veto=- → BUY` plus
+   `[VETO] … HARD risk veto → HOLD (…)` when a danger gate fires.
+6. **Manual-trade protection intact** — `my_open` keeps a trade only if
+   `manage_manual_trades OR (type=='bot' AND not manual)`; bot trades tagged
+   `manual=False`, all 3 dashboard manual paths tagged `manual=True`.
+
 ## FINAL STABLE MODE — fix execution / make the bot ACT (May 29, 2026)
 
 Operator: the bot still wasn't trading (over-filtered). Made entry SIMPLE so it

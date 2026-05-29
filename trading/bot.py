@@ -610,8 +610,14 @@ class TradingBot:
             # directional signal AND (score>=threshold OR AI confidence>=floor).
             # Either path is enough — we do NOT require both. Strategy HOLD is
             # the only hard block (no direction to trade).
+            # NOTE: score>0 is REQUIRED on both paths. The weighted engine is the
+            # canonical edge gate; score==0 means either no weighted edge or a
+            # hard veto fired (worker fails closed → HOLD/score=0). Without this,
+            # a candidate could qualify on AI confidence alone with zero weighted
+            # conviction and place a LIVE order unprotected.
             qualified = [c for c in cands
                          if c.get("signal") in ("BUY", "SELL")
+                         and int(c.get("score", 0)) > 0
                          and (int(c.get("score", 0))      >= self.score_threshold
                               or int(c.get("confidence", 0)) >= self.confidence_floor)]
             qualified.sort(key=lambda c: (int(c.get("score", 0)),

@@ -1,1 +1,2 @@
 - [Entry gate invariant](entry-gate-invariant.md) — orchestrator qualification and execute_entry sizing must use the SAME entry rule, or a winner gets qualified then silently blocked at sizing.
+- [Weighted engine fail-closed](weighted-engine-fail-closed.md) — the canonical edge gate must fail closed on exception/import error; `float(np.nan)` doesn't raise, use `np.isfinite`.

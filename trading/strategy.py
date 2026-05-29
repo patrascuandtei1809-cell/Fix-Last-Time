@@ -558,3 +558,165 @@ def score_market(df: pd.DataFrame, signal: str, base_confidence: int,
         "pre_regime":    int(pre_regime),
     }
     return total, breakdown
+
+
+# ── WEIGHTED DECISION ENGINE — replaces the hard HOLD veto ────────────────────
+#
+# Instead of vetoing a trade whenever the rule strategy emits HOLD, we score
+# BOTH directions from 6 weighted factors and let the stronger side win — as
+# long as it clears the orchestrator threshold downstream. A HARD veto is
+# reserved ONLY for genuinely dangerous conditions (insufficient data, a flat /
+# dead tape, or a volatility blowout). This keeps the bot reactive and simple
+# instead of requiring perfect conditions to act.
+#
+# Factors & max weights (sum = 100):
+#   • AI confidence   20  — directional conviction from the AI engine
+#   • RSI             15  — oversold→BUY / overbought→SELL (graded)
+#   • EMA trend       20  — EMA9 vs EMA21 alignment + EMA9 slope
+#   • MACD momentum   20  — histogram sign + a fresh sign-flip
+#   • Volume spike    15  — current vs 20-bar avg, credited to candle direction
+#   • Candle struct   10  — body fraction (direction) + wick rejection
+#
+# Returns (signal, score, breakdown, veto_reason):
+#   signal       "BUY" | "SELL" | "HOLD"
+#   score        0–100 conviction for the chosen side (regime-adjusted)
+#   breakdown    per-factor + bull/bear totals (for logs + dashboard)
+#   veto_reason  "" normally; a short string when a HARD risk veto fired
+#                (dangerous condition → forced HOLD regardless of score)
+DANGER_ATR_PCT = 2.0    # ATR% above this on the last bar = blowout → hard veto
+FLAT_PCT       = 0.005  # last-candle move below this on a DEAD tape → hard veto
+
+
+def weighted_decision(df: pd.DataFrame, ai_signal: str = "HOLD",
+                      ai_confidence: int = 0,
+                      regime: str = "") -> Tuple[str, int, dict, str]:
+    if df is None or len(df) < 30:
+        return "HOLD", 0, {"reason": "insufficient data"}, "insufficient data"
+    d = get_indicators(df) if "macd_hist" not in df.columns else df
+    last = d.iloc[-1]
+    try:
+        ema9   = float(last["ema9"]);  ema21 = float(last["ema21"])
+        rsi    = float(last["rsi"]);   atr   = float(last["atr"])
+        price  = float(last["close"]); opn   = float(last["open"])
+        high   = float(last["high"]);  low   = float(last["low"])
+        vol    = float(last["volume"]); mhist = float(last["macd_hist"])
+        ema9_3  = float(d["ema9"].iloc[-4])      if len(d) >= 4 else ema9
+        mhist_p = float(d["macd_hist"].iloc[-2])
+        close_p = float(d["close"].iloc[-2])
+    except Exception:
+        return "HOLD", 0, {"reason": "indicator NaN"}, "indicator NaN"
+
+    # SAFETY: float(np.nan) does NOT raise, so explicitly reject any non-finite
+    # indicator — a NaN that slips into bull/bear could be clamped into a fake
+    # high score and fire a LIVE order. Non-finite → hard veto (HOLD).
+    if not all(np.isfinite(v) for v in
+               (ema9, ema21, rsi, atr, price, opn, high, low, vol,
+                mhist, ema9_3, mhist_p, close_p)):
+        return "HOLD", 0, {"reason": "non-finite indicator"}, "non-finite indicator"
+
+    atr_pct   = (atr / price * 100) if price else 0.0
+    last_move = abs((price - close_p) / close_p * 100) if close_p else 0.0
+
+    # ── HARD RISK VETO — dangerous conditions ONLY ─────────────────────────
+    if atr_pct > DANGER_ATR_PCT:
+        return ("HOLD", 0,
+                {"atr_pct": round(atr_pct, 3), "regime": regime or "UNKNOWN"},
+                f"volatility blowout atr%={atr_pct:.2f}>{DANGER_ATR_PCT}")
+    if regime == "DEAD" and last_move < FLAT_PCT:
+        return ("HOLD", 0,
+                {"atr_pct": round(atr_pct, 3), "regime": regime,
+                 "last_move": round(last_move, 4)},
+                f"flat/dead tape (move {last_move:.4f}%<{FLAT_PCT}%)")
+
+    bull = 0.0
+    bear = 0.0
+
+    # 1. AI confidence (20) — directional conviction from the AI engine.
+    if   ai_signal == "BUY":  bull += min(20.0, max(0, ai_confidence) / 5.0)
+    elif ai_signal == "SELL": bear += min(20.0, max(0, ai_confidence) / 5.0)
+
+    # 2. RSI (15) — graded oversold→BUY / overbought→SELL.
+    if   rsi < 30: bull += 15
+    elif rsi < 40: bull += 9
+    elif rsi < 45: bull += 4
+    if   rsi > 70: bear += 15
+    elif rsi > 60: bear += 9
+    elif rsi > 55: bear += 4
+
+    # 3. EMA trend (20) — alignment (12) + slope (8).
+    slope_pct = ((ema9 - ema9_3) / ema9_3 * 100) if ema9_3 else 0.0
+    if ema9 > ema21: bull += 12
+    else:            bear += 12
+    if   slope_pct > 0: bull += min(8.0, abs(slope_pct) / 0.05 * 8)
+    elif slope_pct < 0: bear += min(8.0, abs(slope_pct) / 0.05 * 8)
+
+    # 4. MACD momentum (20) — sign (10) + fresh flip (10) / turning (4).
+    if   mhist > 0: bull += 10
+    elif mhist < 0: bear += 10
+    if   mhist_p <= 0 and mhist > 0: bull += 10   # fresh flip up
+    elif mhist_p >= 0 and mhist < 0: bear += 10   # fresh flip down
+    elif mhist > mhist_p:            bull += 4    # turning up
+    elif mhist < mhist_p:            bear += 4    # turning down
+
+    # 5. Volume spike (15) — credited to the candle's direction.
+    try:
+        avg_vol = float(d["volume"].rolling(20).mean().iloc[-1])
+    except Exception:
+        avg_vol = 0.0
+    vol_ratio = (vol / avg_vol) if avg_vol > 0 else 0.0
+    vspike = min(15.0, max(0.0, (vol_ratio - 1.0) / 1.5 * 15))
+    if price >= opn: bull += vspike
+    else:            bear += vspike
+
+    # 6. Candle structure (10) — body fraction (6) + wick rejection (4).
+    rng        = max(high - low, 1e-9)
+    body       = abs(price - opn)
+    body_frac  = body / rng
+    lower_wick = min(opn, price) - low
+    upper_wick = high - max(opn, price)
+    if price >= opn: bull += body_frac * 6
+    else:            bear += body_frac * 6
+    if body > 0 and lower_wick >= 2 * body: bull += min(4.0, (lower_wick / rng) * 6)
+    if body > 0 and upper_wick >= 2 * body: bear += min(4.0, (upper_wick / rng) * 6)
+
+    # Guard against any residual non-finite leaking into the totals.
+    if not (np.isfinite(bull) and np.isfinite(bear)):
+        return "HOLD", 0, {"reason": "non-finite score"}, "non-finite score"
+    pre_bull = max(0.0, min(100.0, bull))
+    pre_bear = max(0.0, min(100.0, bear))
+
+    # Regime adjustment — applied to BOTH directions so the canonical score
+    # (conviction in the FINAL signal's direction) is regime-aware. Same engine
+    # as score_market for consistency.
+    bull, bear = pre_bull, pre_bear
+    if regime:
+        try:
+            from market_regime import apply_regime_to_score
+            bull = apply_regime_to_score(pre_bull, regime)
+            bear = apply_regime_to_score(pre_bear, regime)
+        except Exception:
+            pass
+    bull = max(0, min(100, int(round(bull))))
+    bear = max(0, min(100, int(round(bear))))
+    if bull >= bear:
+        signal, score = "BUY", bull
+    else:
+        signal, score = "SELL", bear
+
+    breakdown = {
+        "bull":          bull,
+        "bear":          bear,
+        "pre_bull":      round(pre_bull, 1),
+        "pre_bear":      round(pre_bear, 1),
+        "ai_signal":     ai_signal,
+        "ai_confidence": int(ai_confidence),
+        "rsi":           round(rsi, 1),
+        "ema9_gt_ema21": bool(ema9 > ema21),
+        "ema_slope_pct": round(slope_pct, 4),
+        "macd_hist":     round(mhist, 6),
+        "vol_ratio":     round(vol_ratio, 2),
+        "body_frac":     round(body_frac, 2),
+        "atr_pct":       round(atr_pct, 3),
+        "regime":        regime or "UNKNOWN",
+    }
+    return signal, score, breakdown, ""
