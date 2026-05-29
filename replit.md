@@ -141,6 +141,37 @@ Operator-facing safety + persistence pass. Four changes:
    horizontal blocks so columns stack vertically, makes buttons full-width,
    and caps plotly charts / dataframes / images to viewport width.
 
+## FINAL STABLE MODE — fix execution / make the bot ACT (May 29, 2026)
+
+Operator: the bot still wasn't trading (over-filtered). Made entry SIMPLE so it
+acts on real signals instead of waiting for perfect conditions. Risk caps kept
+safe (SL 0.4% / TP 0.8% / 30 total open — untouched).
+
+1. **SIMPLE ENTRY (OR rule).** Orchestrator (`bot.py`) qualifies a candidate on
+   a directional signal AND **(score ≥ score_threshold OR AI confidence ≥
+   confidence_floor)** — no longer both. `confidence_floor 50→30`. The sizing
+   gate in `symbol_worker.execute_entry()` mirrors this exactly (tiers:
+   ≥80→30%, ≥70→20%, ≥60→10%, ≥score_floor→10% "score-min", conf≥30→10%
+   "ai-confidence", else block) so a winner can never be **qualified upstream
+   then blocked at sizing**. The orchestrator stamps its effective
+   `score_threshold` onto the winner so anti-idle (threshold→40) stays
+   consistent at sizing.
+2. **AI priority.** `ai_decide()` already overrides a strategy HOLD with a
+   directional verdict (conf floored ≥40 when it picks a side), so strategy HOLD
+   never blocks an AI BUY/SELL.
+3. **Removed blockers in `strategy.reversal_signal()`.** Volume gate **1.1×→1.0×**
+   and the strict "ALL 5 must align" momentum stacking is gone — now fires on the
+   CORE trigger (RSI extreme/turning OR MACD momentum flip) + vol ≥1.0 + a
+   directional candle; body/RSI-depth only ADD confidence.
+4. **GPT is ADVISORY.** The global analyst veto only fires when GPT returns
+   `NO_TRADE` for OUR winner symbol (narrow "reject obvious bad ones").
+   Symbol-mismatch / direction-mismatch / low-probability **no longer veto**.
+5. **Force activity from cold start.** Worker idle is measured from
+   `_last_trade_at or _created_at`, so the 10-min forced-micro-entry fires even
+   before the first trade (not only after).
+6. **Logging.** AI decision (`[AI]`), score (`[SCAN]`/`[RANK]`), and explicit
+   blocked reasons at every gate (per-symbol / global / sizing).
+
 ## FIX FINAL — anti-overfilter + full-history chart (May 29, 2026)
 
 Operator reported the bot wasn't trading (over-filtered) and the chart only

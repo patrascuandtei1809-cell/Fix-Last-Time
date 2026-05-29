@@ -327,58 +327,50 @@ def reversal_signal(df: pd.DataFrame) -> Tuple[str, str, int]:
         return "HOLD", f"LATE — last bar moved {move_pct:.2f}% > {MAX_LAST_CANDLE_MOVE_PCT}% (move already happened)", 0
 
     vol_ratio = (vol / avg_vol) if avg_vol > 0 else 0.0
-    # FIX FINAL (May 29 2026): relaxed 1.5× → 1.1× so the bot isn't starved of
-    # entries by an over-strict volume gate.
-    vol_ok = vol_ratio >= 1.1   # only need a mild volume uptick
+    # FINAL STABLE MODE (May 29 2026): NO strict volume requirement — only a
+    # non-shrinking volume is needed (vol ≥ 1.0× the 20-bar average).
+    vol_ok = vol_ratio >= 1.0
 
-    # Candle body strength — reject weak/doji candles (body ≥ 50% of range).
+    # Candle body strength — used as a CONFIDENCE booster now, no longer a hard
+    # gate (FINAL STABLE MODE removed strict momentum stacking).
     rng = max(high - low, 1e-9)
     body_ratio = abs(cls - opn) / rng
-    strong_green = body_ratio >= 0.5 and cls > opn
-    strong_red   = body_ratio >= 0.5 and cls < opn
 
     # Momentum turning up: hist flipped sign OR rising from below zero.
     mom_up   = (mh_p <= 0 and mh > 0) or (mh > mh_p and mh_p < 0)
     mom_down = (mh_p >= 0 and mh < 0) or (mh < mh_p and mh_p > 0)
 
-    # Price position vs EMA9 (small tolerance so "right at EMA9" still qualifies).
-    near_or_below_ema = cls <= ema9 * 1.0005
-    stretched_above_ema = cls >= ema9 * 0.9995
+    # ── FINAL STABLE MODE: NO strict stacking ──────────────────────────────
+    # Fire on the CORE reversal trigger (RSI extreme/turning OR momentum flip)
+    # + a non-shrinking volume + a candle leaning the right way. Body strength,
+    # RSI depth and EMA position only ADD confidence — they don't block.
+    buy_trigger  = (rsi < 45 and rsi >= rsi_p) or mom_up
+    sell_trigger = (rsi > 55 and rsi <= rsi_p) or mom_down
 
-    # ── BUY: ALL must be true ──────────────────────────────────────────────
-    buy_checks = {
-        "RSI<40 rising":      rsi < 40 and rsi > rsi_p,
-        "momentum flipping ↑": mom_up,
-        "vol≥1.1×avg":         vol_ok,
-        "strong green body":   strong_green,
-        "price ≤ EMA9":        near_or_below_ema,
-    }
-    if all(buy_checks.values()):
-        conf = min(95, 60 + int(min(20, max(0, (vol_ratio - 1.1)) * 20)) + int(body_ratio * 10) + (10 if rsi < 30 else 0))
-        reason = (f"REVERSAL BUY: RSI {rsi:.1f}↑ (was {rsi_p:.1f}) | "
+    if buy_trigger and vol_ok and cls >= opn:
+        conf = min(95, 40 + int(min(20, max(0, (vol_ratio - 1.0)) * 20))
+                   + int(body_ratio * 15)
+                   + (10 if mom_up else 0) + (10 if rsi < 35 else 0))
+        reason = (f"REVERSAL BUY: RSI {rsi:.1f} (was {rsi_p:.1f}) | "
                   f"MACD hist {mh_p:+.5f}→{mh:+.5f} | vol {vol_ratio:.2f}×avg | "
-                  f"body {body_ratio*100:.0f}% | price {cls:.4f} ≤ EMA9 {ema9:.4f}")
+                  f"body {body_ratio*100:.0f}% | price {cls:.4f} vs EMA9 {ema9:.4f}")
         return "BUY", reason, conf
 
-    # ── SELL: ALL must be true ─────────────────────────────────────────────
-    sell_checks = {
-        "RSI>60 falling":      rsi > 60 and rsi < rsi_p,
-        "momentum flipping ↓": mom_down,
-        "vol≥1.1×avg":         vol_ok,
-        "strong red body":     strong_red,
-        "price ≥ EMA9":        stretched_above_ema,
-    }
-    if all(sell_checks.values()):
-        conf = min(95, 60 + int(min(20, max(0, (vol_ratio - 1.1)) * 20)) + int(body_ratio * 10) + (10 if rsi > 70 else 0))
-        reason = (f"REVERSAL SELL: RSI {rsi:.1f}↓ (was {rsi_p:.1f}) | "
+    if sell_trigger and vol_ok and cls <= opn:
+        conf = min(95, 40 + int(min(20, max(0, (vol_ratio - 1.0)) * 20))
+                   + int(body_ratio * 15)
+                   + (10 if mom_down else 0) + (10 if rsi > 65 else 0))
+        reason = (f"REVERSAL SELL: RSI {rsi:.1f} (was {rsi_p:.1f}) | "
                   f"MACD hist {mh_p:+.5f}→{mh:+.5f} | vol {vol_ratio:.2f}×avg | "
-                  f"body {body_ratio*100:.0f}% | price {cls:.4f} ≥ EMA9 {ema9:.4f}")
+                  f"body {body_ratio*100:.0f}% | price {cls:.4f} vs EMA9 {ema9:.4f}")
         return "SELL", reason, conf
 
-    # Diagnostic HOLD — show which gate(s) failed for the closer side.
-    side, checks = ("BUY", buy_checks) if rsi <= 50 else ("SELL", sell_checks)
-    failed = [name for name, ok in checks.items() if not ok]
-    return "HOLD", f"no {side} (failed: {', '.join(failed)})", 0
+    # Diagnostic HOLD — explain why no trigger fired.
+    side = "BUY" if rsi <= 50 else "SELL"
+    bits = [f"vol {vol_ratio:.2f}× ({'ok' if vol_ok else '<1.0'})",
+            f"RSI {rsi:.1f}", f"mom_up={mom_up} mom_down={mom_down}",
+            f"candle {'green' if cls >= opn else 'red'}"]
+    return "HOLD", f"no {side} trigger ({', '.join(bits)})", 0
 
 
 def get_signal(df: pd.DataFrame, strategy: str, threshold: float = 0.0003) -> Tuple[str, str, int]:

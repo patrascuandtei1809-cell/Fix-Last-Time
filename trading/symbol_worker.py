@@ -68,6 +68,7 @@ class SymbolWorker:
         self._last_eval: Dict = {}
 
         # Per-symbol state
+        self._created_at:     datetime = datetime.now()  # for cold-start idle force
         self._last_trade_at:  Optional[datetime] = None
         self._last_trade_dir: Optional[str] = None
         self._session_trades: int = 0
@@ -241,14 +242,17 @@ class SymbolWorker:
         # ACTIVE SCALPER spec: "If no trade for 5–10 minutes → automatically
         # lower thresholds (be more aggressive)". Threshold is restored to its
         # base value as soon as a new trade fires (self._last_trade_at update).
-        _mins_idle = None
-        if self._last_trade_at is not None:
-            _mins_idle = (datetime.now() - self._last_trade_at).total_seconds() / 60.0
+        # FINAL STABLE MODE: measure idle from the LAST trade, or — if this
+        # worker has never traded — from when it was created, so the 10-min
+        # "force activity" rule also fires on a cold start (not only after the
+        # first trade).
+        _idle_ref  = self._last_trade_at or self._created_at
+        _mins_idle = (datetime.now() - _idle_ref).total_seconds() / 60.0
         _force_idle = False
-        if _mins_idle is not None and _mins_idle >= AS_FORCE_AFTER_MIN:
+        if _mins_idle >= AS_FORCE_AFTER_MIN:
             self.threshold = self._base_threshold * 0.25   # 0.0025% — forced
             _force_idle = True
-        elif _mins_idle is not None and _mins_idle >= AS_ANTI_IDLE_MIN:
+        elif _mins_idle >= AS_ANTI_IDLE_MIN:
             self.threshold = self._base_threshold * 0.5    # 0.005%
         else:
             self.threshold = self._base_threshold
@@ -497,24 +501,35 @@ class SymbolWorker:
         # Ceiling at free_usdt * 0.75 keeps 25% reserve. $10 floor = Binance
         # Spot min notional.
         _score  = int(ev.get("score") or 0)
+        _conf   = int(ev.get("confidence") or 0)
         _regime = (ev.get("regime") or "").upper()
-        if   _score >= 80: _dyn_pct, _tier_lbl = 30.0, "excellent"
-        elif _score >= 70: _dyn_pct, _tier_lbl = 20.0, "strong"
-        elif _score >= 60: _dyn_pct, _tier_lbl = 10.0, "standard"
-        else:              _dyn_pct, _tier_lbl =  0.0, "below-min"
+        # FINAL STABLE MODE — sizing must honor the SIMPLE ENTRY rule: a trade
+        # qualifies on EITHER a strong score OR sufficient AI confidence. The
+        # score tiers below set conviction-based size; when the score is sub-60
+        # but the AI-confidence path qualified the entry (conf >= 30), we still
+        # trade at the conservative base size instead of hard-blocking.
+        # Path-B floor = the effective threshold the orchestrator used to
+        # qualify this winner (anti-idle may have lowered it below 50). Falls
+        # back to 50 (MIN_SCORE) for any direct/legacy caller.
+        _score_floor = int(ev.get("score_threshold") or 50)
+        if   _score >= 80:           _dyn_pct, _tier_lbl = 30.0, "excellent"
+        elif _score >= 70:           _dyn_pct, _tier_lbl = 20.0, "strong"
+        elif _score >= 60:           _dyn_pct, _tier_lbl = 10.0, "standard"
+        elif _score >= _score_floor: _dyn_pct, _tier_lbl = 10.0, "score-min"      # path B
+        elif _conf  >= 30:           _dyn_pct, _tier_lbl = 10.0, "ai-confidence"  # path A
+        else:                        _dyn_pct, _tier_lbl =  0.0, "below-min"
         if _regime == "VOLATILE" and _dyn_pct > 0:
             _dyn_pct *= 0.75
             _tier_lbl += "-vol"
         print(f"[BOT] {self.symbol} size tier={_tier_lbl} score={_score} "
-              f"regime={_regime} → {_dyn_pct:.1f}% of free USDT",
+              f"conf={_conf} regime={_regime} → {_dyn_pct:.1f}% of free USDT",
               flush=True)
-        # SMART AI SCALPING BOT: absolute tiers ONLY — no legacy fallback.
-        # If score < 60 we MUST NOT trade (orchestrator already filters at the
-        # threshold gate, but anti-idle can lower threshold to 55 → still
-        # block here so we never enter on a sub-spec score).
+        # Block ONLY if neither entry path qualifies (score<50 AND conf<30) —
+        # exactly matching the orchestrator's SIMPLE ENTRY rule, so a winner
+        # can never be qualified upstream then blocked here.
         if _dyn_pct <= 0:
-            msg = (f"score={_score} < 60 — below SMART AI min tier "
-                   f"(anti-idle threshold={_score})")
+            msg = (f"score={_score} < {_score_floor} AND conf={_conf} < 30 — "
+                   f"neither entry path qualifies")
             print(f"[BOT] {self.symbol} blocked reason={msg} (sizing gate)",
                   flush=True)
             self._on_state(self.symbol, block_reason=msg)

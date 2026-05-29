@@ -443,13 +443,14 @@ class TradingBot:
         # truly motionless market HOLDs rather than forcing a low-quality
         # entry. GPT runs as a GLOBAL ANALYST every cycle (≥1 candidate) and
         # can veto with NO_TRADE.
-        # FIX FINAL (May 29 2026): loosened so the bot actually trades. GPT is a
-        # filter that rejects only obviously-bad setups, NOT a gatekeeper.
-        self.score_threshold_base: int = 50   # minimum score to trade
+        # FINAL STABLE MODE (May 29 2026): make the bot ACT. A candidate now
+        # qualifies on EITHER score>=threshold OR AI confidence>=floor (see the
+        # qualified filter below) — not both. GPT is advisory only.
+        self.score_threshold_base: int = 50   # path B: score-based entry
         self.score_threshold:      int = 50   # current threshold (anti-idle lowers it)
         self.score_threshold_floor: int = 40  # anti-idle never drops below this
-        self.confidence_floor:     int = 50   # min worker confidence to qualify
-        self.gpt_prob_floor:       int = 50   # min GPT probability (filter, not predictor)
+        self.confidence_floor:     int = 30   # path A: AI-confidence entry
+        self.gpt_prob_floor:       int = 50   # GPT advisory only (no hard veto)
         self.global_throttle_sec:   int = 5   # min seconds between any 2 new trades
         self._last_global_trade_at: float = 0.0   # unix seconds
         # Candidate queue — workers append their evaluation here via on_candidate;
@@ -605,11 +606,14 @@ class TradingBot:
                 f"({c.get('signal','?')[0]})"
                 for c in cands)
 
-            # SMART ACTIVE SCALPER filter: signal + score + confidence floors.
+            # FINAL STABLE MODE — SIMPLE ENTRY RULE: a candidate qualifies on a
+            # directional signal AND (score>=threshold OR AI confidence>=floor).
+            # Either path is enough — we do NOT require both. Strategy HOLD is
+            # the only hard block (no direction to trade).
             qualified = [c for c in cands
                          if c.get("signal") in ("BUY", "SELL")
-                         and int(c.get("score", 0))      >= self.score_threshold
-                         and int(c.get("confidence", 0)) >= self.confidence_floor]
+                         and (int(c.get("score", 0))      >= self.score_threshold
+                              or int(c.get("confidence", 0)) >= self.confidence_floor)]
             qualified.sort(key=lambda c: (int(c.get("score", 0)),
                                           int(c.get("confidence", 0))),
                            reverse=True)
@@ -660,30 +664,25 @@ class TradingBot:
                             _gsym = _gd.get("symbol", "NONE")
                             _gdir = _gd.get("direction", "NONE")
                             _gprob = int(_gd.get("probability", 0))
-                            if _act == "NO_TRADE":
-                                gpt_block = (f"GPT NO_TRADE "
+                            # FINAL STABLE MODE: GPT is ADVISORY. It may reject
+                            # ONLY an obviously-bad setup — i.e. it explicitly
+                            # flags OUR winner symbol as NO_TRADE. Symbol /
+                            # direction disagreement or a low probability NO
+                            # LONGER vetoes the trade (GPT must not block all
+                            # trades). Local AI confidence + score already
+                            # qualified the winner.
+                            if _act == "NO_TRADE" and _gsym == winner["symbol"]:
+                                gpt_block = (f"GPT NO_TRADE on winner "
+                                             f"{_gsym} "
                                              f"({_gd.get('reason','')[:80]})")
                                 winner = None
-                            elif _gsym != winner["symbol"]:
-                                gpt_block = (f"GPT picked {_gsym} "
-                                             f"(prob={_gprob}) ≠ score winner "
-                                             f"{winner['symbol']}")
-                                winner = None
-                            elif _gdir != winner.get("signal"):
-                                gpt_block = (f"GPT direction {_gdir} ≠ "
-                                             f"winner signal "
-                                             f"{winner.get('signal')}")
-                                winner = None
-                            elif _gprob < self.gpt_prob_floor:
-                                gpt_block = (f"GPT prob {_gprob} < "
-                                             f"{self.gpt_prob_floor} for "
-                                             f"{_gsym}")
-                                winner = None
                             else:
-                                print(f"[GPT] ✓ {_gsym} {_gdir} "
-                                      f"prob={_gprob} risk="
-                                      f"{_gd.get('risk_level','?')} "
-                                      f"({_gd.get('reason','')[:80]})",
+                                print(f"[GPT] advisory {_act} pick={_gsym} "
+                                      f"{_gdir} prob={_gprob} risk="
+                                      f"{_gd.get('risk_level','?')} → "
+                                      f"proceeding with {winner['symbol']} "
+                                      f"{winner.get('signal')} "
+                                      f"({_gd.get('reason','')[:60]})",
                                       flush=True)
                 except Exception as _re:
                     print(f"[GPT] analyst skipped: {_re}", flush=True)
@@ -700,8 +699,8 @@ class TradingBot:
                       flush=True)
             elif winner is None:
                 _why = (f"GPT veto: {gpt_block}" if gpt_block
-                        else f"all < threshold {self.score_threshold} "
-                             f"or conf < {self.confidence_floor}")
+                        else f"no candidate met score≥{self.score_threshold} "
+                             f"OR conf≥{self.confidence_floor}")
                 print(f"[RANK] {_rank_bits} → HOLD ({_why}) "
                       f"throttle={throttle_left}s open={len(all_open)}/{cap}",
                       flush=True)
@@ -737,6 +736,11 @@ class TradingBot:
                             w = _w; break
                 if w is not None:
                     try:
+                        # Stamp the effective score threshold used to qualify
+                        # this winner (anti-idle may have lowered it) so the
+                        # sizing gate uses the SAME floor — never qualify here
+                        # then block at sizing.
+                        winner["score_threshold"] = int(self.score_threshold)
                         w.execute_entry(winner, all_open, global_gate)
                     except Exception as exc:
                         log_activity("ERROR",
