@@ -12,6 +12,34 @@ import sys
 
 _TZ = ZoneInfo("Europe/London")
 
+
+def _to_london(val):
+    """Coerce any stored timestamp (ISO string or datetime, naive=server-local
+    or tz-aware) to an Europe/London-aware datetime. DISPLAY-ONLY — never alters
+    stored data or backend behavior. A naive value is assumed to be in the
+    server's local clock (same clock the bot used to write it) and converted to
+    London via .astimezone(_TZ), so this is correct regardless of the server tz."""
+    if val is None or val == "":
+        return None
+    dt = val
+    if isinstance(dt, str):
+        try:
+            dt = datetime.fromisoformat(dt)
+        except Exception:
+            return None
+    if not isinstance(dt, datetime):
+        return None
+    try:
+        return dt.astimezone(_TZ)
+    except Exception:
+        return dt
+
+
+def _fmt_london(val, fmt="%H:%M:%S"):
+    """Format any stored timestamp as Europe/London wall-clock text."""
+    dt = _to_london(val)
+    return dt.strftime(fmt) if dt else "—"
+
 # ── Path ──────────────────────────────────────────────────────────────────────
 _DIR = os.path.dirname(os.path.abspath(__file__))
 if _DIR not in sys.path:
@@ -1038,7 +1066,7 @@ l_str     = _fmt_p(low_24h, 2)  if low_24h  else "—"
 
 _upd_at  = get_shared_updated_at(symbol=st.session_state.symbol) if bot_running else None
 _now_tz  = datetime.now(_TZ)
-_upd_str = _upd_at.strftime("%H:%M:%S") if _upd_at else _now_tz.strftime("%H:%M:%S")
+_upd_str = _fmt_london(_upd_at) if _upd_at else _now_tz.strftime("%H:%M:%S")
 _src_label = {"bot-live": "bot-live", "auth": "auth-live", "public": "public"}.get(chart_source, "—")
 
 conn_pill = ('<span class="pill p-green"><span class="dot dot-g"></span>CONNECTED</span>'
@@ -1272,8 +1300,8 @@ else:                 _conf_col = "#6e7681"
 # Last bot check time (London) + seconds elapsed
 _last_tick = get_shared_last_tick(symbol=st.session_state.symbol)
 if _last_tick:
-    _tick_str = _last_tick.strftime("%H:%M:%S")
-    _elapsed  = int((datetime.now() - _last_tick).total_seconds())
+    _tick_str = _fmt_london(_last_tick)
+    _elapsed  = int((datetime.now(_TZ) - _to_london(_last_tick)).total_seconds())
     _tick_disp = f"{_tick_str} <span style=\"opacity:.55;\">· {_elapsed}s ago</span>"
 else:
     _tick_disp = "—"
@@ -2339,15 +2367,15 @@ with st.container():
         )
         # Anchor point: first trade open time, or today's start if no trades yet
         if _spark_trades:
-            _t0 = datetime.fromisoformat(_spark_trades[0].get("open_time") or _spark_trades[0]["close_time"])
+            _t0 = _to_london(_spark_trades[0].get("open_time") or _spark_trades[0]["close_time"])
         else:
-            _t0 = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            _t0 = datetime.now(_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
         _eq_times  = [_t0]
         _eq_vals   = [0.0]
         if _spark_trades:
             for _t in _spark_trades:
                 _cum += _t.get("profit_loss") or 0
-                _eq_times.append(datetime.fromisoformat(_t["close_time"]))
+                _eq_times.append(_to_london(_t["close_time"]))
                 _eq_vals.append(round(_cum, 4))
             # extend to now with current unrealized P&L
             _unreal = sum(
@@ -2357,7 +2385,7 @@ with st.container():
                 for ot in open_trades
                 if live_price and ot.get("entry_price")
             )
-            _eq_times.append(datetime.now())
+            _eq_times.append(datetime.now(_TZ))
             _eq_vals.append(round(_cum + _unreal, 4))
 
         _spark_color = "#26a69a" if _eq_vals[-1] >= 0 else "#ef5350"
@@ -3608,7 +3636,7 @@ with st.container():
             else:
                 lines = []
                 for entry in reversed(activity[-300:]):
-                    ts  = (entry.get("time") or "")[:19].replace("T"," ")
+                    ts  = _fmt_london(entry.get("time"), "%Y-%m-%d %H:%M:%S")
                     lvl = entry.get("level","INFO")
                     msg = (entry.get("message","")
                            .replace("&","&amp;").replace("<","&lt;").replace(">","&gt;"))
@@ -3642,7 +3670,7 @@ with st.container():
                      "P&L %": round(t.get("profit_loss_pct") or 0, 2),
                      "Strategy": t.get("strategy","—"),
                      "Type": "🤖" if t.get("type")=="bot" else "👤",
-                     "Closed": (t.get("close_time") or "")[:16].replace("T"," ")}
+                     "Closed": _fmt_london(t.get("close_time"), "%Y-%m-%d %H:%M")}
                     for t in closed_trades
                 ]
                 st.dataframe(pd.DataFrame(pnl_data), width="stretch",
