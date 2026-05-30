@@ -624,14 +624,27 @@ class SymbolWorker:
             self._on_state(self.symbol, block_reason=msg)
             return
         invested = free_usdt * _dyn_pct / 100.0
-        invested = min(invested, free_usdt * 0.75)
-        # Hard floor at Binance minimum
-        if invested < 10.0:
-            msg = (f"sizing ${invested:.2f} < $10 Binance min (free USDT "
-                   f"${free_usdt:.2f} too low for {_dyn_pct:.0f}% sizing)")
-            print(f"[BOT] {self.symbol} blocked reason={msg} (balance gate)", flush=True)
-            self._on_state(self.symbol, block_reason=msg)
-            return
+        _ceiling = free_usdt * 0.75   # keep a 25% reserve
+        invested = min(invested, _ceiling)
+        # $10 = Binance Spot min notional. Per spec (ACTIVE SCALPER) the size is
+        # FLOORED UP to the minimum so small accounts still trade — NOT blocked.
+        # Only block if even the 25%-reserve ceiling can't cover $10 (account is
+        # genuinely too small). This is what kept a ~$66 account from EVER
+        # trading: 10% of $66 = $6.60 < $10, so every tick was blocked instead of
+        # flooring up to a $10 order.
+        MIN_NOTIONAL = 10.0
+        if invested < MIN_NOTIONAL:
+            if _ceiling >= MIN_NOTIONAL:
+                print(f"[BOT] {self.symbol} sizing ${invested:.2f} < "
+                      f"${MIN_NOTIONAL:.0f} min → floored up to ${MIN_NOTIONAL:.0f} "
+                      f"(free ${free_usdt:.2f})", flush=True)
+                invested = MIN_NOTIONAL
+            else:
+                msg = (f"free USDT ${free_usdt:.2f} too small — even the "
+                       f"25%-reserve ceiling ${_ceiling:.2f} < $10 Binance min")
+                print(f"[BOT] {self.symbol} blocked reason={msg} (balance gate)", flush=True)
+                self._on_state(self.symbol, block_reason=msg)
+                return
         invested = round(invested, 2)
 
         # 7. Global gate
