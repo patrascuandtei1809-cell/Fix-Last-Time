@@ -3133,19 +3133,29 @@ with st.container():
             # _view_end = latest candle; _view_start = `window` hours back but
             # never earlier than the oldest candle we hold.
             _win_hours = float(st.session_state[_win_key])
+            # Chart timezone — MUST be defined here unconditionally. The trade-
+            # marker loop below calls _to_xtz() for EVERY marker, and _to_xtz reads
+            # `_xtz`. The bounded-window branch used to skip setting it (only the
+            # no-data else-branch did), so on a normal chart every marker raised
+            # NameError and was silently dropped by the per-trade try/except —
+            # which is exactly why BUY/SELL markers stopped showing on the chart.
+            try:
+                _xtz = df_chart["open_time"].dt.tz
+            except Exception:
+                _xtz = None
             try:
                 _data_start = df_chart["open_time"].min()
                 _data_end   = df_chart["open_time"].max()
             except Exception:
                 _data_start = _data_end = None
             if _data_start is not None and _data_end is not None:
-                _view_end   = _data_end
-                _view_start = max(_data_start, _view_end - pd.Timedelta(hours=_win_hours))
+                # Pad the right edge slightly past the last candle so a trade placed
+                # RIGHT NOW (timestamped a few seconds-to-a-minute after the last
+                # candle's open_time) is not clipped off the right edge.
+                _view_end   = _data_end + max(
+                    pd.Timedelta(hours=_win_hours) * 0.05, pd.Timedelta(minutes=1))
+                _view_start = max(_data_start, _data_end - pd.Timedelta(hours=_win_hours))
             else:
-                try:
-                    _xtz = df_chart["open_time"].dt.tz
-                except Exception:
-                    _xtz = None
                 _view_end   = pd.Timestamp.now(tz=_xtz) if _xtz is not None else pd.Timestamp.now()
                 _view_start = _view_end - pd.Timedelta(hours=_win_hours)
             # Force Plotly to honor our explicit bounded range on EVERY render.

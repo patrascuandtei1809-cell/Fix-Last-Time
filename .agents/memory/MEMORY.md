@@ -6,3 +6,4 @@
 - [Streamlit cache_data args](streamlit-cache-data-args.md) — leading-underscore args are treated as unhashed; don't `_`-prefix cache params or all keys collapse.
 - [Plotly zoom control](streamlit-plotly-zoom-persistence.md) — stable uirevision makes a scroll-zoom STICK and ignores explicit range; bump uirevision every render + bound window to candle data for a deterministic, button-controlled view.
 - [st_autorefresh placement](streamlit-autorefresh-placement.md) — render st_autorefresh EARLY, not as the last element, or its iframe re-mounts at page bottom and the browser scrolls down every tick.
+- [Silent except dropped markers](silent-except-continue-dropped-markers.md) — a per-item try/except:continue ate a NameError (conditionally-defined `_xtz`) and dropped ALL chart markers; define shared render vars unconditionally before any branch.
