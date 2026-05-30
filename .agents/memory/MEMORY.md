@@ -1,2 +1,5 @@
 - [Entry gate invariant](entry-gate-invariant.md) — orchestrator qualification and execute_entry sizing must use the SAME entry rule, or a winner gets qualified then silently blocked at sizing.
 - [Weighted engine fail-closed](weighted-engine-fail-closed.md) — the canonical edge gate must fail closed on exception/import error; `float(np.nan)` doesn't raise, use `np.isfinite`.
+- [Settings persistence](alphatrade-settings-persistence.md) — three layers must agree; COMMITTED settings.json is the droplet's de-facto config (restart-bot.sh stashes the live file).
+- [Streamlit cache_data args](streamlit-cache-data-args.md) — leading-underscore args are treated as unhashed; don't `_`-prefix cache params or all keys collapse.
+- [Plotly zoom persistence](streamlit-plotly-zoom-persistence.md) — gate axis range on an interaction nonce so auto-refresh doesn't fight uirevision; no-flash vs auto-follow is a hard tradeoff.

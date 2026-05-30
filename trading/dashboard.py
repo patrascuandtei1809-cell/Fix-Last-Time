@@ -3059,6 +3059,14 @@ with st.container():
             _nonce_key = "chart_view_nonce"
             if _win_key   not in st.session_state: st.session_state[_win_key]   = DEFAULT_WINDOW_HOURS
             if _nonce_key not in st.session_state: st.session_state[_nonce_key] = 0
+            # Apply an explicit axis window ONLY when the user pressed a zoom/reset
+            # button (nonce bumped) or on the very first render. On plain auto-
+            # refresh ticks we leave the axes untouched so Plotly's uirevision
+            # preserves the user's current zoom/pan instead of snapping back to
+            # the default window every few seconds. This also removes the per-tick
+            # axis relayout that caused the visible "flash".
+            _applied_key = "chart_view_applied_nonce"
+            _force_view  = st.session_state.get(_applied_key) != st.session_state[_nonce_key]
 
             _c1,_c2,_c3,_c4,_c5,_c6,_c7,_csp,_zi,_zo,_zr = st.columns(
                 [0.07,0.07,0.07,0.07,0.07,0.09,0.09, 0.05, 0.12,0.12,0.18]
@@ -3398,18 +3406,21 @@ with st.container():
             )
             # X-axis: shared, sparse grid, scroll/pan unlocked, default 4h window
             for r in range(1, n_rows + 1):
-                fig.update_xaxes(
+                _xk = dict(
                     gridcolor=G, gridwidth=1, zerolinecolor=G_ZERO,
                     showspikes=True, spikecolor="#484f58",
                     spikethickness=1, spikedash="dot", spikemode="across",
                     tickfont=dict(size=10, color="#6e7681"),
                     tickformat="%H:%M\n%b-%d",
                     hoverformat="%Y-%m-%d %H:%M:%S",
-                    range=[_view_start, _view_end],
-                    fixedrange=False, autorange=False,
+                    fixedrange=False,
                     nticks=8,
                     row=r, col=1,
                 )
+                if _force_view:
+                    _xk["range"]     = [_view_start, _view_end]
+                    _xk["autorange"] = False
+                fig.update_xaxes(**_xk)
             # Price Y-axis — auto-fit to VISIBLE candles only (not full history),
             # with 3% padding above/below so wicks don't kiss the frame.
             try:
@@ -3441,11 +3452,13 @@ with st.container():
                 fixedrange=False,
                 row=_row["price"], col=1,
             )
-            if _y_range is not None:
+            if _force_view and _y_range is not None:
                 _price_yaxis_kwargs["range"]     = _y_range
                 _price_yaxis_kwargs["autorange"] = False
-            else:
+            elif _force_view:
                 _price_yaxis_kwargs["autorange"] = True
+            # When not forcing a view, leave range/autorange unset so uirevision
+            # keeps the user's manually-zoomed price axis across auto-refreshes.
             fig.update_yaxes(**_price_yaxis_kwargs)
             # RSI / Stoch Y-axes: pinned 0–100, sparse ticks
             for _p in ("rsi", "stoch"):
@@ -3480,6 +3493,9 @@ with st.container():
                     "modeBarButtonsToRemove": ["select2d", "lasso2d", "toImage"],
                 },
             )
+            # Mark this view-nonce as applied so subsequent auto-refresh ticks
+            # don't re-snap the axes — uirevision then preserves the user's zoom.
+            st.session_state[_applied_key] = st.session_state[_nonce_key]
         else:
             with st.spinner("Loading chart data from Binance…"):
                 st.info("Chart will appear here once data loads. No API key required.")

@@ -31,3 +31,23 @@ auto-resumed worker ticks with stale/default risk for the first cycle.
 **How to apply:** when adding a new persisted setting, add it to all three
 layers above, confirm the force-snap block does not overwrite it, and if it
 feeds the running bot, make sure it's synced before auto-resume.
+
+## Droplet de-facto config = the COMMITTED settings.json
+
+`trading/data/settings.json` is git-tracked, and the production droplet's
+`restart-bot.sh` runs `git stash` on it before `git pull` (and does not pop it
+back). Net effect: **on every droplet restart the operator's in-UI settings are
+discarded and the COMMITTED settings.json values become the live config.** So
+if the operator complains a setting "always resets" (e.g. max_open_trades back
+to 1, or the bot trading too rarely), check the committed values in
+settings.json first — fixing the committed file is what actually changes droplet
+behavior. The in-app sliders hold fine within a running session; the reset is
+restart-driven.
+
+**Why:** runtime state should not really be version-controlled; until it is
+untracked + gitignored, the committed file is authoritative on the droplet.
+
+**How to apply:** to change effective droplet defaults, edit the committed
+settings.json (keep it consistent with the "Reset to … defaults" button, which
+represents the operator's intended config). A permanent fix is to untrack it
+(`git rm --cached`) + gitignore so UI changes survive restarts.
