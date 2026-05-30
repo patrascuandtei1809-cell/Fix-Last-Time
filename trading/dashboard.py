@@ -3117,12 +3117,33 @@ with st.container():
                     st.session_state[_nonce_key] += 1
                     st.rerun()
 
+            # Bound the visible window to the candle data we actually have, so
+            # zooming out reveals REAL price history (max ~the fetched range)
+            # instead of empty space with old trade markers floating in it.
+            # _view_end = latest candle; _view_start = `window` hours back but
+            # never earlier than the oldest candle we hold.
+            _win_hours = float(st.session_state[_win_key])
             try:
-                _xtz = df_chart["open_time"].dt.tz
+                _data_start = df_chart["open_time"].min()
+                _data_end   = df_chart["open_time"].max()
             except Exception:
-                _xtz = None
-            _view_end   = pd.Timestamp.now(tz=_xtz) if _xtz is not None else pd.Timestamp.now()
-            _view_start = _view_end - pd.Timedelta(hours=float(st.session_state[_win_key]))
+                _data_start = _data_end = None
+            if _data_start is not None and _data_end is not None:
+                _view_end   = _data_end
+                _view_start = max(_data_start, _view_end - pd.Timedelta(hours=_win_hours))
+            else:
+                try:
+                    _xtz = df_chart["open_time"].dt.tz
+                except Exception:
+                    _xtz = None
+                _view_end   = pd.Timestamp.now(tz=_xtz) if _xtz is not None else pd.Timestamp.now()
+                _view_start = _view_end - pd.Timedelta(hours=_win_hours)
+            # Force Plotly to honor our explicit bounded range on EVERY render.
+            # uirevision keyed on this monotonically-increasing seq defeats
+            # Plotly preserving a stale scroll/box-zoom that would otherwise leave
+            # the chart "stuck" zoomed out across auto-refreshes — the server-set
+            # window (driven by the Zoom in/out/Reset buttons) is now canonical.
+            st.session_state["_chart_render_seq"] = st.session_state.get("_chart_render_seq", 0) + 1
 
             # ── Dynamic subplot layout based on enabled indicators ──────────────
             _panels = ["price"]
@@ -3400,7 +3421,7 @@ with st.container():
                 uirevision=f"alphatrade-main-chart-"
                            f"{st.session_state.symbol}-"
                            f"{st.session_state.interval}-"
-                           f"{st.session_state[_nonce_key]}",
+                           f"{st.session_state['_chart_render_seq']}",
             )
             # X-axis: shared, sparse grid, scroll/pan unlocked, default 4h window
             for r in range(1, n_rows + 1):
