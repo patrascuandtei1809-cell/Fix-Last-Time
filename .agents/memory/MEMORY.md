@@ -1,5 +1,6 @@
 - [Entry gate invariant](entry-gate-invariant.md) — orchestrator qualification and execute_entry sizing must use the SAME entry rule, or a winner gets qualified then silently blocked at sizing.
 - [Min-notional floor](alphatrade-min-notional-floor.md) — sizing must FLOOR UP to Binance $10 min (not block), or small accounts (~$66 @ 10%=$6.60) never trade; decision engine is testable on geo-blocked Replit with synthetic OHLCV.
+- [Orchestrator resilience](alphatrade-orchestrator-resilience.md) — trading daemon thread must self-heal via a supervisor try/except loop; never rely on a UI rerun/watchdog to revive a dead bot thread.
 - [Weighted engine fail-closed](weighted-engine-fail-closed.md) — the canonical edge gate must fail closed on exception/import error; `float(np.nan)` doesn't raise, use `np.isfinite`.
 - [Settings persistence](alphatrade-settings-persistence.md) — three layers must agree; COMMITTED settings.json is the droplet's de-facto config (restart-bot.sh stashes the live file).
 - [Streamlit cache_data args](streamlit-cache-data-args.md) — leading-underscore args are treated as unhashed; don't `_`-prefix cache params or all keys collapse.

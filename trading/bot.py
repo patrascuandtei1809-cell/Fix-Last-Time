@@ -511,6 +511,46 @@ class TradingBot:
 
     # ── Main loop ────────────────────────────────────────────────────────────
     def _loop(self):
+        """Crash-PROOF thread target. If a single orchestrator cycle ever raises
+        an unhandled exception (e.g. a transient data/IO error in the
+        global-state refresh, the winner path, or a GPT/network hiccup), the
+        thread MUST NOT die — otherwise trading silently stops and the operator
+        is forced to restart the whole process (`restart-bot.sh`). We catch
+        everything, log it, pause briefly, and re-enter the cycle. The ONLY ways
+        the thread exits are an operator Stop or the daily-loss breaker (both set
+        self._running=False)."""
+        _last_alert_sig = None
+        _last_alert_at  = 0.0
+        while self._running:
+            try:
+                self._inner_loop()
+            except Exception as _exc:
+                # The recovery path itself MUST NOT raise — if it did, the
+                # supervisor thread would die and defeat the whole point. Wrap
+                # every side effect defensively.
+                try:
+                    print(f"[BOT] orchestrator crashed — auto-recovering in 3s: "
+                          f"{_exc}", flush=True)
+                    log_activity("ERROR",
+                        f"Orchestrator crashed — auto-recovering in 3s: {_exc}")
+                    # Throttle alerts: one per exception signature per 5 min so a
+                    # persistent fault doesn't spam Telegram/activity every 3s.
+                    _sig = f"{type(_exc).__name__}:{str(_exc)[:80]}"
+                    _now = time.time()
+                    if _sig != _last_alert_sig or (_now - _last_alert_at) >= 300:
+                        _tg_dispatch("error_alert",
+                            f"Orchestrator crashed, auto-recovering: {_exc}")
+                        _last_alert_sig = _sig
+                        _last_alert_at  = _now
+                except Exception:
+                    pass
+                for _ in range(3):
+                    if not self._running:
+                        break
+                    time.sleep(1)
+        log_activity("INFO", "🛑 Orchestrator thread fully exited")
+
+    def _inner_loop(self):
         log_activity("INFO",
             f"📡 Orchestrator alive — {len(self.workers)} workers, "
             f"tick every {self.check_every}s")
