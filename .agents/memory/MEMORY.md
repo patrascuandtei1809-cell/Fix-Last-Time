@@ -5,3 +5,4 @@
 - [Settings persistence](alphatrade-settings-persistence.md) — three layers must agree; COMMITTED settings.json is the droplet's de-facto config (restart-bot.sh stashes the live file).
 - [Streamlit cache_data args](streamlit-cache-data-args.md) — leading-underscore args are treated as unhashed; don't `_`-prefix cache params or all keys collapse.
 - [Plotly zoom control](streamlit-plotly-zoom-persistence.md) — stable uirevision makes a scroll-zoom STICK and ignores explicit range; bump uirevision every render + bound window to candle data for a deterministic, button-controlled view.
+- [st_autorefresh placement](streamlit-autorefresh-placement.md) — render st_autorefresh EARLY, not as the last element, or its iframe re-mounts at page bottom and the browser scrolls down every tick.

@@ -635,6 +635,16 @@ def _init():
 
 _init()
 
+# ── Auto-refresh (silent JS-driven, no page-stall flash) ─────────────────────
+# streamlit-autorefresh = JS setInterval → triggers rerun WITHOUT blocking python.
+# Minimum 5s. MUST render EARLY (right after _init populates refresh_secs): if the
+# autorefresh iframe is the LAST element on the page, the browser scrolls down to
+# it on every refresh → the page "jumps to the bottom" on its own. Rendering it at
+# the top keeps the scroll position stable.
+from streamlit_autorefresh import st_autorefresh
+_refresh_ms = max(5, int(st.session_state.get("refresh_secs", 5))) * 1000
+st_autorefresh(interval=_refresh_ms, key="alphatrade_autorefresh", limit=None)
+
 
 def _maybe_resume_bot():
     """If `bot_was_running` was persisted (user had bot ON before the server
@@ -3773,11 +3783,3 @@ if st.session_state.get("_last_settings_hash") != _snap_hash:
         if st.session_state.get("_settings_initial_saved"):
             st.toast("✅ Settings saved", icon="💾")
         st.session_state._settings_initial_saved = True
-
-# ── Auto-refresh (silent JS-driven, no page-stall flash) ─────────────────────
-# streamlit-autorefresh = JS setInterval → triggers rerun WITHOUT blocking python.
-# Minimum 5s. Combined with uirevision + stable plotly keys + anti-flicker CSS
-# (status widgets hidden), this gives smooth updates with no visible flash.
-from streamlit_autorefresh import st_autorefresh
-_refresh_ms = max(5, int(st.session_state.get("refresh_secs", 5))) * 1000
-st_autorefresh(interval=_refresh_ms, key="alphatrade_autorefresh", limit=None)
