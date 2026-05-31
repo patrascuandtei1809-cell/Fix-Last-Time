@@ -3709,6 +3709,101 @@ with st.container():
             _sc(s4, "Win Rate",      f"{win_rate:.1f}%", "up" if win_rate >= 50 else "dn")
             _sc(s5, "Total P&L",     _fmt_pnl(total_pnl), "up" if total_pnl >= 0 else "dn")
 
+            # ── 💸 Real P&L after ESTIMATED fees ─────────────────────────────
+            # Binance spot fees are NOT recorded per trade, and the stored
+            # profit_loss is the raw price difference (GROSS). A scalper pays a
+            # fee on BOTH the entry and the exit, so true (net) results can be
+            # far worse than the gross numbers above. This panel estimates fees
+            # at the rate below so the operator sees net reality.
+            st.markdown('<div class="sec-lbl" style="margin-top:18px;">💸 Real P&L — after estimated fees</div>', unsafe_allow_html=True)
+            if "fee_rate_pct" not in st.session_state:
+                st.session_state.fee_rate_pct = 0.10
+            fee_rate_pct = st.number_input(
+                "Binance fee per side (%) — 0.10 = standard spot taker · 0.075 = with BNB discount",
+                min_value=0.0, max_value=1.0, step=0.005, format="%.3f",
+                key="fee_rate_pct",
+            )
+            _fr = fee_rate_pct / 100.0
+            if not closed_trades:
+                st.markdown('<div style="background:#0d1117;border:1px solid #1e2736;border-radius:6px;padding:14px;color:#484f58;">No closed trades yet — net P&L appears once trades close.</div>', unsafe_allow_html=True)
+            else:
+                def _finite(x):
+                    try:
+                        v = float(x)
+                        return v if np.isfinite(v) else 0.0
+                    except (TypeError, ValueError):
+                        return 0.0
+                _gross = 0.0; _fees = 0.0; _net_wins = 0; _bad_rows = 0
+                _net_gross_pnls = []   # per-trade gross used for win/loss stats
+                def _is_bad(x):
+                    if x is None:
+                        return False   # missing is treated as 0, not "bad data"
+                    try:
+                        return not np.isfinite(float(x))
+                    except (TypeError, ValueError):
+                        return True
+                for t in closed_trades:
+                    raw_g = t.get("profit_loss")
+                    if _is_bad(raw_g):
+                        _bad_rows += 1
+                    g    = _finite(raw_g)
+                    qty  = _finite(t.get("quantity"))
+                    entry_notional = _finite(t.get("invested"))
+                    xp   = _finite(t.get("exit_price"))
+                    exit_notional  = (xp * qty) if (xp > 0 and qty > 0) else entry_notional
+                    fee  = (entry_notional + exit_notional) * _fr
+                    _gross += g; _fees += fee
+                    _net_gross_pnls.append(g)
+                    if (g - fee) > 0:          # strict: a net-zero trade is NOT a win
+                        _net_wins += 1
+                _net    = _gross - _fees
+                _n      = len(closed_trades)
+                _net_wr = (_net_wins / _n * 100) if _n else 0.0
+                # Data-driven breakeven win rate from avg gross win/loss + avg fee.
+                _g_wins = [p for p in _net_gross_pnls if p > 0]
+                _g_loss = [-p for p in _net_gross_pnls if p < 0]
+                _avg_w  = (sum(_g_wins) / len(_g_wins)) if _g_wins else 0.0
+                _avg_l  = (sum(_g_loss) / len(_g_loss)) if _g_loss else 0.0
+                _avg_fee = (_fees / _n) if _n else 0.0
+                _be_ok  = (_avg_w + _avg_l) > 0
+                _be_wr  = (((_avg_l + _avg_fee) / (_avg_w + _avg_l)) * 100) if _be_ok else 0.0
+                _be_str = f"{_be_wr:.1f}%" if _be_ok else "N/A"
+
+                f1, f2, f3, f4, f5 = st.columns(5)
+                _sc(f1, "Gross P&L",       _fmt_pnl(_gross),  "up" if _gross >= 0 else "dn")
+                _sc(f2, "Est. Fees",       f"-${_fees:.4f}",  "dn")
+                _sc(f3, "NET P&L",         _fmt_pnl(_net),    "up" if _net >= 0 else "dn")
+                _sc(f4, "Net Win Rate",    f"{_net_wr:.1f}%", "up" if _net_wr >= 50 else "dn")
+                _sc(f5, "Breakeven Needs", _be_str,           ("dn" if (_be_ok and _be_wr > _net_wr) else "up"))
+
+                if _gross > 0 and _net < 0:
+                    _verdict = (f"Your trades made <b>+${_gross:.2f} gross</b>, but fees of "
+                                f"<b>${_fees:.2f}</b> turned that into "
+                                f"<b style='color:#f85149;'>−${abs(_net):.2f} net</b>. "
+                                f"Fees alone wiped out the profit.")
+                    _vc = "#f85149"
+                elif _net < 0:
+                    _verdict = (f"Net loss of <b style='color:#f85149;'>−${abs(_net):.2f}</b> "
+                                f"(gross {_fmt_pnl(_gross)} minus <b>${_fees:.2f}</b> fees).")
+                    _vc = "#f85149"
+                else:
+                    _verdict = (f"Net profit of <b style='color:#3fb950;'>+${_net:.2f}</b> "
+                                f"after <b>${_fees:.2f}</b> in fees.")
+                    _vc = "#3fb950"
+                if _be_ok:
+                    _verdict += (f" At this fee rate you need a <b>{_be_wr:.1f}%</b> win rate just to "
+                                 f"break even — you're currently at <b>{_net_wr:.1f}%</b> net.")
+                st.markdown(
+                    f'<div style="background:#0d1117;border:1px solid {_vc}55;'
+                    f'border-left:3px solid {_vc};border-radius:6px;padding:12px 14px;'
+                    f'margin-top:10px;color:#c9d1d9;font-size:13px;line-height:1.55;">'
+                    f'{_verdict}</div>', unsafe_allow_html=True)
+                if _bad_rows:
+                    st.caption(f"⚠️ {_bad_rows} trade(s) had invalid/non-finite P&L and were "
+                               f"treated as 0 — totals may be incomplete.")
+                st.caption("⚠️ Fees are ESTIMATED — Binance commissions aren't stored per trade. "
+                           "The Gross/Total P&L numbers elsewhere on this dashboard do NOT subtract fees.")
+
             if closed_trades:
                 st.markdown('<div class="sec-lbl" style="margin-top:16px;">P&L per Closed Trade</div>', unsafe_allow_html=True)
                 pnl_data = [
