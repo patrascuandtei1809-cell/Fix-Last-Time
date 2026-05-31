@@ -989,7 +989,47 @@ for _ot in open_trades:
 total_pnl = realized_pnl + unrealized_pnl
 daily_pnl = daily_realized + unrealized_pnl  # today's realized + currently-open marks
 
-# Equity = starting capital + realized PnL + unrealized PnL
+
+@st.cache_data(ttl=15, show_spinner=False)
+def _compute_account_value(_client, bust: str) -> dict:
+    """TRUE total account value in USDT = free+locked USDT PLUS the live market
+    value of every coin held (BTC/ETH/SOL/etc). The USDT-only balance does NOT
+    include coins the bot/operator bought — that money lives in coins, not USDT,
+    which is why the dashboard could show ~$4 while the real account looked full.
+
+    `_client` is UNHASHED (leading underscore, not hashable); `bust` (api-key
+    prefix) is the hashable cache key so one account's value is never served for
+    another. Cached 15s so the 2s auto-refresh doesn't hammer the API.
+    """
+    _STABLES = {"USDT", "USDC", "BUSD", "FDUSD", "TUSD", "DAI"}
+    bals = _client.get_all_balances()  # {asset: {free, locked, total}}
+    total = 0.0
+    holdings = []
+    unpriced = []   # held coins we couldn't get a live price for (NOT counted)
+    for _asset, _b in bals.items():
+        _amt = float(_b.get("total") or 0)
+        if _amt <= 0:
+            continue
+        if _asset in _STABLES:
+            _val = _amt
+        else:
+            try:
+                _val = _amt * public_price(f"{_asset}USDT")
+            except Exception:
+                _val = 0.0   # no USDT pair / dust / transient quote failure
+        if _val > 0:
+            total += _val
+            holdings.append({"asset": _asset, "amount": _amt, "value": _val})
+        elif _asset not in _STABLES:
+            # Held a real coin but couldn't price it — flag it so the total is
+            # never silently understated (this is what confused the user before).
+            unpriced.append({"asset": _asset, "amount": _amt})
+    holdings.sort(key=lambda h: h["value"], reverse=True)
+    return {"total": total, "holdings": holdings, "unpriced": unpriced}
+
+
+# Equity = starting capital + realized PnL + unrealized PnL (fallback only —
+# overridden by the REAL Binance account value below when connected).
 equity  = st.session_state.initial_balance + realized_pnl + unrealized_pnl
 
 # LIVE Binance balance — single source of truth. No simulated/paper equity.
@@ -1012,7 +1052,27 @@ if _binance_connected:
         # Failed balance call is critical — surface it, do NOT fall back to fake equity
         balance = 0.0
 
-roi = (total_pnl / st.session_state.initial_balance * 100) if st.session_state.initial_balance else 0.0
+# ── TRUE account value: USDT + live value of ALL coin holdings ────────────────
+# This is the number that matches the Binance app. The USDT card above is only
+# the leftover cash; coins the bot bought are counted here.
+account_value_usdt = None
+account_holdings   = []
+account_unpriced   = []
+account_value_err  = None
+if _binance_connected and not binance_balance_err:
+    try:
+        _av = _compute_account_value(_cl(), (st.session_state.get("api_key") or "")[:8])
+        account_value_usdt = _av["total"]
+        account_holdings   = _av["holdings"]
+        account_unpriced   = _av.get("unpriced", [])
+    except Exception as _e:
+        account_value_err = str(_e)
+
+# REAL account value is the honest equity when connected — no fake starting capital.
+if account_value_usdt is not None:
+    equity = account_value_usdt
+
+roi = (total_pnl / equity * 100) if equity else 0.0
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ALERT DETECTION — diff against last known trade IDs
@@ -2148,6 +2208,27 @@ with st.sidebar:
         help="Bot stops opening new trades after this count. 0 = unlimited.",
     )
 
+    # ── 💰 BOT SPENDING LIMIT (fixed $) ───────────────────────────────────────
+    # The MOST of YOUR money the bot may have in open trades at once. Each new
+    # trade is sized down to fit what's left; the bot stops opening trades once
+    # it's fully used. The rest of your balance is never touched. 0 = no limit.
+    _g = st.session_state.global_risk
+    _g.max_total_exposure_usdt = st.number_input(
+        "💰 Bot spending limit (USDT)",
+        min_value=0.0, max_value=1_000_000.0,
+        value=float(getattr(_g, "max_total_exposure_usdt", 0.0) or 0.0), step=10.0,
+        help="The most of your money the bot is allowed to have in open trades "
+             "at once (across BTC/ETH/SOL, counting bot + manual positions). "
+             "Each trade is sized to fit what's left of this budget; the bot "
+             "stops opening new trades once it's fully used. 0 = no limit (the "
+             "bot can use all your available USDT).",
+    )
+    if _g.max_total_exposure_usdt > 0:
+        st.caption(f"🔒 Bot capped at **${_g.max_total_exposure_usdt:,.0f}** of "
+                   f"your money in play at once — the rest stays untouched.")
+    else:
+        st.caption("⚠️ No limit set — the bot can use ALL your available USDT.")
+
     st.markdown('<div style="height:4px;"></div>', unsafe_allow_html=True)
     # Min 0.1 + step 0.1 so PRO FAST SCALPER preset (SL 0.4 / TP 0.5) and
     # other sub-0.5% scalping setups don't trip Streamlit's value-below-min
@@ -2164,11 +2245,11 @@ with st.sidebar:
     # ── Global (account-wide) risk caps — applies across all symbols ──────────
     with st.expander("🌐 Global risk (account-wide)", expanded=False):
         g = st.session_state.global_risk
-        g.max_total_exposure_usdt = st.number_input(
-            "Max total exposure (USDT)",
-            min_value=0.0, max_value=1_000_000.0,
-            value=float(g.max_total_exposure_usdt), step=50.0,
-            help="Sum of all open positions across all symbols. 0 = no cap.",
+        st.caption(
+            "💰 Bot spending limit: "
+            + (f"**${g.max_total_exposure_usdt:,.0f}**" if g.max_total_exposure_usdt > 0
+               else "**OFF** (no limit)")
+            + " — set it above under **Risk Management → 💰 Bot spending limit**."
         )
         g.max_exposure_per_symbol_pct = st.slider(
             "Max % of exposure in one symbol",
@@ -2329,6 +2410,14 @@ with st.container():
         _bin_free_disp  = "ERR"  if binance_balance_err else f"${binance_free_usdt:,.2f}"
         _bin_sub_total  = ("⚠️ API ERROR" if binance_balance_err
                            else ('🟢 Live · free + locked' if _binance_connected else 'Not connected'))
+        # Account Value card = TRUE total (USDT + coins). Falls back to USDT-only
+        # if the per-coin valuation failed, so the card is never blank.
+        _acct_disp = ("ERR" if account_value_err
+                      else (f"${account_value_usdt:,.2f}" if account_value_usdt is not None
+                            else _bin_total_disp))
+        _acct_sub  = ("⚠️ price feed error" if account_value_err
+                      else ("🟢 USDT + coins (live)" if account_value_usdt is not None
+                            else _bin_sub_total))
         _bin_sub_free   = ("⚠️ API ERROR" if binance_balance_err
                            else ('Free for new orders' if _binance_connected else 'Connect API key'))
         if binance_balance_err:
@@ -2337,9 +2426,9 @@ with st.container():
         st.markdown(f"""
 <div class="cards">
   <div class="card" style="{_bin_card_style}">
-    <div class="c-lbl">Binance Total (USDT)</div>
-    <div class="c-val">{_bin_total_disp}</div>
-    <div class="c-sub">{_bin_sub_total}</div>
+    <div class="c-lbl">Account Value</div>
+    <div class="c-val">{_acct_disp}</div>
+    <div class="c-sub">{_acct_sub}</div>
   </div>
   <div class="card" style="{_bin_card_style}">
     <div class="c-lbl">Available (USDT)</div>
@@ -2368,6 +2457,43 @@ with st.container():
   </div>
 </div>
 """, unsafe_allow_html=True)
+
+        # ── Holdings breakdown: show WHERE the money is (coins, not lost) ───────
+        if account_holdings:
+            _STABLES = ("USDT", "USDC", "BUSD", "FDUSD", "TUSD", "DAI")
+            _hbits = []
+            for _h in account_holdings[:6]:
+                if _h["asset"] in _STABLES:
+                    _hbits.append(f"{_h['amount']:,.2f} {_h['asset']}")
+                else:
+                    _hbits.append(f"{_h['amount']:,.6g} {_h['asset']} (${_h['value']:,.2f})")
+            st.caption("💼 Held as:  " + "   ·   ".join(_hbits)
+                       + "  —  money in coins isn't lost, it's just not USDT.")
+        if account_unpriced:
+            _ub = ", ".join(f"{_u['amount']:,.6g} {_u['asset']}" for _u in account_unpriced[:6])
+            st.warning(f"⚠️ Couldn't get a live price for: {_ub}. These are NOT "
+                       f"counted in Account Value above, so your real total may "
+                       f"be a little higher than shown.")
+
+        # ── Bot spending limit meter: how much of YOUR money is in play ─────────
+        _bot_limit   = float(getattr(st.session_state.global_risk,
+                                     "max_total_exposure_usdt", 0) or 0)
+        _bot_in_play = sum((t.get("invested") or 0) for t in open_trades)
+        if _bot_limit > 0:
+            _bot_avail = max(0.0, _bot_limit - _bot_in_play)
+            _bot_frac  = min(1.0, _bot_in_play / _bot_limit) if _bot_limit else 0.0
+            st.markdown(
+                f'<div style="display:flex;align-items:center;gap:10px;margin:4px 0 2px;flex-wrap:wrap;">'
+                f'<span style="font-size:10px;color:#6e7681;text-transform:uppercase;letter-spacing:.1em;font-weight:600;">💰 Bot Spending Limit</span>'
+                f'<span style="font-size:13px;font-weight:700;font-family:\'JetBrains Mono\',monospace;color:#f0f6fc;">${_bot_in_play:,.2f} in play</span>'
+                f'<span style="font-size:11px;color:#6e7681;">of ${_bot_limit:,.2f} limit · ${_bot_avail:,.2f} still free for the bot</span>'
+                f'</div>',
+                unsafe_allow_html=True)
+            st.progress(_bot_frac)
+        else:
+            st.caption("💸 Bot spending limit: OFF — the bot can use all your "
+                       "available USDT. Set a $ limit in the sidebar (Risk "
+                       "Management) to cap how much it uses.")
 
         # ── Equity Curve Sparkline ─────────────────────────────────────────────
         _cum       = 0.0

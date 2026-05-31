@@ -186,9 +186,13 @@ class GlobalRiskManager:
                            f"({n_open}/{s.max_open_trades_total})")
 
         current_exposure = sum((t.get("invested") or 0) for t in all_open_trades)
-        if current_exposure + new_invest_usdt > s.max_total_exposure_usdt:
-            return False, (f"Total exposure cap — ${current_exposure:.2f} + "
-                           f"${new_invest_usdt:.2f} > ${s.max_total_exposure_usdt:.2f}")
+        # max_total_exposure_usdt == 0 means NO cap (unlimited). Only enforce a
+        # POSITIVE limit — otherwise a 0 setting would block every single trade
+        # (0 + any invest > 0), which is the opposite of "no limit".
+        if s.max_total_exposure_usdt > 0 and \
+           current_exposure + new_invest_usdt > s.max_total_exposure_usdt:
+            return False, (f"Spending limit reached — ${current_exposure:.2f} + "
+                           f"${new_invest_usdt:.2f} > ${s.max_total_exposure_usdt:.2f} limit")
 
         # Per-symbol concentration cap
         sym_exposure = sum((t.get("invested") or 0) for t in all_open_trades

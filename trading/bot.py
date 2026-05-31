@@ -787,6 +787,14 @@ class TradingBot:
                         # sizing gate uses the SAME floor — never qualify here
                         # then block at sizing.
                         winner["score_threshold"] = int(self.score_threshold)
+                        # Stamp the bot spending limit + current open exposure so
+                        # execute_entry() can size the trade DOWN to fit the
+                        # operator's fixed-$ budget (0 = unlimited). Uses the same
+                        # all_open snapshot as the global gate for consistency.
+                        winner["bot_budget_usdt"]   = float(
+                            self.global_risk.settings.max_total_exposure_usdt)
+                        winner["bot_exposure_usdt"] = sum(
+                            (t.get("invested") or 0) for t in all_open)
                         w.execute_entry(winner, all_open, global_gate)
                     except Exception as exc:
                         log_activity("ERROR",

@@ -647,6 +647,29 @@ class SymbolWorker:
                 return
         invested = round(invested, 2)
 
+        # 6b. BOT SPENDING LIMIT (fixed $ budget) — the operator caps how much
+        # of THEIR money the bot may have in play at once. Size the trade DOWN
+        # to fit what's left of the budget so a qualified signal isn't wasted;
+        # block only when the budget is already fully deployed. 0 = unlimited.
+        _budget = float(ev.get("bot_budget_usdt") or 0)
+        if _budget > 0:
+            _in_play   = float(ev.get("bot_exposure_usdt") or 0)
+            _remaining = _budget - _in_play
+            if _remaining < MIN_NOTIONAL:
+                msg = (f"spending limit reached — ${_in_play:.2f} in play / "
+                       f"${_budget:.2f} limit (need ≥ ${MIN_NOTIONAL:.0f} free)")
+                print(f"[BOT] {self.symbol} blocked reason={msg} (budget gate)",
+                      flush=True)
+                self._log("INFO", f"{tag} ⏸️ {msg}")
+                self._on_state(self.symbol, block_reason=msg)
+                self._last_block_reason = msg
+                return False
+            if invested > _remaining:
+                print(f"[BOT] {self.symbol} sizing ${invested:.2f} → "
+                      f"${_remaining:.2f} to fit spending limit "
+                      f"(${_in_play:.2f}/${_budget:.2f} in play)", flush=True)
+                invested = round(_remaining, 2)
+
         # 7. Global gate
         ok_g, block_g = global_gate_fn(invested, self.symbol)
         if not ok_g:
