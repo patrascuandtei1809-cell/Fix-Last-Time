@@ -2513,16 +2513,14 @@ with st.container():
                 _cum += _t.get("profit_loss") or 0
                 _eq_times.append(_to_london(_t["close_time"]))
                 _eq_vals.append(round(_cum, 4))
-            # extend to now with current unrealized P&L
-            _unreal = sum(
-                ((live_price - ot["entry_price"]) / ot["entry_price"] * (ot.get("invested") or 0))
-                if ot.get("side") == "BUY"
-                else ((ot["entry_price"] - live_price) / ot["entry_price"] * (ot.get("invested") or 0))
-                for ot in open_trades
-                if live_price and ot.get("entry_price")
-            )
+            # Extend to now with current unrealized P&L. REUSE unrealized_pnl
+            # (computed above), which prices EACH open position with ITS OWN
+            # coin's live price via _cur_price_for(). The old code here multiplied
+            # EVERY open position by the single selected-symbol `live_price`, so
+            # one open SOL/ETH trade priced as if it were BTC produced thousands
+            # of dollars of fake "profit" (the bogus +$8,941 equity number).
             _eq_times.append(datetime.now(_TZ))
-            _eq_vals.append(round(_cum + _unreal, 4))
+            _eq_vals.append(round(_cum + unrealized_pnl, 4))
 
         _spark_color = "#26a69a" if _eq_vals[-1] >= 0 else "#ef5350"
         _spark_fill  = "rgba(38,166,154,0.08)" if _eq_vals[-1] >= 0 else "rgba(239,83,80,0.08)"
@@ -2560,7 +2558,7 @@ with st.container():
             uirevision="alphatrade-spark",
         )
 
-        _sp_lbl = f'<span style="font-size:10px;color:#6e7681;text-transform:uppercase;letter-spacing:.1em;font-weight:600;">Equity Curve</span>'
+        _sp_lbl = f'<span style="font-size:10px;color:#6e7681;text-transform:uppercase;letter-spacing:.1em;font-weight:600;">Cumulative P&amp;L (real)</span>'
         _sp_val = f'<span style="font-size:13px;font-weight:700;font-family:\'JetBrains Mono\',monospace;color:{_spark_color};">{"+" if _eq_vals[-1]>=0 else ""}${_eq_vals[-1]:,.4f}</span>'
         _sp_cnt = f'<span style="font-size:10px;color:#484f58;">{len(_spark_trades)} closed trade{"s" if len(_spark_trades)!=1 else ""}</span>'
         st.markdown(
