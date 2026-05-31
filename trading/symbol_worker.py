@@ -601,18 +601,26 @@ class SymbolWorker:
         # qualify this winner (anti-idle may have lowered it below 50). Falls
         # back to 50 (MIN_SCORE) for any direct/legacy caller.
         _score_floor = int(ev.get("score_threshold") or 50)
-        if   _score >= 80:           _dyn_pct, _tier_lbl = 30.0, "excellent"
-        elif _score >= 70:           _dyn_pct, _tier_lbl = 20.0, "strong"
-        elif _score >= 60:           _dyn_pct, _tier_lbl = 10.0, "standard"
-        elif _score >= _score_floor: _dyn_pct, _tier_lbl = 10.0, "score-min"      # path B
-        elif _conf  >= 30:           _dyn_pct, _tier_lbl = 10.0, "ai-confidence"  # path A
-        else:                        _dyn_pct, _tier_lbl =  0.0, "below-min"
+        # BASE size = the operator's "% of free USDT per trade" sidebar slider
+        # (dynamic_size_pct). Conviction scales it UP for stronger signals.
+        # PREVIOUSLY these tiers were HARDCODED at 10/20/30% and the slider was
+        # IGNORED entirely — so raising the slider did nothing and every trade
+        # stayed tiny (often floored to the $10 Binance minimum). Now the slider
+        # is the real dial: raise it to invest more, lower it to invest less.
+        _base_pct = float(getattr(self.risk.settings, "dynamic_size_pct", 40.0) or 40.0)
+        if   _score >= 80:           _mult, _tier_lbl = 1.50, "excellent"
+        elif _score >= 70:           _mult, _tier_lbl = 1.25, "strong"
+        elif _score >= 60:           _mult, _tier_lbl = 1.00, "standard"
+        elif _score >= _score_floor: _mult, _tier_lbl = 1.00, "score-min"      # path B
+        elif _conf  >= 30:           _mult, _tier_lbl = 1.00, "ai-confidence"  # path A
+        else:                        _mult, _tier_lbl = 0.0,  "below-min"
+        _dyn_pct = _base_pct * _mult
         if _regime == "VOLATILE" and _dyn_pct > 0:
             _dyn_pct *= 0.75
             _tier_lbl += "-vol"
         print(f"[BOT] {self.symbol} size tier={_tier_lbl} score={_score} "
-              f"conf={_conf} regime={_regime} → {_dyn_pct:.1f}% of free USDT",
-              flush=True)
+              f"conf={_conf} regime={_regime} base={_base_pct:.0f}% "
+              f"→ {_dyn_pct:.1f}% of free USDT", flush=True)
         # Block ONLY if neither entry path qualifies (score<50 AND conf<30) —
         # exactly matching the orchestrator's SIMPLE ENTRY rule, so a winner
         # can never be qualified upstream then blocked here.
