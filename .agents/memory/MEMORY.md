@@ -8,3 +8,5 @@
 - [st_autorefresh placement](streamlit-autorefresh-placement.md) — render st_autorefresh EARLY, not as the last element, or its iframe re-mounts at page bottom and the browser scrolls down every tick.
 - [Silent except dropped markers](silent-except-continue-dropped-markers.md) — a per-item try/except:continue ate a NameError (conditionally-defined `_xtz`) and dropped ALL chart markers; define shared render vars unconditionally before any branch.
 - [P&L is gross, no fees](alphatrade-pnl-is-gross-no-fees.md) — stored profit_loss is raw price diff; Binance fees never recorded, so ALL dashboard P&L is gross; net analysis must estimate fees.
+- [Binance data from Replit](replit-binance-data-access.md) — api.binance.com=451 but data-api.binance.vision IS reachable with identical klines; use it (or binance.us) for on-Replit backtests.
+- [No backtested edge](alphatrade-no-edge-backtest.md) — faithful replay shows ~-0.24%/trade after costs; cause = 2-red-exit + fee drag + over-trading; bigger size loses faster; require positive walk-forward expectancy before risking more.
