@@ -253,8 +253,11 @@ def run_symbol(df_raw: pd.DataFrame, symbol: str, *,
         try:
             if is_v2:
                 # V2 qualifies on its own confluence signal — no weighted gate.
+                # Plus a REGIME gate: never open in RANGE or DEAD (operator spec).
                 sig, _rr, rconf = strategy.get_signal(sl_slice, strategy_name)
-                qualified = sig in ("BUY", "SELL") and rconf > 0
+                regime, _ = market_regime.classify_regime(sl_slice)
+                qualified = (sig in ("BUY", "SELL") and rconf > 0
+                             and regime not in ("RANGE", "DEAD"))
             else:
                 regime, _ = market_regime.classify_regime(sl_slice)
                 sig, score, _bd, veto = strategy.weighted_decision(

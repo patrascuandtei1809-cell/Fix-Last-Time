@@ -374,17 +374,21 @@ def reversal_signal(df: pd.DataFrame) -> Tuple[str, str, int]:
 
 
 def ema_macd_rsi_volume_v2_signal(df: pd.DataFrame) -> Tuple[str, str, int]:
-    """EMA_MACD_RSI_VOLUME_V2 — trend-following confirmation strategy.
+    """EMA_MACD_RSI_VOLUME_V2 — LONG-ONLY trend-following confirmation strategy.
 
     A deliberate counterpoint to the reactive scalper: it only acts when the
     higher-timeframe trend, momentum, RSI bias, and volume ALL agree, so it
     fires far less often but with stronger confluence. Pairs with ATR-based
     SL/TP (see risk.RiskManager.atr_*) so stops adapt to volatility.
 
-      LONG  (BUY) : EMA50 > EMA200  AND  MACD hist > 0  AND  RSI > 50
-                    AND  volume > 1.2× the 20-bar average
-      SHORT (SELL): EMA50 < EMA200  AND  MACD hist < 0  AND  RSI < 50
-                    AND  volume > 1.2× the 20-bar average  (spot = informational)
+    EXACT entry spec (operator-defined, June 2026):
+      LONG (BUY) requires ALL of:
+        • EMA50 > EMA200            (only take longs in an established uptrend)
+        • RSI   > 55               (momentum bias to the upside)
+        • MACD histogram > 0       (momentum turning/expanding up)
+        • volume > 1.5× the 20-bar average  (real participation behind the move)
+      EMA50 < EMA200  →  NO LONG (HOLD). Spot is long-only, so there is no SHORT
+      side: a down-trend simply means "do not open a position".
 
     Returns (signal, reason, confidence_0_100). HOLD carries a diagnostic of
     which condition failed.
@@ -404,23 +408,19 @@ def ema_macd_rsi_volume_v2_signal(df: pd.DataFrame) -> Tuple[str, str, int]:
         return "HOLD", "V2: non-finite indicator", 0
 
     vol_ratio = (vol / avg_vol) if avg_vol > 0 else 0.0
-    vol_ok    = vol_ratio > 1.2
+    vol_ok    = vol_ratio > 1.5
     trend_up  = ema50 > ema200
 
-    if trend_up and mhist > 0 and rsi > 50 and vol_ok:
-        conf = 60 + min(35, int((vol_ratio - 1.2) * 25) + int((rsi - 50) / 2))
+    # LONG-ONLY. EMA50 < EMA200 → never open (spot cannot short).
+    if trend_up and rsi > 55 and mhist > 0 and vol_ok:
+        conf = 60 + min(35, int((vol_ratio - 1.5) * 25) + int((rsi - 55) / 2))
         return "BUY", (
-            f"V2 LONG — EMA50>EMA200, MACD hist {mhist:+.5f}>0, "
-            f"RSI {rsi:.1f}>50, vol {vol_ratio:.2f}×>1.2×"), min(95, conf)
-    if (not trend_up) and mhist < 0 and rsi < 50 and vol_ok:
-        conf = 60 + min(35, int((vol_ratio - 1.2) * 25) + int((50 - rsi) / 2))
-        return "SELL", (
-            f"V2 SHORT — EMA50<EMA200, MACD hist {mhist:+.5f}<0, "
-            f"RSI {rsi:.1f}<50, vol {vol_ratio:.2f}×>1.2×"), min(95, conf)
+            f"V2 LONG — EMA50>EMA200, RSI {rsi:.1f}>55, "
+            f"MACD hist {mhist:+.5f}>0, vol {vol_ratio:.2f}×>1.5×"), min(95, conf)
 
     return "HOLD", (
         f"V2 no setup (EMA50{'>' if trend_up else '<'}EMA200, "
-        f"MACD hist {mhist:+.5f}, RSI {rsi:.1f}, vol {vol_ratio:.2f}×)"), 0
+        f"RSI {rsi:.1f}, MACD hist {mhist:+.5f}, vol {vol_ratio:.2f}×)"), 0
 
 
 def get_signal(df: pd.DataFrame, strategy: str, threshold: float = 0.0003) -> Tuple[str, str, int]:

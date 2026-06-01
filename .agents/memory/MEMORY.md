@@ -11,3 +11,4 @@
 - [Diagnostics journal & reconcile](alphatrade-diagnostics-journal.md) — block-reason attribution must mirror the orchestrator gate ORDER (GPT veto nulls winner); ghost auto-reconcile closes ONLY true dust, never recorded_qty*0.5.
 - [Binance data from Replit](replit-binance-data-access.md) — api.binance.com=451 but data-api.binance.vision IS reachable with identical klines; use it (or binance.us) for on-Replit backtests.
 - [No backtested edge](alphatrade-no-edge-backtest.md) — faithful replay shows ~-0.24%/trade after costs; cause = 2-red-exit + fee drag + over-trading; bigger size loses faster; require positive walk-forward expectancy before risking more.
+- [1m scalping fails after fees](1m-fee-structural-loss.md) — both reversal AND strict trend-confluence V2 lose on all 9 cells; fees are 2–6× the 1m gross move; it's the timeframe/fee mismatch, not the entry filter. Don't wire a rejected strategy live.

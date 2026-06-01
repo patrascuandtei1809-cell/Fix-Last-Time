@@ -219,10 +219,90 @@ def run_cell(symbol: str, days: int, *, strategy_name: str, fee: float,
     return m
 
 
+REVERSAL_BASELINE_TPD = 48.0  # ~trades/day/symbol of the Reversal Scalper suite
+
+
+def report(strategy_name: str, symbols=("BTCUSDT", "ETHUSDT", "SOLUSDT"),
+           periods=(30, 90, 180)) -> None:
+    """Print the metrics table + AUTOMATIC ACCEPT/REJECT verdict for one strategy.
+
+    Rule (operator spec): a cell — and the strategy as a whole — is REJECTED if
+    Profit Factor < 1 OR expectancy/trade < 0 (after Binance fees + slippage).
+    Only a strategy that is positive on EVERY cell is ACCEPTED.
+    """
+    res = _load_results()
+    cells = res.get("cells", {})
+    print("=" * 78)
+    print(f"AUTO-VALIDATION REPORT — strategy={strategy_name!r}")
+    print("  PASS rule: Profit Factor >= 1 AND expectancy/trade > 0 (after fees)")
+    print("=" * 78)
+    header = (f"{'cell':<16}{'trades':>7}{'win%':>7}{'PF':>8}"
+              f"{'exp%/t':>9}{'maxDD%':>9}{'gross%':>9}{'fees%':>9}"
+              f"{'net%':>9}  verdict")
+    print(header)
+    print("-" * len(header))
+
+    all_pass = True
+    any_cell = False
+    total_trades = 0
+    for days in periods:
+        for sym in symbols:
+            key = f"{sym}:{days}:{strategy_name}"
+            m = cells.get(key)
+            label = f"{sym[:3]} {days}d"
+            if not m:
+                print(f"{label:<16}{'—  not computed yet':>40}")
+                all_pass = False
+                continue
+            any_cell = True
+            t = int(m.get("trades", 0))
+            total_trades += t
+            if t == 0:
+                # No trades = strategy never qualified = no proven edge = REJECT.
+                print(f"{label:<16}{0:>7}{'—':>7}{'—':>8}{'—':>9}{'—':>9}"
+                      f"{'—':>9}{'—':>9}{'—':>9}  ❌ REJECT (no trades)")
+                all_pass = False
+                continue
+            pf = m.get("profit_factor", 0.0)
+            exp = m.get("expectancy_pct", 0.0)
+            ok = (pf >= 1.0) and (exp > 0.0)
+            all_pass = all_pass and ok
+            pf_s = "inf" if pf == float("inf") else f"{pf:.2f}"
+            verdict = "✅ pass" if ok else "❌ REJECT"
+            print(f"{label:<16}{t:>7}{m.get('win_rate',0):>7.1f}{pf_s:>8}"
+                  f"{exp:>+9.3f}{m.get('max_drawdown_pct',0):>9.2f}"
+                  f"{m.get('sum_gross_pct',0):>+9.1f}{m.get('sum_fees_pct',0):>9.1f}"
+                  f"{m.get('sum_net_pct',0):>+9.1f}  {verdict}")
+
+    print("=" * 78)
+    if not any_cell:
+        print("VERDICT: ⚠️  no cells computed — run the suite first.")
+        return
+    # Trade-frequency reduction vs the Reversal Scalper baseline.
+    n_cells = len(symbols) * len(periods)
+    total_days = sum(periods) * len(symbols)
+    tpd = (total_trades / total_days) if total_days else 0.0
+    reduction = (1 - tpd / REVERSAL_BASELINE_TPD) * 100 if REVERSAL_BASELINE_TPD else 0.0
+    print(f"Trade frequency: {tpd:.2f} trades/day/symbol  vs Reversal baseline "
+          f"≈{REVERSAL_BASELINE_TPD:.0f}  →  {reduction:.1f}% FEWER trades "
+          f"(target was ≥90% fewer)")
+    if all_pass:
+        print("VERDICT: 🟢 ACCEPTED — positive expectancy AND PF≥1 after fees on "
+              "every cell.\n         Necessary, NOT sufficient: forward-test tiny "
+              "before trusting it.")
+    else:
+        print("VERDICT: 🔴 REJECTED — fails the rule (PF<1 or expectancy<0, or no "
+              "trades) on\n         at least one cell. Strategy must NOT be trusted "
+              "with real money as-is.")
+    print("=" * 78)
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--cells", required=True,
+    ap.add_argument("--cells", default="",
                     help="comma list of SYMBOL:DAYS, e.g. BTCUSDT:30,ETHUSDT:30")
+    ap.add_argument("--report", default="",
+                    help="print ACCEPT/REJECT verdict for the named strategy and exit")
     ap.add_argument("--strategy", default="Reversal Scalper")
     ap.add_argument("--fee", type=float, default=0.1)
     ap.add_argument("--slippage", type=float, default=0.02)
@@ -235,6 +315,10 @@ def main():
     ap.add_argument("--half", type=int, default=0, choices=[0, 1, 2],
                     help="0=single pass; 1/2=resumable split for one cell")
     args = ap.parse_args()
+
+    if args.report:
+        report(args.report)
+        return
 
     cells = []
     for c in args.cells.split(","):
