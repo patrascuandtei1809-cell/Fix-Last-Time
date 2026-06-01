@@ -46,6 +46,7 @@ if _DIR not in sys.path:
     sys.path.insert(0, _DIR)
 
 import bot as bot_module
+import diagnostics
 from bot import (
     load_trades, load_activity, get_open_trades,
     add_trade, close_trade, reset_all_data, clear_activity, log_activity,
@@ -1697,6 +1698,115 @@ if bot_running:
             f'{_cards}</div>',
             unsafe_allow_html=True,
         )
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 🚦 WHY NO TRADE? — live trade diagnostics (decision journal + frequency)
+# Observability only. Shows the EXACT current reason each symbol isn't trading,
+# trade-frequency stats, and the top reasons trades were blocked this run. Also
+# exposes manual Binance pre-flight verification + ghost-trade reconciliation.
+# ─────────────────────────────────────────────────────────────────────────────
+try:
+    _freq   = diagnostics.trade_frequency_stats()
+    _latest = diagnostics.get_latest_by_symbol()
+    _topblk = diagnostics.get_block_summary(top=10)
+    _cyc    = diagnostics.get_cycle_stats()
+
+    with st.expander("🚦 WHY NO TRADE? — live trade diagnostics",
+                     expanded=bool(bot_running)):
+        _m1, _m2, _m3, _m4 = st.columns(4)
+        _m1.metric("Trades today", _freq["trades_today"])
+        _m2.metric("Avg trades/day", _freq["avg_per_day"])
+        _m3.metric("Open now", _freq["open_trades"])
+        _mins = _freq["minutes_since_last"]
+        _m4.metric("Min since last trade",
+                   f"{_mins:.0f}" if _mins is not None else "—")
+        if _freq["last_trade_at"]:
+            st.caption(
+                f"Last trade: {_freq['last_trade_at'].strftime('%Y-%m-%d %H:%M:%S')}"
+                f"  ·  total all-time: {_freq['total_trades']}"
+                f"  ·  bot {_freq['bot_trades']} / manual {_freq['manual_trades']}")
+        else:
+            st.caption("No trades recorded yet — the bot has never opened a position.")
+
+        st.markdown("**Current reason per symbol** (refreshes every cycle)")
+        if _latest:
+            st.dataframe(
+                [{"Symbol": d["symbol"], "Signal": d["signal"],
+                  "Score": d["score"], "Conf": d["confidence"],
+                  "Regime": d["regime"] or "—", "Why no trade": d["reason"]}
+                 for d in _latest.values()],
+                use_container_width=True, hide_index=True,
+            )
+        else:
+            st.info("No decisions recorded yet. Start the bot and give it a few "
+                    "cycles, then this fills in.")
+
+        st.markdown(
+            f"**Top reasons trades were blocked this run** "
+            f"(cycles: {_cyc['cycles']} · traded: {_cyc['traded']} · "
+            f"block events: {_cyc['total_blocks']})")
+        if _topblk:
+            st.dataframe(
+                [{"#": i + 1, "Reason": r["category"], "Count": r["count"],
+                  "% of blocks": f"{r['pct']:.1f}%"}
+                 for i, r in enumerate(_topblk)],
+                use_container_width=True, hide_index=True,
+            )
+        else:
+            st.caption("No block events recorded yet this run.")
+
+        st.divider()
+        _bcol1, _bcol2, _bcol3 = st.columns(3)
+        _client_now = st.session_state.get("client")
+        _verify = _bcol1.button("🔍 Verify Binance", use_container_width=True,
+                                disabled=_client_now is None,
+                                help="Check connection, balance, minNotional, "
+                                     "stepSize, and quantity precision.")
+        _recon  = _bcol2.button("🧹 Reconcile now", use_container_width=True,
+                                disabled=_client_now is None,
+                                help="Close local open trades that no longer "
+                                     "exist on Binance.")
+        _report = _bcol3.button("📋 Full report", use_container_width=True,
+                                help="Generate the Top-10 text diagnostic report.")
+
+        if _client_now is None:
+            st.caption("🔌 Connect a LIVE Binance key to enable verification + "
+                       "reconciliation. (On Replit, api.binance.com is "
+                       "geo-blocked — run these on your droplet.)")
+
+        if _verify or _recon or _report:
+            from exchanges.binance import BinanceExchange
+            _ex_now = BinanceExchange(_client_now) if _client_now else None
+            _syms_now = list(st.session_state.active_symbols or
+                             ["BTCUSDT", "ETHUSDT", "SOLUSDT"])
+            if _verify:
+                _pf = diagnostics.preflight_checks(_ex_now, _syms_now)
+                if _pf["ok"]:
+                    st.success(f"✅ Connected · USDT free ${_pf['usdt_free']:.2f}")
+                else:
+                    st.error("⚠️ Pre-flight found issues: " +
+                             "; ".join(_pf["errors"]) if _pf["errors"]
+                             else "Not connected.")
+                st.json(_pf)
+            if _recon:
+                _rc = diagnostics.reconcile_ghost_trades(_ex_now)
+                if _rc.get("errors"):
+                    st.error("; ".join(_rc["errors"]))
+                if _rc.get("closed"):
+                    st.warning(f"🧹 Closed {len(_rc['closed'])} ghost trade(s) "
+                               f"not on Binance: {_rc['closed']}")
+                elif not _rc.get("errors"):
+                    st.success(f"✅ Reconcile complete — checked "
+                               f"{_rc['checked']} open trade(s), no ghosts found.")
+                if _rc.get("mismatches"):
+                    st.info(f"{len(_rc['mismatches'])} partial mismatch(es) left "
+                            f"OPEN for review (not auto-closed).")
+                    st.json(_rc["mismatches"])
+            if _report:
+                st.code(diagnostics.build_report(exchange=_ex_now,
+                                                 symbols=_syms_now))
+except Exception as _diag_err:
+    st.caption(f"Diagnostics panel unavailable: {_diag_err}")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 🧠 WHY AI DID THIS — learning panel for the currently-viewed symbol

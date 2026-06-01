@@ -27,6 +27,7 @@ from exchanges.binance import BinanceExchange
 from exchanges import registry as ex_registry
 from symbol_worker import SymbolWorker
 import telegram_notifier as tg
+import diagnostics
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -559,6 +560,8 @@ class TradingBot:
         self._last_trade_executed_at: Optional[datetime] = None
         self._loop_started_at = datetime.now()
         self._last_idle_warn_at: Optional[datetime] = None
+        # Auto ghost-trade reconciliation timer (0 = run on first cycle).
+        self._last_reconcile_at: float = 0.0
         # Threshold for idle warning: 5 min OR 10× check_every, whichever is larger.
         idle_warn_secs = max(300, self.check_every * 10)
         while self._running:
@@ -588,6 +591,22 @@ class TradingBot:
                                      for w in self.workers.values()}))
             print(f"[BOT] ACTIVE SCAN {_syms} | open={len(all_open)} "
                   f"| daily_pnl={daily_pct:+.2f}%", flush=True)
+
+            # ── Auto ghost-trade reconciliation (every 5 min) ────────────
+            # Close LOCAL open trades that no longer exist on Binance. Safe +
+            # conservative: only the clear "no balance" case is auto-closed.
+            _now_ts = time.time()
+            if _now_ts - self._last_reconcile_at >= 300:
+                self._last_reconcile_at = _now_ts
+                try:
+                    _ex = next(iter(self.workers.values())).exchange
+                    _rc = diagnostics.reconcile_ghost_trades(_ex)
+                    if _rc.get("closed"):
+                        log_activity("WARNING",
+                            f"🧹 Reconciled {len(_rc['closed'])} ghost trade(s) "
+                            f"not present on Binance — marked closed.")
+                except Exception as _re:
+                    print(f"[DIAG] auto-reconcile failed: {_re}", flush=True)
 
             # Snapshot count of bot trades opened this session before workers run.
             _before_count = sum(w._session_trades for w in self.workers.values())
@@ -802,9 +821,48 @@ class TradingBot:
 
             # Did any worker execute a trade this cycle?
             _after_count = sum(w._session_trades for w in self.workers.values())
-            if _after_count > _before_count:
+            _traded_this_cycle = _after_count > _before_count
+            if _traded_this_cycle:
                 self._last_trade_executed_at = datetime.now()
                 self._last_global_trade_at   = time.time()
+
+            # ── DECISION JOURNAL (observability only) ────────────────────
+            # Record WHY each symbol did/didn't trade this cycle so the
+            # dashboard "WHY NO TRADE?" panel and the Top-10 report are exact.
+            try:
+                _cand_by_sym = {c.get("symbol"): c for c in cands}
+                _snaps = []
+                for _w in self.workers.values():
+                    _c = _cand_by_sym.get(_w.symbol) or (_w._last_eval or {})
+                    _snaps.append({
+                        "symbol":       _w.symbol,
+                        "signal":       _c.get("signal"),
+                        "score":        int(_c.get("score") or 0),
+                        "confidence":   int(_c.get("confidence") or 0),
+                        "regime":       _c.get("regime") or "",
+                        "worker_block": _w._last_block_reason or "",
+                    })
+                # The symbol that reached the FINAL gate stage this cycle. When
+                # GPT vetoes, `winner` is nulled but the top qualified candidate
+                # is still the one that was selected — attribute the GPT/cap/
+                # throttle reason to it (not "awaiting selection").
+                _selected_sym = (winner or {}).get("symbol")
+                if _selected_sym is None and gpt_block and qualified:
+                    _selected_sym = qualified[0].get("symbol")
+                diagnostics.record_cycle(
+                    snaps=_snaps,
+                    score_threshold=int(self.score_threshold),
+                    confidence_floor=int(self.confidence_floor),
+                    winner_symbol=_selected_sym,
+                    throttle_sec=int(self.global_throttle_sec),
+                    last_global_trade_at=float(self._last_global_trade_at or 0),
+                    n_open=len(all_open),
+                    cap=int(self.global_risk.settings.max_open_trades_total),
+                    gpt_block=gpt_block or "",
+                    traded=_traded_this_cycle,
+                )
+            except Exception as _de:
+                print(f"[DIAG] journal record failed: {_de}", flush=True)
 
             # Idle warning: bot ON, has been running long enough, no trades for
             # idle_warn_secs → force a single log line per warning interval.
