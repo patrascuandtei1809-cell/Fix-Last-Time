@@ -59,6 +59,41 @@ from risk import RiskManager, RiskSettings, GlobalRiskSettings, GlobalRiskManage
 import telegram_notifier as tg
 from binance_client import public_klines, public_price, public_24h
 
+# ── Real commission → USDT (P2) ─────────────────────────────────────────────
+# Manual trades hit the raw Binance client (place_market_order) which returns the
+# raw order dict. Convert its commission(s) to USDT so manual trades capture the
+# SAME real entry_fee/exit_fee the bot path records. Fails open to 0.0 (never
+# blocks a trade) — a missing fee is handled honestly downstream (fees_complete).
+_FEE_STABLES = ("USDT", "BUSD", "USDC", "FDUSD", "TUSD", "DAI")
+
+
+def _order_fee_usdt(order: dict, coin: str, fill_price: float) -> float:
+    """Sum an order's real commissions, converted to USDT. 0.0 if unknown."""
+    try:
+        from binance_client import extract_fees as _extract_fees
+        detail = _extract_fees(order) or {}
+    except Exception:
+        return 0.0
+    total = 0.0
+    for asset, amt in detail.items():
+        try:
+            amt = float(amt)
+        except (TypeError, ValueError):
+            continue
+        if amt <= 0:
+            continue
+        if asset in _FEE_STABLES:
+            total += amt
+        elif coin.startswith(asset) and fill_price > 0:
+            total += amt * fill_price          # base asset → USDT via fill price
+        else:
+            try:
+                total += amt * public_price(f"{asset}USDT")
+            except Exception:
+                pass                            # unknown asset → skip (fail open)
+    return total
+
+
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="AlphaTrade",
@@ -747,7 +782,11 @@ if not st.session_state.get("_settings_loaded"):
     # The persisted settings.json on disk may pre-date the FULL RESET (e.g.
     # contains BTCUSDT only, 15s tick, 0.05% threshold, 50/100 risk). The
     # operator has no UI to change these in the new build, so override.
-    st.session_state.strategy           = "Reversal Scalper"
+    # EXCEPTION: the operator MAY now opt into EMA_MACD_RSI_VOLUME_V2 from the
+    # sidebar — if that was persisted, keep it. Anything else snaps back to
+    # the default Reversal Scalper.
+    if st.session_state.get("strategy") != "EMA_MACD_RSI_VOLUME_V2":
+        st.session_state.strategy       = "Reversal Scalper"
     st.session_state.interval           = "1m"
     st.session_state.check_every        = 2
     st.session_state.threshold          = 0.01
@@ -2034,22 +2073,50 @@ with st.sidebar:
                              if st.session_state.interval in INTERVALS else 2)
     st.session_state.interval = intv_sel
 
-    # ACTIVE SCALPER MODE — single hardcoded strategy, no dropdown.
-    st.session_state.strategy = "Reversal Scalper"
-    strat_sel = "Active Scalper"
-    st.markdown(
-        '<div style="background:#1a2e1a;border:1px solid #2ea043;border-radius:6px;'
-        'padding:8px 10px;margin:4px 0;color:#7ce0c2;font-weight:700;font-size:13px;">'
-        '⚡ ACTIVE SCALPER MODE'
-        '<div style="font-size:10px;font-weight:600;color:#7ee787;'
-        'margin-top:4px;letter-spacing:0.5px;">'
-        'AI MODE = HYBRID · Rule-based (primary) + gpt-4o-mini (advisor)'
-        '</div></div>',
-        unsafe_allow_html=True,
+    # Strategy selector — default ACTIVE SCALPER (Reversal Scalper) plus the
+    # opt-in EMA_MACD_RSI_VOLUME_V2 trend/momentum strategy (EMA50>EMA200 +
+    # MACD hist + RSI + volume confirmation, ATR-based SL/TP).
+    _STRAT_OPTS = ["Reversal Scalper", "EMA_MACD_RSI_VOLUME_V2"]
+    _cur_strat  = st.session_state.get("strategy", "Reversal Scalper")
+    if _cur_strat not in _STRAT_OPTS:
+        _cur_strat = "Reversal Scalper"
+    strat_pick = st.selectbox(
+        "Strategy", _STRAT_OPTS, index=_STRAT_OPTS.index(_cur_strat),
+        help="Reversal Scalper = fast 2s anti-idle scalper (default). "
+             "EMA_MACD_RSI_VOLUME_V2 = trend/momentum entries confirmed by "
+             "EMA50>EMA200, MACD histogram, RSI and a volume spike, with "
+             "ATR-based stop-loss / take-profit.",
     )
-    st.caption("Single hardcoded strategy. Fires on price ±0.01% OR EMA9 slope "
-               "OR bounce OR momentum flip. AI confirms but never blocks. "
-               "Anti-idle lowers threshold after 5–10 min of no trades.")
+    st.session_state.strategy = strat_pick
+    strat_sel = "Active Scalper"
+    if strat_pick == "EMA_MACD_RSI_VOLUME_V2":
+        st.markdown(
+            '<div style="background:#15233a;border:1px solid #1f6feb;border-radius:6px;'
+            'padding:8px 10px;margin:4px 0;color:#a9c7ff;font-weight:700;font-size:13px;">'
+            '📈 EMA · MACD · RSI · VOLUME V2'
+            '<div style="font-size:10px;font-weight:600;color:#79c0ff;'
+            'margin-top:4px;letter-spacing:0.5px;">'
+            'Trend + momentum + volume confirmation · ATR SL/TP'
+            '</div></div>',
+            unsafe_allow_html=True,
+        )
+        st.caption("LONG when EMA50>EMA200, MACD hist>0, RSI>50, volume>1.2×20-avg "
+                   "(SHORT mirrors). Stop-loss / take-profit sized from ATR. "
+                   "Needs ≥200 candles — uses a deeper kline fetch.")
+    else:
+        st.markdown(
+            '<div style="background:#1a2e1a;border:1px solid #2ea043;border-radius:6px;'
+            'padding:8px 10px;margin:4px 0;color:#7ce0c2;font-weight:700;font-size:13px;">'
+            '⚡ ACTIVE SCALPER MODE'
+            '<div style="font-size:10px;font-weight:600;color:#7ee787;'
+            'margin-top:4px;letter-spacing:0.5px;">'
+            'AI MODE = HYBRID · Rule-based (primary) + gpt-4o-mini (advisor)'
+            '</div></div>',
+            unsafe_allow_html=True,
+        )
+        st.caption("Single hardcoded strategy. Fires on price ±0.01% OR EMA9 slope "
+                   "OR bounce OR momentum flip. AI confirms but never blocks. "
+                   "Anti-idle lowers threshold after 5–10 min of no trades.")
 
     st.markdown('<hr class="s-div"/>', unsafe_allow_html=True)
 
@@ -2895,6 +2962,7 @@ with st.container():
                                         if not _exec_qty:
                                             _exec_qty = _qty
                                         _order_id = (_order or {}).get("orderId", "?")
+                                        _entry_fee = _order_fee_usdt(_order, _ftb_sym, _exec_price)
                                         # 6) Attach SL / TP (overrides per-symbol settings)
                                         _sl_px = round(_exec_price * (1 - _FTB_SL), 8)
                                         _tp_px = round(_exec_price * (1 + _FTB_TP), 8)
@@ -2903,6 +2971,7 @@ with st.container():
                                             "exchange":        "binance",
                                             "type":            "manual",
                                             "manual":          True,   # operator-opened — protected by default
+                                            "entry_fee":       _entry_fee,  # P2 real commission (USDT)
                                             "strategy":        "ForceTestBuy",
                                             "side":            "BUY",
                                             "entry_price":     _exec_price,
@@ -3060,6 +3129,7 @@ with st.container():
                                         if not _exec_price: _exec_price = _bn_price
                                         if not _exec_qty:   _exec_qty   = _qty
                                         _order_id = (_order or {}).get("orderId", "?")
+                                        _entry_fee = _order_fee_usdt(_order, _bn_sym, _exec_price)
                                         _sl_px = round(_exec_price * (1 - _BN_SL), 8)
                                         _tp_px = round(_exec_price * (1 + _BN_TP), 8)
                                         _t = {
@@ -3067,6 +3137,7 @@ with st.container():
                                             "exchange":        "binance",
                                             "type":            "manual",
                                             "manual":          True,   # operator-opened — protected by default
+                                            "entry_fee":       _entry_fee,  # P2 real commission (USDT)
                                             "strategy":        "BuyNow90",
                                             "side":            "BUY",
                                             "entry_price":     _exec_price,
@@ -3158,11 +3229,13 @@ with st.container():
                         _do_live = False
                     if _do_live:
                         rm = st.session_state.risk_manager
+                        _entry_fee = _order_fee_usdt(order, st.session_state.symbol, _exec_price)
                         _t = {
                             "coin":            st.session_state.symbol,
                             "exchange":        "binance",
                             "type":            "manual",
                             "manual":          True,   # operator-opened — protected by default
+                            "entry_fee":       _entry_fee,  # P2 real commission (USDT)
                             "strategy":        "Manual",
                             "side":            _plt_side,
                             "entry_price":     _exec_price,
@@ -3838,6 +3911,10 @@ with st.container():
                                     _counter_side = "SELL" if _side == "BUY" else "BUY"
                                     _order = c.place_market_order(_coin, _counter_side, _q_rnd)
                                     _exec_q, xp = _extract_fill(_order)
+                                    # P2 REAL PnL — convert the real exit commission to
+                                    # USDT via the shared helper (same logic the manual
+                                    # OPEN paths use, so entry/exit fees stay consistent).
+                                    _exit_fee = _order_fee_usdt(_order, _coin, xp)
                                 except Exception as _e:
                                     st.error(f"❌ LIVE close order failed (NOT recorded): {_e}")
                                     log_activity("ERROR", f"👤 Close {ot['id']} FAILED on Binance: {_e}")
@@ -3858,7 +3935,7 @@ with st.container():
                                         f"👤 Close {ot['id']} qty mismatch — intended {_q_rnd}, "
                                         f"filled {_exec_q} (Δ {_dev*100:.2f}%). Trade OPEN.")
                                     st.stop()
-                                _closed = close_trade(ot["id"], xp, "Manual close via dashboard (LIVE)")
+                                _closed = close_trade(ot["id"], xp, "Manual close via dashboard (LIVE)", _exit_fee)
                                 if not _closed:
                                     st.error("❌ Counter-order filled but persistence failed — manual reconciliation required.")
                                     log_activity("ERROR",
@@ -3976,16 +4053,26 @@ with st.container():
                         return not np.isfinite(float(x))
                     except (TypeError, ValueError):
                         return True
+                _real_fee_rows = 0
                 for t in closed_trades:
-                    raw_g = t.get("profit_loss")
+                    raw_g = t.get("gross_pnl", t.get("profit_loss"))
                     if _is_bad(raw_g):
                         _bad_rows += 1
                     g    = _finite(raw_g)
-                    qty  = _finite(t.get("quantity"))
-                    entry_notional = _finite(t.get("invested"))
-                    xp   = _finite(t.get("exit_price"))
-                    exit_notional  = (xp * qty) if (xp > 0 and qty > 0) else entry_notional
-                    fee  = (entry_notional + exit_notional) * _fr
+                    # P2 REAL PnL — use the REAL figure ONLY when BOTH commission
+                    # legs were captured (fees_complete). A partial capture (e.g. a
+                    # manual trade missing its entry fee, or a failed BNB→USDT
+                    # conversion) would UNDERSTATE fees and OVERSTATE net, so we fall
+                    # back to the honest rate-based estimate instead.
+                    if t.get("fees_complete") and t.get("total_fees") is not None:
+                        fee = _finite(t.get("total_fees"))
+                        _real_fee_rows += 1
+                    else:
+                        qty  = _finite(t.get("quantity"))
+                        entry_notional = _finite(t.get("invested"))
+                        xp   = _finite(t.get("exit_price"))
+                        exit_notional  = (xp * qty) if (xp > 0 and qty > 0) else entry_notional
+                        fee  = (entry_notional + exit_notional) * _fr
                     _gross += g; _fees += fee
                     _net_gross_pnls.append(g)
                     if (g - fee) > 0:          # strict: a net-zero trade is NOT a win
@@ -4035,20 +4122,48 @@ with st.container():
                 if _bad_rows:
                     st.caption(f"⚠️ {_bad_rows} trade(s) had invalid/non-finite P&L and were "
                                f"treated as 0 — totals may be incomplete.")
-                st.caption("⚠️ Fees are ESTIMATED — Binance commissions aren't stored per trade. "
-                           "The Gross/Total P&L numbers elsewhere on this dashboard do NOT subtract fees.")
+                if _real_fee_rows >= _n and _n:
+                    st.caption(f"✅ Fees are REAL Binance commissions for all {_n} closed "
+                               f"trade(s). NET P&L above is exact.")
+                elif _real_fee_rows:
+                    st.caption(f"ℹ️ {_real_fee_rows}/{_n} trades use REAL recorded Binance "
+                               f"commissions; the rest fall back to the estimate above.")
+                else:
+                    st.caption("⚠️ Fees are ESTIMATED — no real commissions recorded yet "
+                               "(older trades). New trades capture real Binance fees. "
+                               "The Gross/Total P&L numbers elsewhere do NOT subtract fees.")
 
             if closed_trades:
                 st.markdown('<div class="sec-lbl" style="margin-top:16px;">P&L per Closed Trade</div>', unsafe_allow_html=True)
-                pnl_data = [
-                    {"Trade": f"{t.get('id','?')} {t.get('side','')} {t.get('coin','')}",
-                     "P&L $": round(t.get("profit_loss") or 0, 4),
-                     "P&L %": round(t.get("profit_loss_pct") or 0, 2),
-                     "Strategy": t.get("strategy","—"),
-                     "Type": "🤖" if t.get("type")=="bot" else "👤",
-                     "Closed": _fmt_london(t.get("close_time"), "%Y-%m-%d %H:%M")}
-                    for t in closed_trades
-                ]
+                def _row_fee_net(t):
+                    """Real fee/net when both legs captured; else honest estimate
+                    (prefixed ≈) so a partial capture never looks exact."""
+                    g = _finite(t.get("gross_pnl", t.get("profit_loss")))
+                    if t.get("fees_complete") and t.get("total_fees") is not None:
+                        fee = round(_finite(t.get("total_fees")), 4)
+                        net = round(_finite(t.get("net_pnl")), 4)
+                        pct = round(t.get("net_pnl_pct", t.get("profit_loss_pct")) or 0, 2)
+                        return fee, net, pct
+                    qty  = _finite(t.get("quantity"))
+                    inv  = _finite(t.get("invested"))
+                    xp   = _finite(t.get("exit_price"))
+                    exit_notional = (xp * qty) if (xp > 0 and qty > 0) else inv
+                    fee_est = (inv + exit_notional) * _fr
+                    net_est = g - fee_est
+                    pct_est = (net_est / inv * 100) if inv else 0.0
+                    return (f"≈{fee_est:.4f}", f"≈{net_est:.4f}", round(pct_est, 2))
+                pnl_data = []
+                for t in closed_trades:
+                    _fee_c, _net_c, _pct_c = _row_fee_net(t)
+                    pnl_data.append(
+                        {"Trade": f"{t.get('id','?')} {t.get('side','')} {t.get('coin','')}",
+                         "Gross $": round(_finite(t.get("gross_pnl", t.get("profit_loss"))), 4),
+                         "Fees $":  _fee_c,
+                         "Net $":   _net_c,
+                         "P&L %":   _pct_c,
+                         "Strategy": t.get("strategy","—"),
+                         "Type": "🤖" if t.get("type")=="bot" else "👤",
+                         "Closed": _fmt_london(t.get("close_time"), "%Y-%m-%d %H:%M")})
                 st.dataframe(pd.DataFrame(pnl_data), width="stretch",
                              hide_index=True, height=220)
 

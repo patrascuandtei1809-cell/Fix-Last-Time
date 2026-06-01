@@ -323,11 +323,28 @@ def add_trade(trade: Dict) -> Dict:
         existing = _load_trade_file(path)
         existing.append(trade)
         _save_trade_file(path, existing)
+    # P1 SYNC — explicit OPEN state-transition log so every position lifecycle
+    # is auditable in the activity feed.
+    try:
+        log_activity("INFO",
+            f"🔄 STATE {trade.get('coin','?')} {trade.get('side','?')} "
+            f"id={trade['id']} →OPEN @ ${float(trade.get('entry_price') or 0):.4f} "
+            f"(${float(trade.get('invested') or 0):.2f}, "
+            f"{'🤖 bot' if trade.get('type')=='bot' else '👤 manual'})")
+    except Exception:
+        pass
     return trade
 
 
-def close_trade(trade_id: str, exit_price: float, reason: str) -> Optional[Dict]:
-    """Find the trade across all per-symbol files and close it."""
+def close_trade(trade_id: str, exit_price: float, reason: str,
+                exit_fee: float = 0.0) -> Optional[Dict]:
+    """Find the trade across all per-symbol files and close it.
+
+    P2 REAL PnL: records GROSS pnl (price move only — kept on `profit_loss` for
+    backward compatibility with old records/UI) AND the fee-aware NET pnl. The
+    entry commission was stamped on the trade at open time (`entry_fee`); the
+    exit commission is passed in here from the live close order.
+    """
     with _file_lock:
         for fp in sorted(glob.glob(os.path.join(TRADES_DIR, "*.json"))):
             trades = _load_trade_file(fp)
@@ -337,16 +354,48 @@ def close_trade(trade_id: str, exit_price: float, reason: str) -> Optional[Dict]
                     entry    = t["entry_price"]
                     side     = t["side"]
                     if side == "BUY":
-                        t["profit_loss"]     = (exit_price - entry) / entry * invested
-                        t["profit_loss_pct"] = (exit_price - entry) / entry * 100
+                        gross     = (exit_price - entry) / entry * invested
+                        gross_pct = (exit_price - entry) / entry * 100
                     else:
-                        t["profit_loss"]     = (entry - exit_price) / entry * invested
-                        t["profit_loss_pct"] = (entry - exit_price) / entry * 100
+                        gross     = (entry - exit_price) / entry * invested
+                        gross_pct = (entry - exit_price) / entry * 100
+                    entry_fee  = float(t.get("entry_fee") or 0.0)
+                    exit_fee_v = float(exit_fee or 0.0)
+                    total_fees = entry_fee + exit_fee_v
+                    net        = gross - total_fees
+                    net_pct    = (net / invested * 100) if invested else 0.0
+                    # P2 honesty: total_fees is only COMPLETE when BOTH legs were
+                    # really captured. Entry fee is stamped at open (bot + manual);
+                    # legacy trades / failed fee conversions leave a leg at 0. When
+                    # incomplete, the dashboard estimates rather than understating.
+                    had_entry  = ("entry_fee" in t) and (entry_fee > 0)
+                    fees_complete = had_entry and (exit_fee_v > 0)
+                    # Back-compat: profit_loss stays GROSS (existing dashboards/
+                    # reports read it). Real fee-aware figures are additive.
+                    t["profit_loss"]     = gross
+                    t["profit_loss_pct"] = gross_pct
+                    t["gross_pnl"]       = gross
+                    t["gross_pnl_pct"]   = gross_pct
+                    t["entry_fee"]       = entry_fee
+                    t["exit_fee"]        = exit_fee_v
+                    t["total_fees"]      = total_fees
+                    t["fees_complete"]   = fees_complete
+                    t["net_pnl"]         = net
+                    t["net_pnl_pct"]     = net_pct
                     t["exit_price"]   = exit_price
                     t["close_time"]   = datetime.now().isoformat()
                     t["close_reason"] = reason
                     t["status"]       = "closed"
                     _save_trade_file(fp, trades)
+                    # P1 SYNC — explicit OPEN→CLOSED state-transition log.
+                    try:
+                        log_activity("INFO",
+                            f"🔄 STATE {t.get('coin','?')} {side} id={trade_id} "
+                            f"OPEN→CLOSED @ ${exit_price:.4f} | net ${net:+.2f} "
+                            f"(gross ${gross:+.2f} − fees ${total_fees:.4f}) | "
+                            f"{(reason or '')[:60]}")
+                    except Exception:
+                        pass
                     return t
     return None
 

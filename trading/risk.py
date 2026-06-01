@@ -23,6 +23,12 @@ class SymbolRiskSettings:
     # Fewer, higher-quality trades — let winners run.
     stop_loss_pct:    float = 0.4
     take_profit_pct:  float = 0.8
+    # ── ATR-based stops (EMA_MACD_RSI_VOLUME_V2) ──────────────────────────────
+    # When use_atr_stops is True, SL/TP distances are ATR×mult instead of the
+    # fixed %s above — so stops adapt to each symbol's live volatility.
+    use_atr_stops:    bool  = False
+    atr_sl_mult:      float = 1.5        # SL distance = ATR × 1.5
+    atr_tp_mult:      float = 3.0        # TP distance = ATR × 3.0 (≈2:1 R:R)
     max_open_trades:  int   = 99         # per-symbol cap removed (only global cap + balance gate)
     max_per_symbol:   int   = 99         # per-symbol cap removed (only global cap + balance gate)
     cooldown_seconds: int   = 5          # per-symbol cooldown (REVERSAL: faster re-entries)
@@ -73,6 +79,17 @@ class RiskManager:
         if side == "BUY":
             return entry * (1 + self.settings.take_profit_pct / 100)
         return entry * (1 - self.settings.take_profit_pct / 100)
+
+    # ── ATR-based SL/TP (volatility-adaptive — used by V2 strategy) ───────────
+    def atr_stop_loss_price(self, entry: float, side: str, atr_abs: float) -> float:
+        """SL placed atr_abs × atr_sl_mult away from entry (below for longs)."""
+        dist = max(0.0, float(atr_abs)) * self.settings.atr_sl_mult
+        return entry - dist if side == "BUY" else entry + dist
+
+    def atr_take_profit_price(self, entry: float, side: str, atr_abs: float) -> float:
+        """TP placed atr_abs × atr_tp_mult away from entry (above for longs)."""
+        dist = max(0.0, float(atr_abs)) * self.settings.atr_tp_mult
+        return entry + dist if side == "BUY" else entry - dist
 
     def check_stop_loss(self, entry: float, current: float, side: str) -> Tuple[bool, str]:
         sl = self.stop_loss_price(entry, side)

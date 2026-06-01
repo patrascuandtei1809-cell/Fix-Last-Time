@@ -166,14 +166,17 @@ class SymbolWorker:
                                       f"${entry:.4f} (per-trade, no global change)")
 
             # ── SL/TP checks (per-trade BE overrides global SL for this trade) ──
+            # ATR trades (V2): the SL/TP were computed as ABSOLUTE prices at entry
+            # and stored on the trade. Enforce THOSE stored levels — not the
+            # fixed-% risk.settings — so volatility-adaptive stops actually hold.
             if side == "BUY" and self._post_entry.get(str(trade.get("id")), {}) \
                     .get("armed_be") and price <= entry:
                 sl_hit, sl_msg = True, (f"Breakeven SL — price ${price:.4f} ≤ "
                                         f"entry ${entry:.4f} (BE armed)")
-                tp_hit, tp_msg = self.risk.check_take_profit(entry, price, side)
+                tp_hit, tp_msg = self._check_tp_for(trade, entry, price, side)
             else:
-                sl_hit, sl_msg = self.risk.check_stop_loss(entry, price, side)
-                tp_hit, tp_msg = self.risk.check_take_profit(entry, price, side)
+                sl_hit, sl_msg = self._check_sl_for(trade, entry, price, side)
+                tp_hit, tp_msg = self._check_tp_for(trade, entry, price, side)
 
             self._log("INFO",
                 f"{tag} 📌 Open {trade['id']} | {side} @ ${entry:.4f} | "
@@ -192,8 +195,12 @@ class SymbolWorker:
         _open_for_post = [t for t in my_open if t["side"] == "BUY"]
 
         # 3. Klines + signal
+        # V2 (EMA_MACD_RSI_VOLUME_V2) needs EMA200 → fetch ≥250 bars so the
+        # long EMA is populated; all other strategies use the lighter 150-bar
+        # window for signal speed.
+        _klimit = 250 if self.strategy == "EMA_MACD_RSI_VOLUME_V2" else 150
         try:
-            df = self.exchange.get_klines(self.symbol, self.interval, limit=150)
+            df = self.exchange.get_klines(self.symbol, self.interval, limit=_klimit)
         except Exception as e:
             self._log("ERROR", f"{tag} klines fetch failed: {e}")
             return
@@ -554,6 +561,32 @@ class SymbolWorker:
             self._last_block_reason = _msg
             return False
 
+        # P1 SYNC — DUPLICATE / OPPOSITE-ENTRY GUARD. Look at ALL open trades on
+        # this symbol (bot AND manual — manage flag is irrelevant here), not just
+        # the bot-managed subset, because a new order physically touches the same
+        # spot balance:
+        #   • duplicate  — a 2nd same-direction entry would stack/double exposure.
+        #   • opposite   — a SELL while a BUY is open would dump the existing
+        #     position's asset (and vice-versa) — never auto-hedge on spot.
+        # This is the last line of defence; the orchestrator's max-open caps
+        # normally prevent it, but a race or a manual position can slip through.
+        _sym_open = [t for t in all_open_trades
+                     if t.get("coin") == self.symbol and t.get("status") == "open"]
+        if _sym_open:
+            _dirs = sorted({t.get("side") for t in _sym_open})
+            if signal in _dirs:
+                _msg = (f"duplicate {signal} blocked — {len(_sym_open)} open "
+                        f"{self.symbol} position(s) already")
+            else:
+                _msg = (f"opposite-entry {signal} blocked — open "
+                        f"{'/'.join(_dirs)} position(s) on {self.symbol}")
+            print(f"[BOT] {self.symbol} blocked reason={_msg} (dup/opposite gate)",
+                  flush=True)
+            self._log("WARNING", f"{tag} ⏸️ {_msg}")
+            self._on_state(self.symbol, block_reason=_msg)
+            self._last_block_reason = _msg
+            return False
+
         # 4. Per-symbol gate
         ok, block = self.risk.can_open_trade(
             open_trades_for_symbol = my_open,
@@ -695,8 +728,28 @@ class SymbolWorker:
         # All gates clear
         self._on_state(self.symbol, block_reason="")
 
-        sl_p = self.risk.stop_loss_price(price, signal)
-        tp_p = self.risk.take_profit_price(price, signal)
+        # SL/TP — ATR-adaptive for the V2 strategy (or when use_atr_stops is on),
+        # otherwise the fixed-% stops. ATR% rides in the weighted breakdown; we
+        # convert it to an absolute price distance here.
+        _use_atr = bool(getattr(self.risk.settings, "use_atr_stops", False)) \
+                   or self.strategy == "EMA_MACD_RSI_VOLUME_V2"
+        _atr_abs = 0.0
+        if _use_atr:
+            try:
+                _atr_pct = float((ev.get("breakdown") or {}).get("atr_pct") or 0)
+                _atr_abs = _atr_pct / 100.0 * price
+            except Exception:
+                _atr_abs = 0.0
+        if _use_atr and _atr_abs > 0:
+            sl_p = self.risk.atr_stop_loss_price(price, signal, _atr_abs)
+            tp_p = self.risk.atr_take_profit_price(price, signal, _atr_abs)
+            _atr_stops = True
+            self._log("INFO", f"{tag} 🎯 ATR stops — atr≈${_atr_abs:.4f} | "
+                              f"SL ${sl_p:.4f} TP ${tp_p:.4f}")
+        else:
+            sl_p = self.risk.stop_loss_price(price, signal)
+            tp_p = self.risk.take_profit_price(price, signal)
+            _atr_stops = False
 
         # 8. Execute REAL order via Exchange interface
         qty = self.exchange.round_quantity(self.symbol, invested / price)
@@ -741,12 +794,14 @@ class SymbolWorker:
             "invested":        invested,
             "profit_loss":     None,
             "profit_loss_pct": None,
+            "entry_fee":       float(resp.get("fee") or 0.0),  # REAL Binance commission (USDT)
             "open_time":       datetime.now().isoformat(),
             "close_time":      None,
             "reason":          reason,
             "close_reason":    None,
             "stop_loss":       sl_p,
             "take_profit":     tp_p,
+            "atr_stops":       _atr_stops,  # SL/TP are ATR-based absolute prices
             "status":          "open",
         }
         added = self._on_open(trade)
@@ -837,9 +892,38 @@ class SymbolWorker:
                 f"{intended_qty}, filled {exec_qty} (Δ {deviation*100:.2f}%). "
                 f"Marking trade {trade.get('id')} closed (CORRECTED).")
             reason = (reason or "") + f" | CORRECTED qty Δ{deviation*100:.1f}%"
-        self._on_close(trade["id"], exec_price, reason)
+        # P2 REAL PnL — pass the REAL exit commission (USDT) from the live close
+        # order so close_trade() can compute fee-aware net PnL.
+        exit_fee = float(resp.get("fee") or 0.0)
+        self._on_close(trade["id"], exec_price, reason, exit_fee)
         # Forget post-entry tracking for this trade.
         self._post_entry.pop(str(trade.get("id")), None)
+
+    def _check_sl_for(self, trade: Dict, entry: float, price: float,
+                      side: str) -> tuple:
+        """Stop-loss check. ATR trades enforce the stored ABSOLUTE stop price;
+        all others use the fixed-% risk gate (behavior-preserving)."""
+        if trade.get("atr_stops") and trade.get("stop_loss"):
+            sl = float(trade["stop_loss"])
+            if side == "BUY" and price <= sl:
+                return True, f"ATR stop loss — price ${price:.4f} ≤ SL ${sl:.4f}"
+            if side == "SELL" and price >= sl:
+                return True, f"ATR stop loss — price ${price:.4f} ≥ SL ${sl:.4f}"
+            return False, ""
+        return self.risk.check_stop_loss(entry, price, side)
+
+    def _check_tp_for(self, trade: Dict, entry: float, price: float,
+                      side: str) -> tuple:
+        """Take-profit check. ATR trades enforce the stored ABSOLUTE target;
+        all others use the fixed-% risk gate (behavior-preserving)."""
+        if trade.get("atr_stops") and trade.get("take_profit"):
+            tp = float(trade["take_profit"])
+            if side == "BUY" and price >= tp:
+                return True, f"ATR take profit — price ${price:.4f} ≥ TP ${tp:.4f}"
+            if side == "SELL" and price <= tp:
+                return True, f"ATR take profit — price ${price:.4f} ≤ TP ${tp:.4f}"
+            return False, ""
+        return self.risk.check_take_profit(entry, price, side)
 
     @staticmethod
     def _base_asset(symbol: str) -> str:

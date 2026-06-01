@@ -77,8 +77,15 @@ try:
     from risk import SymbolRiskSettings
     _DEF_SL = SymbolRiskSettings().stop_loss_pct
     _DEF_TP = SymbolRiskSettings().take_profit_pct
+    _ATR_SL_MULT = SymbolRiskSettings().atr_sl_mult
+    _ATR_TP_MULT = SymbolRiskSettings().atr_tp_mult
 except Exception:
     _DEF_SL, _DEF_TP = 0.4, 0.8
+    _ATR_SL_MULT, _ATR_TP_MULT = 1.5, 3.0
+
+# V2 (EMA_MACD_RSI_VOLUME_V2) uses ATR-based SL/TP instead of fixed-% — mirrors
+# the live worker, which enables ATR stops for this strategy.
+V2_STRATEGY = "EMA_MACD_RSI_VOLUME_V2"
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data", "backtest")
 # Public Binance market-data mirror — reachable even where api.binance.com is
@@ -191,7 +198,9 @@ class Trade:
     exit_price: float   # fill incl. slippage
     bars_held: int
     reason: str
-    ret_pct: float      # net of fees + slippage, as fraction (0.01 = +1%)
+    ret_pct: float      # NET of fees + slippage, as fraction (0.01 = +1%)
+    gross_pct: float = 0.0  # GROSS price move (pre-fee), as fraction
+    fee_pct: float = 0.0    # round-trip fee charged, as fraction (both sides)
 
 
 WARMUP = 60   # candles needed before the indicators are trustworthy
@@ -201,7 +210,10 @@ def run_symbol(df_raw: pd.DataFrame, symbol: str, *,
                sl_pct: float, tp_pct: float,
                fee_pct: float, slip_pct: float,
                score_threshold: int, conf_floor: int,
-               strategy_name: str, allow_shorts: bool) -> List[Trade]:
+               strategy_name: str, allow_shorts: bool,
+               use_atr: bool = False,
+               atr_sl_mult: float = _ATR_SL_MULT,
+               atr_tp_mult: float = _ATR_TP_MULT) -> List[Trade]:
     """Replay the bot over one symbol's candles. Returns closed trades."""
     # Precompute indicators ONCE on the full series (EMA/RSI/MACD are recursive
     # and need full history); slicing afterward yields identical values to
@@ -210,38 +222,59 @@ def run_symbol(df_raw: pd.DataFrame, symbol: str, *,
     n = len(df)
     fee = fee_pct / 100.0
     slip = slip_pct / 100.0
+    # V2 is a standalone confirmation strategy — it qualifies on its OWN signal
+    # (EMA50>EMA200 + MACD hist + RSI + volume), not the weighted scalper gate,
+    # and uses ATR-based SL/TP. V2 needs ≥200 bars for EMA200.
+    is_v2 = strategy_name == V2_STRATEGY
+    warmup = max(WARMUP, 200) if is_v2 else WARMUP
 
     trades: List[Trade] = []
-    i = WARMUP
+    i = warmup
     while i < n - 1:
         # Decision uses candles up to and INCLUDING i (fully closed). A short
         # tail slice is enough because indicators are precomputed; the rolling
-        # windows inside the engine only look back ~20 bars.
-        sl_slice = df.iloc[max(0, i - WARMUP):i + 1]
+        # windows inside the engine only look back ~20 bars (V2 needs 200 for
+        # EMA200).
+        sl_slice = df.iloc[max(0, i - warmup):i + 1]
         try:
-            regime, _ = market_regime.classify_regime(sl_slice)
-            sig, score, _bd, veto = strategy.weighted_decision(
-                sl_slice, ai_signal="HOLD", ai_confidence=0, regime=regime)
-            rsig, _rr, rconf = strategy.get_signal(sl_slice, strategy_name)
+            if is_v2:
+                # V2 qualifies on its own confluence signal — no weighted gate.
+                sig, _rr, rconf = strategy.get_signal(sl_slice, strategy_name)
+                qualified = sig in ("BUY", "SELL") and rconf > 0
+            else:
+                regime, _ = market_regime.classify_regime(sl_slice)
+                sig, score, _bd, veto = strategy.weighted_decision(
+                    sl_slice, ai_signal="HOLD", ai_confidence=0, regime=regime)
+                rsig, _rr, rconf = strategy.get_signal(sl_slice, strategy_name)
+                # Match bot.py qualify (signal/score/confidence from the SAME
+                # candidate): the confidence OR-path only applies when the rule
+                # signal agrees with the weighted signal — otherwise opposite-side
+                # rule confidence could wrongly qualify a trade.
+                qualified = (
+                    veto == "" and sig in ("BUY", "SELL") and score > 0
+                    and (score >= score_threshold
+                         or (rsig == sig and rconf >= conf_floor))
+                )
         except Exception:
             i += 1
             continue
 
-        # Match bot.py qualify (signal/score/confidence from the SAME candidate):
-        # the confidence OR-path only applies when the rule signal agrees with
-        # the weighted signal — otherwise opposite-side rule confidence could
-        # wrongly qualify a trade.
-        qualified = (
-            veto == "" and sig in ("BUY", "SELL") and score > 0
-            and (score >= score_threshold
-                 or (rsig == sig and rconf >= conf_floor))
-        )
         if not qualified:
             i += 1
             continue
         if sig == "SELL" and not allow_shorts:
             i += 1
             continue
+
+        # ATR at the decision candle (V2 ATR SL/TP). Absolute price units.
+        atr_abs = 0.0
+        if use_atr:
+            try:
+                atr_abs = float(df["atr"].iloc[i])
+                if not np.isfinite(atr_abs) or atr_abs <= 0:
+                    atr_abs = 0.0
+            except Exception:
+                atr_abs = 0.0
 
         # Enter at NEXT candle's open (no look-ahead).
         entry_idx = i + 1
@@ -251,8 +284,15 @@ def run_symbol(df_raw: pd.DataFrame, symbol: str, *,
 
         # Risk levels anchored to the actual FILL (entry_fill), matching the
         # live worker which checks SL/TP/BE against trade["entry_price"].
-        sl_price = entry_fill * (1 - sl_pct / 100) if is_long else entry_fill * (1 + sl_pct / 100)
-        tp_price = entry_fill * (1 + tp_pct / 100) if is_long else entry_fill * (1 - tp_pct / 100)
+        # V2 with ATR available → ATR×mult distances; otherwise fixed-%.
+        if use_atr and atr_abs > 0:
+            sl_dist = atr_abs * atr_sl_mult
+            tp_dist = atr_abs * atr_tp_mult
+            sl_price = entry_fill - sl_dist if is_long else entry_fill + sl_dist
+            tp_price = entry_fill + tp_dist if is_long else entry_fill - tp_dist
+        else:
+            sl_price = entry_fill * (1 - sl_pct / 100) if is_long else entry_fill * (1 + sl_pct / 100)
+            tp_price = entry_fill * (1 + tp_pct / 100) if is_long else entry_fill * (1 - tp_pct / 100)
         be_arm = entry_fill * (1 + AS_BE_ARM_PCT / 100) if is_long else entry_fill * (1 - AS_BE_ARM_PCT / 100)
 
         be_armed = False
@@ -305,7 +345,8 @@ def run_symbol(df_raw: pd.DataFrame, symbol: str, *,
             gross = exit_fill / entry_fill - 1.0
         else:
             gross = entry_fill / exit_fill - 1.0
-        ret = gross - 2 * fee  # taker fee each side, as fraction of notional
+        fee_round_trip = 2 * fee  # taker fee each side, as fraction of notional
+        ret = gross - fee_round_trip
 
         trades.append(Trade(
             symbol=symbol, side=sig,
@@ -313,6 +354,7 @@ def run_symbol(df_raw: pd.DataFrame, symbol: str, *,
             exit_ts=int(df["open_time"].iloc[exit_idx]),
             entry_price=entry_fill, exit_price=exit_fill,
             bars_held=exit_idx - entry_idx, reason=reason, ret_pct=ret,
+            gross_pct=gross, fee_pct=fee_round_trip,
         ))
         # Resume scanning AFTER the trade closes (one position at a time/symbol).
         i = exit_idx + 1
@@ -327,6 +369,8 @@ def metrics(trades: List[Trade]) -> Dict:
     if not trades:
         return {"trades": 0}
     rets = np.array([t.ret_pct for t in trades], dtype=float)
+    gross_arr = np.array([t.gross_pct for t in trades], dtype=float)
+    fees_arr = np.array([t.fee_pct for t in trades], dtype=float)
     wins = rets[rets > 0]; losses = rets[rets <= 0]
     gross_win = float(wins.sum()); gross_loss = float(-losses.sum())
     # Equity curve (compounded) for drawdown.
@@ -348,6 +392,13 @@ def metrics(trades: List[Trade]) -> Dict:
         "max_drawdown_pct": max_dd * 100,
         "sharpe": sharpe,
         "avg_bars_held": float(np.mean([t.bars_held for t in trades])),
+        # Gross / fees / net split (additive sums, NOT compounded) — shows how
+        # much of the raw price edge the fees eat.
+        "sum_gross_pct": float(gross_arr.sum() * 100),
+        "sum_fees_pct": float(fees_arr.sum() * 100),
+        "sum_net_pct": float(rets.sum() * 100),
+        "avg_gross_pct": float(gross_arr.mean() * 100),
+        "avg_fee_pct": float(fees_arr.mean() * 100),
     }
 
 
@@ -362,6 +413,9 @@ def _fmt_metrics(m: Dict) -> str:
         f"avgW=+{m['avg_win_pct']:.2f}% avgL={m['avg_loss_pct']:.2f}%\n"
         f"    {sign} expectancy/trade={m['expectancy_pct']:+.3f}%  "
         f"profit_factor={pf_s}  sharpe={m['sharpe']:.2f}\n"
+        f"    GROSS={m.get('sum_gross_pct', 0):+.2f}%  "
+        f"FEES=-{m.get('sum_fees_pct', 0):.2f}%  "
+        f"NET={m.get('sum_net_pct', 0):+.2f}%  (sum across trades)\n"
         f"    total_return={m['total_return_pct']:+.2f}%  "
         f"max_drawdown={m['max_drawdown_pct']:.2f}%  "
         f"avg_hold={m['avg_bars_held']:.0f} bars"
@@ -380,6 +434,132 @@ def walk_forward(trades: List[Trade], folds: int) -> List[Dict]:
         hi = (f + 1) * size if f < folds - 1 else len(ts_sorted)
         out.append(metrics(ts_sorted[lo:hi]))
     return out
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Suite — BTC/ETH/SOL × 30/90/180d, gross/fees/net, auto-saved
+# ─────────────────────────────────────────────────────────────────────────────
+SUITE_PERIODS = [30, 90, 180]
+REPORTS_DIR = os.path.join(os.path.dirname(__file__), "data", "backtest_reports")
+
+
+def run_suite(*, symbols: List[str], interval: str, fee: float, slippage: float,
+              sl: float, tp: float, threshold: int, conf_floor: int,
+              strategy_name: str, allow_shorts: bool, folds: int,
+              use_cache: bool) -> Dict:
+    """Backtest every (symbol × period) cell, report gross/fees/net, auto-save.
+
+    Saves a machine-readable JSON and a human-readable TXT report to
+    data/backtest_reports/ so results are preserved across runs.
+    """
+    os.makedirs(REPORTS_DIR, exist_ok=True)
+    is_v2 = strategy_name == V2_STRATEGY
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    lines: List[str] = []
+    def _emit(s: str = ""):
+        print(s)
+        lines.append(s)
+
+    _emit("=" * 72)
+    _emit("AlphaTrade BACKTEST SUITE — BTC/ETH/SOL × 30/90/180d")
+    _emit("=" * 72)
+    _emit(f"strategy={strategy_name!r}  interval={interval}  "
+          f"fee={fee}%/side  slippage={slippage}%/side")
+    if is_v2:
+        _emit(f"V2 ATR stops: SL=ATR×{_ATR_SL_MULT}  TP=ATR×{_ATR_TP_MULT}  "
+              f"(fixed-% fallback SL={sl}% TP={tp}%)")
+    else:
+        _emit(f"SL={sl}%  TP={tp}%  score_threshold={threshold}  "
+              f"conf_floor={conf_floor}")
+    _emit(f"shorts={'ON (informational)' if allow_shorts else 'OFF (spot long-only)'}")
+    _emit("-" * 72)
+
+    suite: Dict = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "strategy": strategy_name,
+        "interval": interval,
+        "fee_pct_per_side": fee,
+        "slippage_pct_per_side": slippage,
+        "use_atr": is_v2,
+        "atr_sl_mult": _ATR_SL_MULT if is_v2 else None,
+        "atr_tp_mult": _ATR_TP_MULT if is_v2 else None,
+        "sl_pct": sl, "tp_pct": tp,
+        "score_threshold": threshold, "conf_floor": conf_floor,
+        "allow_shorts": allow_shorts,
+        "periods": {},
+    }
+
+    for days in SUITE_PERIODS:
+        _emit("")
+        _emit(f"╔══ PERIOD: {days}d " + "═" * (60 - len(str(days))))
+        period_trades: List[Trade] = []
+        period_block: Dict = {"days": days, "symbols": {}}
+        for sym in symbols:
+            _emit(f"\n▶ {sym} ({days}d)")
+            try:
+                df = fetch_klines(sym, interval, days, use_cache=use_cache)
+            except Exception as e:
+                _emit(f"  [skip] data error: {e}")
+                period_block["symbols"][sym] = {"trades": 0, "error": str(e)}
+                continue
+            min_bars = (200 if is_v2 else WARMUP) + 50
+            if len(df) < min_bars:
+                _emit(f"  [skip] not enough candles ({len(df)} < {min_bars})")
+                period_block["symbols"][sym] = {"trades": 0,
+                                                "error": "insufficient candles"}
+                continue
+            t0 = time.time()
+            tr = run_symbol(
+                df, sym, sl_pct=sl, tp_pct=tp,
+                fee_pct=fee, slip_pct=slippage,
+                score_threshold=threshold, conf_floor=conf_floor,
+                strategy_name=strategy_name, allow_shorts=allow_shorts,
+                use_atr=is_v2)
+            period_trades.extend(tr)
+            m = metrics(tr)
+            period_block["symbols"][sym] = m
+            _emit(f"  [done] {len(tr)} trades in {time.time()-t0:.1f}s")
+            _emit(_fmt_metrics(m))
+
+        pm = metrics(period_trades)
+        period_block["portfolio"] = pm
+        _emit(f"\n  ── {days}d PORTFOLIO (all symbols) ──")
+        _emit(_fmt_metrics(pm))
+        suite["periods"][str(days)] = period_block
+
+    # ── Summary matrix ───────────────────────────────────────────────────────
+    _emit("\n" + "=" * 72)
+    _emit("SUMMARY — net expectancy/trade (%) per symbol × period")
+    _emit("=" * 72)
+    _hdr = "  symbol   " + "".join(f"{str(d)+'d':>12}" for d in SUITE_PERIODS)
+    _emit(_hdr)
+    for sym in symbols:
+        row = f"  {sym:<9}"
+        for days in SUITE_PERIODS:
+            cell = suite["periods"].get(str(days), {}).get("symbols", {}).get(sym, {})
+            if cell.get("trades", 0):
+                row += f"{cell['expectancy_pct']:>+11.3f}%"
+            else:
+                row += f"{'—':>12}"
+        _emit(row)
+
+    # ── Persist ──────────────────────────────────────────────────────────────
+    base = f"suite_{strategy_name.replace(' ', '_')}_{stamp}"
+    json_path = os.path.join(REPORTS_DIR, base + ".json")
+    txt_path = os.path.join(REPORTS_DIR, base + ".txt")
+    try:
+        with open(json_path, "w") as f:
+            json.dump(suite, f, indent=2, default=str)
+        with open(txt_path, "w") as f:
+            f.write("\n".join(lines) + "\n")
+        _emit("")
+        _emit(f"💾 Saved JSON → {json_path}")
+        _emit(f"💾 Saved TXT  → {txt_path}")
+    except Exception as e:
+        _emit(f"[warn] failed to save report: {e}")
+
+    return suite
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -405,10 +585,26 @@ def main():
                     help="walk-forward folds (out-of-sample windows)")
     ap.add_argument("--allow-shorts", action="store_true",
                     help="also trade SELL signals (NOT executable on Spot)")
+    ap.add_argument("--suite", action="store_true",
+                    help="run the full BTC/ETH/SOL × 30/90/180d suite "
+                         "(gross/fees/net) and auto-save a JSON+TXT report")
     ap.add_argument("--no-cache", action="store_true")
     args = ap.parse_args()
 
     symbols = [s.strip().upper() for s in args.symbols.split(",") if s.strip()]
+
+    # ── SUITE MODE — BTC/ETH/SOL × 30/90/180d, auto-saved report. ────────────
+    if args.suite:
+        run_suite(
+            symbols=symbols, interval=args.interval,
+            fee=args.fee, slippage=args.slippage, sl=args.sl, tp=args.tp,
+            threshold=args.threshold, conf_floor=args.conf_floor,
+            strategy_name=args.strategy, allow_shorts=args.allow_shorts,
+            folds=args.folds, use_cache=not args.no_cache)
+        return
+
+    # V2 uses ATR-based SL/TP — mirror the live worker for the single-run path.
+    _use_atr = args.strategy == V2_STRATEGY
 
     print("=" * 72)
     print("AlphaTrade BACKTEST — honest edge proof (real fees + slippage)")
@@ -441,7 +637,8 @@ def main():
             df, sym, sl_pct=args.sl, tp_pct=args.tp,
             fee_pct=args.fee, slip_pct=args.slippage,
             score_threshold=args.threshold, conf_floor=args.conf_floor,
-            strategy_name=args.strategy, allow_shorts=args.allow_shorts)
+            strategy_name=args.strategy, allow_shorts=args.allow_shorts,
+            use_atr=_use_atr)
         per_symbol[sym] = tr
         all_trades.extend(tr)
         print(f"  [done] {len(tr)} trades in {time.time()-t0:.1f}s")

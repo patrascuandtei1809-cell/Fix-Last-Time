@@ -5,6 +5,7 @@ import pandas as pd
 from .base import Exchange
 from binance_client import (
     BinanceClient, public_klines, public_price, public_24h, extract_fill,
+    extract_fees,
 )
 
 
@@ -67,6 +68,49 @@ class BinanceExchange(Exchange):
             print(f"[BINANCE-EX][ERROR] get_positions failed: {e}", flush=True)
             return []
 
+    # ── Symbol asset parsing ─────────────────────────────────────────────────
+    def _quote_asset(self, symbol: str) -> str:
+        for q in self._SUPPORTED_QUOTES:
+            if symbol.endswith(q):
+                return q
+        return "USDT"
+
+    def _base_asset(self, symbol: str) -> str:
+        q = self._quote_asset(symbol)
+        return symbol[:-len(q)] if symbol.endswith(q) else symbol
+
+    _STABLES = ("USDT", "BUSD", "USDC", "FDUSD", "TUSD", "DAI")
+
+    def _fee_to_usdt(self, fees: dict, symbol: str, fill_price: float) -> float:
+        """Convert Binance commissions (grouped by asset) into ONE USDT figure.
+
+        • quote/stablecoin commission → taken as-is.
+        • base-coin commission        → × the fill price (its USDT value).
+        • any other asset (e.g. BNB)  → × its live public USDT price.
+        A conversion that can't be priced is skipped (better to under-report a
+        tiny BNB fee than to crash a recorded trade)."""
+        if not fees:
+            return 0.0
+        base = self._base_asset(symbol)
+        total = 0.0
+        for asset, amt in fees.items():
+            try:
+                amt = float(amt)
+            except (TypeError, ValueError):
+                continue
+            if amt <= 0:
+                continue
+            if asset in self._STABLES:
+                total += amt
+            elif asset == base:
+                total += amt * float(fill_price or 0)
+            else:
+                try:
+                    total += amt * public_price(f"{asset}USDT")
+                except Exception:
+                    pass
+        return total
+
     # ── Orders (REAL) ────────────────────────────────────────────────────────
     def _normalize_order(self, raw: dict, symbol: str, side: str,
                          qty: float, fallback_price: float) -> Dict:
@@ -74,6 +118,8 @@ class BinanceExchange(Exchange):
         # extract_fill raises if Binance returned no executable fill data,
         # which is treated as an order failure (NEVER fall back to ticker).
         exec_qty, exec_price = extract_fill(raw)
+        fee_detail = extract_fees(raw)
+        fee_usdt   = self._fee_to_usdt(fee_detail, symbol, exec_price)
         return {
             "ok": True,
             "exchange": self.name,
@@ -81,6 +127,8 @@ class BinanceExchange(Exchange):
             "side": side,
             "qty": exec_qty,
             "price": exec_price,
+            "fee": fee_usdt,           # REAL commission converted to USDT
+            "fee_detail": fee_detail,  # raw per-asset commissions
             "raw": raw,
         }
 

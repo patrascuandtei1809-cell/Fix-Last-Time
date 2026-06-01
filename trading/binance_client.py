@@ -53,6 +53,30 @@ def extract_fill(order: dict) -> tuple[float, float]:
     )
 
 
+def extract_fees(order: dict) -> dict:
+    """Return REAL Binance commissions grouped by asset from an order response.
+
+    Binance reports a `commission` + `commissionAsset` on every `fills[]` entry.
+    The asset varies: USDT (quote), the base coin (BTC/ETH/SOL), or BNB if the
+    account pays fees in BNB. We sum per asset and let the caller convert to a
+    single USDT figure (it needs live prices, which this low-level client does
+    not fetch). Returns {} when no commission data is present (e.g. a response
+    that only has cummulativeQuoteQty and no fills[]).
+
+    Example: {"USDT": 0.0123} or {"BTC": 0.00000012, "BNB": 0.00050}.
+    """
+    out: dict = {}
+    for f in order.get("fills") or []:
+        try:
+            c = float(f.get("commission", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        a = f.get("commissionAsset")
+        if c > 0 and a:
+            out[a] = out.get(a, 0.0) + c
+    return out
+
+
 _KLINE_COLS = [
     "open_time", "open", "high", "low", "close", "volume",
     "close_time", "quote_volume", "trades",

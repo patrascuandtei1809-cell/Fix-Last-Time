@@ -373,6 +373,56 @@ def reversal_signal(df: pd.DataFrame) -> Tuple[str, str, int]:
     return "HOLD", f"no {side} trigger ({', '.join(bits)})", 0
 
 
+def ema_macd_rsi_volume_v2_signal(df: pd.DataFrame) -> Tuple[str, str, int]:
+    """EMA_MACD_RSI_VOLUME_V2 — trend-following confirmation strategy.
+
+    A deliberate counterpoint to the reactive scalper: it only acts when the
+    higher-timeframe trend, momentum, RSI bias, and volume ALL agree, so it
+    fires far less often but with stronger confluence. Pairs with ATR-based
+    SL/TP (see risk.RiskManager.atr_*) so stops adapt to volatility.
+
+      LONG  (BUY) : EMA50 > EMA200  AND  MACD hist > 0  AND  RSI > 50
+                    AND  volume > 1.2× the 20-bar average
+      SHORT (SELL): EMA50 < EMA200  AND  MACD hist < 0  AND  RSI < 50
+                    AND  volume > 1.2× the 20-bar average  (spot = informational)
+
+    Returns (signal, reason, confidence_0_100). HOLD carries a diagnostic of
+    which condition failed.
+    """
+    if df is None or len(df) < 200:
+        return "HOLD", "V2: insufficient data (<200 bars for EMA200)", 0
+    d = get_indicators(df) if "ema200" not in df.columns else df
+    last = d.iloc[-1]
+    try:
+        ema50  = float(last["ema50"]);  ema200 = float(last["ema200"])
+        mhist  = float(last["macd_hist"]); rsi  = float(last["rsi"])
+        vol    = float(last["volume"])
+        avg_vol = float(d["volume"].rolling(20).mean().iloc[-1])
+    except Exception:
+        return "HOLD", "V2: indicator NaN", 0
+    if not all(np.isfinite(v) for v in (ema50, ema200, mhist, rsi, vol, avg_vol)):
+        return "HOLD", "V2: non-finite indicator", 0
+
+    vol_ratio = (vol / avg_vol) if avg_vol > 0 else 0.0
+    vol_ok    = vol_ratio > 1.2
+    trend_up  = ema50 > ema200
+
+    if trend_up and mhist > 0 and rsi > 50 and vol_ok:
+        conf = 60 + min(35, int((vol_ratio - 1.2) * 25) + int((rsi - 50) / 2))
+        return "BUY", (
+            f"V2 LONG — EMA50>EMA200, MACD hist {mhist:+.5f}>0, "
+            f"RSI {rsi:.1f}>50, vol {vol_ratio:.2f}×>1.2×"), min(95, conf)
+    if (not trend_up) and mhist < 0 and rsi < 50 and vol_ok:
+        conf = 60 + min(35, int((vol_ratio - 1.2) * 25) + int((50 - rsi) / 2))
+        return "SELL", (
+            f"V2 SHORT — EMA50<EMA200, MACD hist {mhist:+.5f}<0, "
+            f"RSI {rsi:.1f}<50, vol {vol_ratio:.2f}×>1.2×"), min(95, conf)
+
+    return "HOLD", (
+        f"V2 no setup (EMA50{'>' if trend_up else '<'}EMA200, "
+        f"MACD hist {mhist:+.5f}, RSI {rsi:.1f}, vol {vol_ratio:.2f}×)"), 0
+
+
 def get_signal(df: pd.DataFrame, strategy: str, threshold: float = 0.0003) -> Tuple[str, str, int]:
     """Returns (signal, reason, confidence_0_100)."""
     if strategy == "Reversal Scalper":
@@ -380,6 +430,8 @@ def get_signal(df: pd.DataFrame, strategy: str, threshold: float = 0.0003) -> Tu
     if strategy == "Active Scalper":
         # `threshold` is fractional (0.0001 = 0.01%); convert to percent.
         return active_scalper_signal(df, threshold_pct=max(threshold, 0.00001) * 100)
+    if strategy == "EMA_MACD_RSI_VOLUME_V2":
+        return ema_macd_rsi_volume_v2_signal(df)
     if strategy == "EMA Crossover":
         return ema_crossover_signal(df)
     if strategy == "Price Movement":
@@ -404,6 +456,7 @@ def get_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df["ema9"]    = calculate_ema(df["close"], 9)
     df["ema21"]   = calculate_ema(df["close"], 21)
     df["ema50"]   = calculate_ema(df["close"], 50)
+    df["ema200"]  = calculate_ema(df["close"], 200)   # trend filter (V2 strategy)
     df["stoch_k"], df["stoch_d"] = calculate_stochastic(df)
     df["rsi"]     = calculate_rsi(df["close"])
     df["atr"]     = calculate_atr(df)
