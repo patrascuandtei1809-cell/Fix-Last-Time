@@ -213,8 +213,19 @@ def run_symbol(df_raw: pd.DataFrame, symbol: str, *,
                strategy_name: str, allow_shorts: bool,
                use_atr: bool = False,
                atr_sl_mult: float = _ATR_SL_MULT,
-               atr_tp_mult: float = _ATR_TP_MULT) -> List[Trade]:
-    """Replay the bot over one symbol's candles. Returns closed trades."""
+               atr_tp_mult: float = _ATR_TP_MULT,
+               scan_start: int = None, scan_entry_limit: int = None,
+               return_next: bool = False):
+    """Replay the bot over one symbol's candles. Returns closed trades.
+
+    The optional `scan_start` / `scan_entry_limit` / `return_next` arguments
+    exist ONLY to let a constrained sandbox split one long replay across
+    several short shell calls. Because the replay holds no cross-trade state
+    (the outer loop simply resumes at `exit_idx + 1`), restricting the range of
+    candles on which NEW entries are scanned, then resuming from the returned
+    index, produces the exact same trade list as a single full pass. When all
+    three are left at their defaults the behaviour is byte-identical to before.
+    """
     # Precompute indicators ONCE on the full series (EMA/RSI/MACD are recursive
     # and need full history); slicing afterward yields identical values to
     # computing on each prefix, but O(N) instead of O(N^2).
@@ -229,8 +240,11 @@ def run_symbol(df_raw: pd.DataFrame, symbol: str, *,
     warmup = max(WARMUP, 200) if is_v2 else WARMUP
 
     trades: List[Trade] = []
-    i = warmup
+    i = warmup if scan_start is None else max(warmup, scan_start)
+    entry_cap = (n - 1) if scan_entry_limit is None else min(scan_entry_limit, n - 1)
     while i < n - 1:
+        if i >= entry_cap:  # stop scanning NEW entries past the assigned range
+            break
         # Decision uses candles up to and INCLUDING i (fully closed). A short
         # tail slice is enough because indicators are precomputed; the rolling
         # windows inside the engine only look back ~20 bars (V2 needs 200 for
@@ -359,6 +373,8 @@ def run_symbol(df_raw: pd.DataFrame, symbol: str, *,
         # Resume scanning AFTER the trade closes (one position at a time/symbol).
         i = exit_idx + 1
 
+    if return_next:
+        return trades, i
     return trades
 
 

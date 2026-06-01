@@ -10,8 +10,12 @@ A faithful replay (`trading/backtest.py`) of the live engine
 `get_signal`, qualified like `bot.py`, exits = SL/TP/breakeven/2-red-candle from
 `symbol_worker`) over real Binance candles, with 0.1%/side fee + 0.02%/side
 slippage (≈0.24% round-trip), shows a **catastrophic negative edge**, stable
-across 7d and 14d windows, all 3 symbols, every walk-forward fold:
-- win rate ≈ 4%, expectancy ≈ **−0.24%/trade**, profit factor ≈ 0.04, avg hold ≈ 5 bars.
+across the FULL suite — 30/90/180d, all 3 symbols (BTC/ETH/SOL), every
+walk-forward fold (each fold −0.23…−0.25%/trade):
+- win rate ≈ 3–9%, expectancy ≈ **−0.24%/trade** (dead flat regardless of symbol
+  or period), profit factor ≈ 0.02–0.10, ≈48 trades/day/symbol, avg hold ≈ 5–6 bars.
+- 180d net per symbol ≈ −2070% to −2110% (sum of per-trade returns; ~8600 trades),
+  with FEES (≈1700–1740%) dwarfing already-negative GROSS (≈−345% to −373%).
 
 **Structural cause (the durable lesson):** avg LOSS ≈ −0.26% ≈ the round-trip
 cost itself. The **2-red-candle exit fires within ~5 bars almost every time**,
