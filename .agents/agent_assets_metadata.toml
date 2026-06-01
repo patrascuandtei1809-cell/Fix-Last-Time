@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "hi89c8CfMafE5g5q-ivhq"
+uri = "file://trading/PROJECT_REPORT.md"
+type = "text"
+title = "AlphaTrade — Project Discovery Report"
