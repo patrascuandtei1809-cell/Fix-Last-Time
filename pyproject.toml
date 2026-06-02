@@ -7,6 +7,7 @@ dependencies = [
     "numpy>=2.4.6",
     "pandas>=3.0.3",
     "plotly>=6.7.0",
+    "psycopg2-binary>=2.9.12",
     "pytest>=9.0.3",
     "python-binance>=1.0.36",
     "python-dateutil>=2.9.0.post0",

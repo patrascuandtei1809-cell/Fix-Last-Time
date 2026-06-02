@@ -1,10 +1,5 @@
 [
   {
-    "time": "2026-05-21T22:46:20.708915",
-    "level": "ERROR",
-    "message": "Public price fetch failed: Public price fetch failed: 451 Client Error:  for url: https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
-  },
-  {
     "time": "2026-05-21T22:46:50.755984",
     "level": "ERROR",
     "message": "Public price fetch failed: Public price fetch failed: 451 Client Error:  for url: https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
@@ -2498,5 +2493,10 @@
     "time": "2026-05-22T05:25:22.427415",
     "level": "INFO",
     "message": "\ud83d\uded1 Bot thread exited for BTCUSDT"
+  },
+  {
+    "time": "2026-06-02T19:29:00.723713",
+    "level": "WARNING",
+    "message": "\ud83d\udea8 EMERGENCY STOP activated"
   }
 ]

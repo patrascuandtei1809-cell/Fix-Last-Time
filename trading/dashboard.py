@@ -46,6 +46,7 @@ if _DIR not in sys.path:
     sys.path.insert(0, _DIR)
 
 import bot as bot_module
+import aggressive_mode as am
 import diagnostics
 from bot import (
     load_trades, load_activity, get_open_trades,
@@ -591,6 +592,7 @@ def _init():
         "manual_amount":    10.0,                # $10–$20 per trade
         "ai_assist":        True,                # AI always on (advisory, never blocks)
         "ai_aggressiveness": "Active Scalper",   # ignored — single mode
+        "aggressive_mode":  am.DEFAULT_MODE,     # Conservative/Balanced/Aggressive/Very Aggressive (PG-persisted)
         "refresh_secs":     5,
         "alert_open_ids":      [],
         "alert_closed_ids":    [],
@@ -728,6 +730,7 @@ def _maybe_resume_bot():
             manage_manual_trades = bool(getattr(st.session_state.global_risk,
                                                 "manage_manual_trades", False)),
         )
+        am.apply_profile_to_bot(b, st.session_state.get("aggressive_mode", am.DEFAULT_MODE))
         b._initial_balance = st.session_state.initial_balance
         b.start()
         st.session_state.bot_was_running = True
@@ -747,7 +750,7 @@ if not st.session_state.get("_settings_loaded"):
         "threshold", "initial_balance", "manual_amount",
         "refresh_secs", "tg_enabled", "tg_token", "tg_chat_id",
         "active_symbols", "bot_was_running",
-        "ai_assist", "ai_aggressiveness",
+        "ai_assist", "ai_aggressiveness", "aggressive_mode",
         # Chart indicator toggles
         "show_ema", "show_volume", "show_rsi", "show_macd",
         "show_stoch", "show_old_trades", "show_sl_tp",
@@ -824,6 +827,21 @@ if not st.session_state.get("_settings_loaded"):
         st.session_state.risk_manager.settings = st.session_state.risk
     except Exception:
         pass
+
+    # ── Aggressive Mode: PostgreSQL is the source of truth (survives redeploy) ─
+    # Falls back to the JSON-persisted / default value if the DB is unavailable.
+    try:
+        _db_mode = am.get_mode()
+        st.session_state.aggressive_mode = _db_mode
+        _prof = am.get_profile(_db_mode)
+        st.session_state.check_every = int(_prof["check_every"])
+        am.apply_profile_to_risk(st.session_state.risk, _db_mode)
+        for _rs in (st.session_state.get("per_symbol_risk") or {}).values():
+            am.apply_profile_to_risk(_rs, _db_mode)
+        st.session_state.risk_manager.settings = st.session_state.risk
+    except Exception as _e:
+        print(f"[AGGRO] mode load failed, using default: {_e}", flush=True)
+        st.session_state.aggressive_mode = am.DEFAULT_MODE
 
     st.session_state._settings_loaded = True
     if _persisted:
@@ -2255,6 +2273,7 @@ with st.sidebar:
                     manage_manual_trades=bool(getattr(st.session_state.global_risk,
                                                       "manage_manual_trades", False)),
                 )
+                am.apply_profile_to_bot(b, st.session_state.aggressive_mode)
                 b._initial_balance = st.session_state.initial_balance
                 b.start()
                 # Refresh-proof: clear stop flag so auto-resume re-launches on
@@ -2461,6 +2480,62 @@ with st.sidebar:
     st.session_state.risk_manager.settings = r
 
     # ── Global (account-wide) risk caps — applies across all symbols ──────────
+    # ── 🔥 Aggressive Mode ────────────────────────────────────────────────────
+    with st.expander("🔥 Aggressive Mode", expanded=False):
+        _cur_mode = am.normalize_mode(st.session_state.get("aggressive_mode"))
+        _sel_mode = st.selectbox(
+            "Trading intensity",
+            am.MODES,
+            index=am.MODES.index(_cur_mode),
+            help="Higher intensity = more trades and larger size. Safety limits "
+                 "(strategy validation, risk caps, spending limits, safe mode) "
+                 "ALWAYS apply and are never bypassed.",
+        )
+        if _sel_mode != _cur_mode:
+            if am.set_mode(_sel_mode, actor="dashboard"):
+                st.session_state.aggressive_mode = _sel_mode
+                _pp = am.get_profile(_sel_mode)
+                st.session_state.check_every = int(_pp["check_every"])
+                am.apply_profile_to_risk(st.session_state.risk, _sel_mode)
+                for _rs in (st.session_state.get("per_symbol_risk") or {}).values():
+                    am.apply_profile_to_risk(_rs, _sel_mode)
+                st.session_state.risk_manager.settings = st.session_state.risk
+                _rb = bot_module.get_bot()
+                if _rb and _rb.is_running():
+                    am.apply_profile_to_bot(_rb, _sel_mode)
+                st.rerun()
+            else:
+                st.error("Could not save mode to database — keeping current mode.")
+
+        _p = am.get_profile(_cur_mode)
+        st.caption(f"**{_cur_mode}** — {am.MODE_DESCRIPTIONS[_cur_mode]}")
+        st.markdown(
+            f"- Min AI confidence to trade: **≥ {int(_p['confidence_floor'])}**\n"
+            f"- Signal score bar: **{int(_p['score_threshold_base'])}** "
+            f"(floor {int(_p['score_threshold_floor'])})\n"
+            f"- Requested size: **{_p['dynamic_size_pct']:.0f}% of free USDT** "
+            f"(still capped by your risk limits)\n"
+            f"- Scan every **{int(_p['check_every'])}s**, "
+            f"**{int(_p['global_throttle_sec'])}s** between trades, "
+            f"re-entry cooldown **{int(_p['cooldown_seconds'])}s**"
+        )
+        st.caption("🔒 Never bypasses: strategy validation · allowlist · risk "
+                   "caps · max position size · spending limits · safe mode · "
+                   "exchange safety checks.")
+        if not am.db_available():
+            st.caption("⚠️ Database unavailable — mode falls back to default and "
+                       "may not persist across restart.")
+        _audit = am.get_audit_log(limit=5)
+        if _audit:
+            st.markdown("**Recent mode changes**")
+            for _row in _audit:
+                _when = _row.get("changed_at")
+                _ws = (_when.strftime("%Y-%m-%d %H:%M")
+                       if hasattr(_when, "strftime") else str(_when))
+                st.caption(f"• {_ws} — {_row.get('old_mode') or '—'} → "
+                           f"**{_row.get('new_mode')}** "
+                           f"({_row.get('actor') or '?'})")
+
     with st.expander("🌐 Global risk (account-wide)", expanded=False):
         g = st.session_state.global_risk
         st.caption(
@@ -2879,6 +2954,7 @@ with st.container():
                             manage_manual_trades=bool(getattr(st.session_state.global_risk,
                                                               "manage_manual_trades", False)),
                         )
+                        am.apply_profile_to_bot(b, st.session_state.aggressive_mode)
                         b._initial_balance = st.session_state.initial_balance
                         b.start()
                 st.rerun()

@@ -8,7 +8,7 @@
   "bot_was_running": false,
   "strategy": "Reversal Scalper",
   "interval": "1m",
-  "check_every": 2,
+  "check_every": 8,
   "threshold": 0.01,
   "initial_balance": 1000.0,
   "manual_amount": 100.0,
@@ -37,9 +37,9 @@
     "stop_loss_pct": 0.4,
     "take_profit_pct": 0.6,
     "max_open_trades": 30,
-    "cooldown_seconds": 5,
+    "cooldown_seconds": 15,
     "max_daily_loss_pct": 5.0,
     "max_trades_per_session": 0,
-    "emergency_stop": false
+    "emergency_stop": true
   }
 }
