@@ -64,3 +64,24 @@ confirmation across more windows, run OFF the 120s sandbox.
 research is 4h HTF momentum on ETH/SOL. Driver: `trading/edge_search.py`
 (chunked by TF to fit the sandbox cap; results in `data/research/edge_rows.json`,
 report in `edge_report.md`).
+
+## Rigorous validation of the 4h candidates (max history + WF + Monte Carlo + sensitivity)
+The 360d edge-search positives held up — and STRENGTHENED — on MAXIMUM history
+(ETH 4h 8.8y/295 trades, SOL 4h 5.8y/200 trades). The small 360d window had
+under-counted the edge, not over-counted it.
+- **🟢 ROBUST: `EMA_MACD_RSI_VOLUME_V2` @ 4h ETH** — +0.84%/trade, PF1.40,
+  Sharpe2.43, +616% total; 5/5 walk-forward folds positive (incl. 2018/2022
+  bears); Monte Carlo P(exp>0)=99.3% with bootstrap 90% CI LOWER bound still
+  positive; survives fee±50%, slip±50%, ATR SL/TP ±25%. BUT reshuffled maxDD
+  worst-5% ≈ −60%.
+- **🟡 WEAK: V2 @ 4h SOL** — base good but edge collapses to break-even under a
+  25%-tighter stop (narrow-param dependence) and MC CI lower bound is negative.
+- **🟡 WEAK: Trend Pullback @ 4h SOL** — survives sensitivity but MC CI dips
+  negative (P(exp>0)=83%) and 1 WF fold negative.
+**Why it matters:** the right edge bar is not "positive on one 360d window" but
+positive-on-max-history AND walk-forward-stable AND Monte-Carlo lower-CI>0 AND
+parameter-stable. Only ETH 4h V2 clears all four. Tooling:
+`trading/validate_candidates.py` (fee sensitivity is ANALYTIC since ret=gross−2·fee;
+slip/param need re-runs because slippage changes fills→SL/TP timing). Live gate
+left default-safe; nothing deployed. All candidates are LONG-ONLY → a long bear
+regime is the main un-modeled risk.

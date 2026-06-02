@@ -534,3 +534,26 @@ human report in `data/research/edge_report.md`).
 single 360d window, only ~30–50 trades/symbol (too thin for walk-forward). The
 live auto-disable gate stays **default-safe (allowlist empty → no auto-trading)**.
 Next step = out-of-sample confirmation across more windows, run OFF the sandbox.
+
+## 4h EDGE — RIGOROUS VALIDATION (June 2026)
+
+Validated the three 4h candidates from the edge search on MAXIMUM history with
+walk-forward, Monte Carlo, and full sensitivity. Tool: `trading/validate_candidates.py`
+(analysis only — live bot/dashboard/allowlist untouched). Report:
+`data/research/validation_report.md`. Fee sensitivity is analytic (ret=gross−2·fee);
+slippage + ATR SL/TP perturbations are re-runs.
+
+**Result — the 4h edge is REAL and got STRONGER on full history (the 360d window
+under-counted it), but only one candidate is robust:**
+- **🟢 ROBUST — `EMA_MACD_RSI_VOLUME_V2` @ 4h ETH:** +0.84%/trade over 295 trades
+  / 8.8y, PF1.40, Sharpe2.43, +616% total. 5/5 walk-forward folds positive (incl.
+  2018/2022 bears); Monte Carlo P(exp>0)=99.3%, bootstrap 90% CI lower bound still
+  positive; survives fee±50%, slip±50%, ATR SL/TP ±25%. Caveat: reshuffled maxDD
+  worst-5% ≈ −60%, and it's long-only.
+- **🟡 WEAK — V2 @ 4h SOL:** collapses to break-even under a 25%-tighter stop
+  (narrow-param) and MC CI lower bound negative.
+- **🟡 WEAK — Trend Pullback @ 4h SOL:** survives sensitivity but MC CI dips
+  negative (P(exp>0)=83%).
+
+None rejected. Live auto-disable gate remains default-safe (allowlist empty → no
+auto-trading); nothing was deployed.
