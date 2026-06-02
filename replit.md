@@ -471,3 +471,42 @@ NestJS/Redis/BullMQ, NO paid feeds, nothing mock-as-production):
   and evidence-graph creation against the real DB. Integration test closes the
   shared `pool` in `afterAll` (vitest isolates each test file in its own worker,
   so this is per-file safe and avoids hanging open pg handles).
+
+## STRATEGY RESEARCH FRAMEWORK — honest after-fee edge proof (June 2026)
+
+User priority shift: STOP expanding backend infra; PROVE (or honestly disprove)
+a positive after-fee trading edge. Built in `trading/` (the bot's codebase, NOT
+the api-server research engine).
+
+- **`trading/research.py`** — StrategySpec registry + multi-timeframe sweep.
+  Sweeps strategy × timeframe × symbol × period; ranks by **net expectancy/trade
+  after fees** (0.1%/side fee + 0.02%/side slippage ≈ **0.24% round-trip**).
+  Trade attribution by exit-reason / regime / symbol. Walk-forward folds (4) for
+  out-of-sample. Strict ACCEPT rule: net exp > 0 AND PF ≥ 1 on EVERY cell with
+  ≥5 trades, ≥20 total trades, majority WF folds positive. Persists a ranked
+  leaderboard + verdict to `data/research/` (+ `latest.json`).
+- **`trading/backtest.py`** — engine gained backward-compatible `run_symbol`
+  flags: `arm_be` (bool), `max_red` (int, 0=off), `qualify_mode`
+  (auto/signal/weighted), `block_regimes`, `warmup_bars`; records entry `regime`
+  on each Trade. HTF strategies disable the scalper exits (breakeven@+0.2%,
+  2-red-candle) that were killing winners, letting ATR TP run.
+- **`trading/strategy.py`** — added HTF candidates `donchian_breakout_signal()`
+  and `trend_pullback_signal()` (LONG-only, EMA200 trend filter, ≥210 bars),
+  registered in `get_signal()`.
+- **AUTO-DISABLE GATE (live).** `is_strategy_validated(strategy, interval)` reads
+  the validated allowlist (`data/research/validated_strategies.json`). `bot.py`
+  enforces it BEFORE `execute_entry` — a (strategy, timeframe) with no ACCEPTED
+  research result is **default-safe blocked** (no auto orders). Manual trades
+  bypass it. Override with env `ALPHATRADE_ALLOW_UNVALIDATED=1`. Dashboard shows
+  a colored banner (✅ enabled / 🔒 disabled / ⚠️ override) above the bot overview.
+
+### VERDICT (June 2, 2026): 🔴 NO after-fee edge
+
+Every strategy × timeframe REJECTED. The gross edge (if any) is smaller than the
+~0.24% round-trip cost; win rates ~27–37%, PF < 1 almost everywhere. Closest was
+Trend Pullback @ 4h (agg +0.051%/trade) but it is carried entirely by SOL (+1.23%,
+15 trades) while BTC/ETH are negative — not robust, correctly rejected. The 1m
+reversal baseline lost −0.250% (≈ fees alone). **The allowlist is empty, so the
+live bot is honestly AUTO-DISABLED.** Changing this requires a genuinely different
+edge source (funding/basis, cross-exchange, on-chain/news), NOT more threshold
+tuning — lowering thresholds to trade more only multiplies the fee drag.

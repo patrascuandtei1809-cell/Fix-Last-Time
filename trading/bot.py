@@ -28,6 +28,14 @@ from exchanges import registry as ex_registry
 from symbol_worker import SymbolWorker
 import telegram_notifier as tg
 import diagnostics
+try:
+    # AUTO-DISABLE gate — the live bot refuses to auto-trade any
+    # (strategy, timeframe) that a research run has not ACCEPTED as having a
+    # positive after-fee edge. Default-safe: no validated allowlist → no auto
+    # entry. Manual trades are never affected by this gate.
+    from research import is_strategy_validated as _is_strategy_validated
+except Exception:                      # pragma: no cover - research optional
+    _is_strategy_validated = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -503,6 +511,12 @@ class TradingBot:
         self.gpt_prob_floor:       int = 50   # GPT advisory only (no hard veto)
         self.global_throttle_sec:   int = 5   # min seconds between any 2 new trades
         self._last_global_trade_at: float = 0.0   # unix seconds
+        # AUTO-DISABLE gate: only auto-trade strategy/timeframes a research run
+        # has ACCEPTED (positive after-fee edge). Default-safe ON. Operator can
+        # override with ALPHATRADE_ALLOW_UNVALIDATED=1 (trades at their own risk).
+        self.require_validation: bool = (
+            os.environ.get("ALPHATRADE_ALLOW_UNVALIDATED", "0") != "1")
+        self._validation_block_logged: Optional[str] = None
         # Candidate queue — workers append their evaluation here via on_candidate;
         # orchestrator picks winner each cycle then clears the queue.
         self._candidates: List[Dict] = []
@@ -848,6 +862,32 @@ class TradingBot:
                     for _k, _w in self.workers.items():
                         if _w.symbol == winner["symbol"]:
                             w = _w; break
+                # ── AUTO-DISABLE GATE ────────────────────────────────────────
+                # Refuse to auto-trade a (strategy, timeframe) that no research
+                # run has ACCEPTED. Default-safe: unknown/unvalidated → block.
+                # This is the honest enforcement of "no proven after-fee edge →
+                # no auto-trading". Manual trades bypass this entirely.
+                if w is not None and self.require_validation:
+                    _allowed, _entry = (False, None)
+                    if _is_strategy_validated is not None:
+                        try:
+                            _allowed, _entry = _is_strategy_validated(
+                                w.strategy, w.interval)
+                        except Exception:
+                            _allowed = False
+                    if not _allowed:
+                        _key = f"{w.strategy}@{w.interval}"
+                        if self._validation_block_logged != _key:
+                            self._validation_block_logged = _key
+                            log_activity("WARNING",
+                                f"🔒 AUTO-DISABLED: '{w.strategy}' @ {w.interval} "
+                                f"has no validated after-fee edge — bot will NOT "
+                                f"auto-trade it. Run research.py to validate, or "
+                                f"set ALPHATRADE_ALLOW_UNVALIDATED=1 to override. "
+                                f"Manual trades still allowed.")
+                        print(f"[GATE] {_key} not validated → SKIP auto-entry "
+                              f"({winner['symbol']})", flush=True)
+                        w = None
                 if w is not None:
                     try:
                         # Stamp the effective score threshold used to qualify

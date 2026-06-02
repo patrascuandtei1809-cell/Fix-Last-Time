@@ -423,6 +423,96 @@ def ema_macd_rsi_volume_v2_signal(df: pd.DataFrame) -> Tuple[str, str, int]:
         f"RSI {rsi:.1f}, MACD hist {mhist:+.5f}, vol {vol_ratio:.2f}×)"), 0
 
 
+def donchian_breakout_signal(df: pd.DataFrame, lookback: int = 20) -> Tuple[str, str, int]:
+    """Donchian Breakout — LONG-ONLY higher-timeframe trend-breakout strategy.
+
+    Designed for 15m/1h/4h where a real breakout can run far past the ~0.24%
+    round-trip fee hurdle (unlike a 1m scalp). Pairs with ATR-based SL/TP and
+    NO scalper exits (no breakeven snap, no 2-red exit) so winners can run.
+
+    BUY requires ALL of:
+      • EMA50 > EMA200            (only break out WITH the higher-tf trend)
+      • close > prior N-bar high  (genuine breakout, current bar excluded)
+      • volume ≥ 1.0× 20-bar avg  (participation behind the break)
+
+    Long-only (spot). Returns (signal, reason, confidence_0_100).
+    """
+    if df is None or len(df) < 210:
+        return "HOLD", "Donchian: insufficient data (<210 bars)", 0
+    d = get_indicators(df) if "ema200" not in df.columns else df
+    last = d.iloc[-1]
+    try:
+        close  = float(last["close"])
+        ema50  = float(last["ema50"]);  ema200 = float(last["ema200"])
+        vol    = float(last["volume"])
+        avg_vol = float(d["volume"].rolling(20).mean().iloc[-1])
+        prior_high = float(d["high"].iloc[-(lookback + 1):-1].max())
+    except Exception:
+        return "HOLD", "Donchian: indicator NaN", 0
+    if not all(np.isfinite(v) for v in (close, ema50, ema200, vol, avg_vol, prior_high)):
+        return "HOLD", "Donchian: non-finite indicator", 0
+
+    trend_up  = ema50 > ema200
+    vol_ratio = (vol / avg_vol) if avg_vol > 0 else 0.0
+    if trend_up and close > prior_high and vol_ratio >= 1.0:
+        conf = 60 + min(35, int((vol_ratio - 1.0) * 20)
+                        + int((close / prior_high - 1.0) * 4000))
+        return "BUY", (
+            f"Donchian breakout — close {close:.2f} > {lookback}-bar high "
+            f"{prior_high:.2f}, EMA50>EMA200, vol {vol_ratio:.2f}×"), min(95, conf)
+    return "HOLD", (
+        f"Donchian no breakout (close {close:.2f} vs {lookback}h-high "
+        f"{prior_high:.2f}, trend {'up' if trend_up else 'down'}, "
+        f"vol {vol_ratio:.2f}×)"), 0
+
+
+def trend_pullback_signal(df: pd.DataFrame) -> Tuple[str, str, int]:
+    """Trend Pullback — LONG-ONLY buy-the-dip in an established uptrend.
+
+    Higher-timeframe companion to Donchian: instead of buying the break, it buys
+    the first reclaim of EMA21 after a pullback inside an uptrend, with RSI
+    turning up. Targets a continuation leg that clears the fee hurdle. ATR exits,
+    no scalper exits.
+
+    BUY requires ALL of:
+      • EMA50 > EMA200             (established uptrend)
+      • prior close ≤ prior EMA21  (price pulled back to/under the fast MA)
+      • current close > EMA21       (reclaiming the MA — bounce confirmed)
+      • RSI rising and 40 ≤ RSI ≤ 68 (momentum turning up, not overbought)
+
+    Long-only (spot). Returns (signal, reason, confidence_0_100).
+    """
+    if df is None or len(df) < 210:
+        return "HOLD", "Pullback: insufficient data (<210 bars)", 0
+    d = get_indicators(df) if "ema200" not in df.columns else df
+    last = d.iloc[-1]; prev = d.iloc[-2]
+    try:
+        close  = float(last["close"]); pclose = float(prev["close"])
+        ema21  = float(last["ema21"]); pema21 = float(prev["ema21"])
+        ema50  = float(last["ema50"]); ema200 = float(last["ema200"])
+        rsi    = float(last["rsi"]);   rsi_prev = float(prev["rsi"])
+    except Exception:
+        return "HOLD", "Pullback: indicator NaN", 0
+    if not all(np.isfinite(v) for v in
+               (close, pclose, ema21, pema21, ema50, ema200, rsi, rsi_prev)):
+        return "HOLD", "Pullback: non-finite indicator", 0
+
+    trend_up    = ema50 > ema200
+    pulled_back = pclose <= pema21
+    reclaim     = close > ema21
+    rsi_ok      = (40 <= rsi <= 68) and (rsi > rsi_prev)
+    if trend_up and pulled_back and reclaim and rsi_ok:
+        conf = 60 + min(30, int(rsi - 40))
+        return "BUY", (
+            "Trend pullback — uptrend (EMA50>EMA200), bounce off EMA21 "
+            f"(prev≤EMA21, now>EMA21), RSI {rsi:.1f} rising"), min(90, conf)
+    return "HOLD", (
+        f"Pullback no setup (trend {'up' if trend_up else 'down'}, "
+        f"prev{'≤' if pulled_back else '>'}EMA21, "
+        f"now{'>' if reclaim else '≤'}EMA21, "
+        f"RSI {rsi:.1f}{'↑' if rsi > rsi_prev else '↓'})"), 0
+
+
 def get_signal(df: pd.DataFrame, strategy: str, threshold: float = 0.0003) -> Tuple[str, str, int]:
     """Returns (signal, reason, confidence_0_100)."""
     if strategy == "Reversal Scalper":
@@ -432,6 +522,10 @@ def get_signal(df: pd.DataFrame, strategy: str, threshold: float = 0.0003) -> Tu
         return active_scalper_signal(df, threshold_pct=max(threshold, 0.00001) * 100)
     if strategy == "EMA_MACD_RSI_VOLUME_V2":
         return ema_macd_rsi_volume_v2_signal(df)
+    if strategy == "Donchian Breakout":
+        return donchian_breakout_signal(df)
+    if strategy == "Trend Pullback":
+        return trend_pullback_signal(df)
     if strategy == "EMA Crossover":
         return ema_crossover_signal(df)
     if strategy == "Price Movement":

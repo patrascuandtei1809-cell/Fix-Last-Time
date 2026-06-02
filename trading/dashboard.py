@@ -1616,6 +1616,47 @@ if _la and isinstance(_la, dict) and _la.get("msg"):
 # can see at a glance WHY each enabled symbol isn't trading. Always rendered
 # (with placeholders) when bot is ON, so an idle bot is never silently idle.
 if bot_running:
+    # ── AUTO-DISABLE GATE STATUS ─────────────────────────────────────────────
+    # Honest surface of whether the bot is allowed to auto-trade the CURRENT
+    # strategy/timeframe. Default-safe: until a research run ACCEPTS a
+    # (strategy, timeframe), the bot will NOT place auto orders. Manual trades
+    # are unaffected. Mirrors the gate in bot.py.
+    try:
+        from research import is_strategy_validated as _is_val, \
+                             validation_status as _val_status
+        _allow_unval = os.environ.get("ALPHATRADE_ALLOW_UNVALIDATED") == "1"
+        _cur_strat = st.session_state.strategy
+        _cur_intv  = st.session_state.interval
+        _ok, _entry = _is_val(_cur_strat, _cur_intv)
+        _vs = _val_status()
+        if _allow_unval:
+            st.markdown(
+                f'<div style="padding:8px 20px;background:#2a1a0a;border-bottom:1px solid #e3b34166;'
+                f'font-size:12px;color:#e3b341;font-family:\'JetBrains Mono\',monospace;font-weight:700;">'
+                f'⚠️ VALIDATION OVERRIDE ACTIVE › auto-trading <b>{_cur_strat} @ {_cur_intv}</b> '
+                f'without a proven after-fee edge (ALPHATRADE_ALLOW_UNVALIDATED=1).</div>',
+                unsafe_allow_html=True)
+        elif _ok:
+            _ne = (_entry or {}).get("net_expectancy_pct")
+            _ne_txt = f" · net exp {_ne:+.3f}%/trade" if isinstance(_ne, (int, float)) else ""
+            st.markdown(
+                f'<div style="padding:8px 20px;background:#0d1f12;border-bottom:1px solid #2ea04366;'
+                f'font-size:12px;color:#3fb950;font-family:\'JetBrains Mono\',monospace;font-weight:700;">'
+                f'✅ AUTO-TRADE ENABLED › <b>{_cur_strat} @ {_cur_intv}</b> passed after-fee '
+                f'validation{_ne_txt}.</div>',
+                unsafe_allow_html=True)
+        else:
+            st.markdown(
+                f'<div style="padding:8px 20px;background:#2a0d0d;border-bottom:1px solid #f8514966;'
+                f'font-size:12px;color:#f85149;font-family:\'JetBrains Mono\',monospace;font-weight:700;">'
+                f'🔒 AUTO-TRADE DISABLED › <b>{_cur_strat} @ {_cur_intv}</b> has no validated '
+                f'after-fee edge ({_vs.get("count", 0)} strategy/timeframe pair(s) validated). '
+                f'The bot will NOT place auto orders — manual trades still work. '
+                f'Run <code>python research.py</code> to (re)validate.</div>',
+                unsafe_allow_html=True)
+    except Exception:
+        pass
+
     _all_state = get_all_symbol_state() or {}
     _active    = list(st.session_state.active_symbols or [])
     # Ensure every active symbol has a row, even before its first tick

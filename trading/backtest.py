@@ -201,6 +201,7 @@ class Trade:
     ret_pct: float      # NET of fees + slippage, as fraction (0.01 = +1%)
     gross_pct: float = 0.0  # GROSS price move (pre-fee), as fraction
     fee_pct: float = 0.0    # round-trip fee charged, as fraction (both sides)
+    regime: str = ""        # market regime at entry (for attribution)
 
 
 WARMUP = 60   # candles needed before the indicators are trustworthy
@@ -214,6 +215,11 @@ def run_symbol(df_raw: pd.DataFrame, symbol: str, *,
                use_atr: bool = False,
                atr_sl_mult: float = _ATR_SL_MULT,
                atr_tp_mult: float = _ATR_TP_MULT,
+               arm_be: bool = True,
+               max_red: int = AS_MAX_RED_AFTER_ENTRY,
+               qualify_mode: str = "auto",
+               block_regimes: tuple = ("RANGE", "DEAD"),
+               warmup_bars: int = None,
                scan_start: int = None, scan_entry_limit: int = None,
                return_next: bool = False):
     """Replay the bot over one symbol's candles. Returns closed trades.
@@ -237,7 +243,12 @@ def run_symbol(df_raw: pd.DataFrame, symbol: str, *,
     # (EMA50>EMA200 + MACD hist + RSI + volume), not the weighted scalper gate,
     # and uses ATR-based SL/TP. V2 needs ≥200 bars for EMA200.
     is_v2 = strategy_name == V2_STRATEGY
-    warmup = max(WARMUP, 200) if is_v2 else WARMUP
+    # Self-qualify (use the strategy's OWN get_signal, like V2) vs weighted gate.
+    use_signal_qualify = (qualify_mode == "signal") or (qualify_mode == "auto" and is_v2)
+    if warmup_bars is not None:
+        warmup = max(WARMUP, int(warmup_bars))
+    else:
+        warmup = max(WARMUP, 200) if is_v2 else WARMUP
 
     trades: List[Trade] = []
     i = warmup if scan_start is None else max(warmup, scan_start)
@@ -251,13 +262,13 @@ def run_symbol(df_raw: pd.DataFrame, symbol: str, *,
         # EMA200).
         sl_slice = df.iloc[max(0, i - warmup):i + 1]
         try:
-            if is_v2:
-                # V2 qualifies on its own confluence signal — no weighted gate.
-                # Plus a REGIME gate: never open in RANGE or DEAD (operator spec).
+            if use_signal_qualify:
+                # Self-qualify on the strategy's OWN signal — no weighted gate.
+                # Plus a REGIME gate (default: never open in RANGE or DEAD).
                 sig, _rr, rconf = strategy.get_signal(sl_slice, strategy_name)
                 regime, _ = market_regime.classify_regime(sl_slice)
                 qualified = (sig in ("BUY", "SELL") and rconf > 0
-                             and regime not in ("RANGE", "DEAD"))
+                             and (not block_regimes or regime not in block_regimes))
             else:
                 regime, _ = market_regime.classify_regime(sl_slice)
                 sig, score, _bd, veto = strategy.weighted_decision(
@@ -333,7 +344,7 @@ def run_symbol(df_raw: pd.DataFrame, symbol: str, *,
                     exit_raw = eff_sl; reason = "BE/SL" if be_armed else "SL"; exit_idx = j; break
                 if hi >= tp_price:
                     exit_raw = tp_price; reason = "TP"; exit_idx = j; break
-                if (not be_armed) and hi >= be_arm:
+                if arm_be and (not be_armed) and hi >= be_arm:
                     be_armed = True
                 if post_entry:
                     red_count = red_count + 1 if cl < op else 0
@@ -343,13 +354,13 @@ def run_symbol(df_raw: pd.DataFrame, symbol: str, *,
                     exit_raw = eff_sl; reason = "BE/SL" if be_armed else "SL"; exit_idx = j; break
                 if lo <= tp_price:
                     exit_raw = tp_price; reason = "TP"; exit_idx = j; break
-                if (not be_armed) and lo <= be_arm:
+                if arm_be and (not be_armed) and lo <= be_arm:
                     be_armed = True
                 if post_entry:
                     red_count = red_count + 1 if cl > op else 0
 
-            if post_entry and red_count >= AS_MAX_RED_AFTER_ENTRY:
-                exit_raw = cl; reason = f"{AS_MAX_RED_AFTER_ENTRY}-red exit"; exit_idx = j; break
+            if max_red > 0 and post_entry and red_count >= max_red:
+                exit_raw = cl; reason = f"{max_red}-red exit"; exit_idx = j; break
             j += 1
 
         if exit_idx is None:  # ran off the end — close at last close
@@ -372,6 +383,7 @@ def run_symbol(df_raw: pd.DataFrame, symbol: str, *,
             entry_price=entry_fill, exit_price=exit_fill,
             bars_held=exit_idx - entry_idx, reason=reason, ret_pct=ret,
             gross_pct=gross, fee_pct=fee_round_trip,
+            regime=str(regime or ""),
         ))
         # Resume scanning AFTER the trade closes (one position at a time/symbol).
         i = exit_idx + 1

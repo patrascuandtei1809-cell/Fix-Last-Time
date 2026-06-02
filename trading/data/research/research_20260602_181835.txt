@@ -1,0 +1,65 @@
+============================================================================
+AlphaTrade STRATEGY RESEARCH — honest after-fee edge proof
+============================================================================
+fee=0.1%/side  slippage=0.02%/side  round-trip cost≈0.24%
+symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[90, 180]d  walk-forward folds=4
+ACCEPT rule: net expectancy>0 AND PF≥1 on EVERY cell (≥5 trades), ≥20 total trades, majority WF folds positive
+----------------------------------------------------------------------------
+
+▶ Reversal Scalper (1m baseline)  @ 1m  (symbols=BTCUSDT  periods=[3]d)
+      BTCUSDT/3d: 182 trades  net_exp=-0.250%  PF=0.01
+    → 🔴 REJECT  net_exp=-0.250%  PF=0.01  trades=182  (1/1 cells negative after fees: BTCUSDT/3d)
+
+▶ Donchian Breakout (HTF)  @ 1h  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[180]d)
+      BTCUSDT/180d: 43 trades  net_exp=-0.377%  PF=0.54
+      ETHUSDT/180d: 44 trades  net_exp=-0.424%  PF=0.61
+      SOLUSDT/180d: 41 trades  net_exp=-0.475%  PF=0.57
+    → 🔴 REJECT  net_exp=-0.425%  PF=0.57  trades=128  (3/3 cells negative after fees: BTCUSDT/180d, ETHUSDT/180d, SOLUSDT/180d)
+
+▶ Donchian Breakout (HTF)  @ 4h  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[180]d)
+      BTCUSDT/180d: 15 trades  net_exp=-0.230%  PF=0.81
+      ETHUSDT/180d: 21 trades  net_exp=-0.437%  PF=0.74
+      SOLUSDT/180d: 19 trades  net_exp=-0.752%  PF=0.67
+    → 🔴 REJECT  net_exp=-0.489%  PF=0.72  trades=55  (3/3 cells negative after fees: BTCUSDT/180d, ETHUSDT/180d, SOLUSDT/180d)
+
+▶ Trend Pullback (HTF)  @ 1h  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[180]d)
+      BTCUSDT/180d: 56 trades  net_exp=-0.123%  PF=0.82
+      ETHUSDT/180d: 53 trades  net_exp=-0.236%  PF=0.76
+      SOLUSDT/180d: 44 trades  net_exp=-0.302%  PF=0.72
+    → 🔴 REJECT  net_exp=-0.214%  PF=0.76  trades=153  (3/3 cells negative after fees: BTCUSDT/180d, ETHUSDT/180d, SOLUSDT/180d)
+
+▶ Trend Pullback (HTF)  @ 4h  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[180]d)
+      BTCUSDT/180d: 16 trades  net_exp=-0.201%  PF=0.83
+      ETHUSDT/180d: 18 trades  net_exp=-0.705%  PF=0.63
+      SOLUSDT/180d: 15 trades  net_exp=+1.229%  PF=1.72
+    → 🔴 REJECT  net_exp=+0.051%  PF=1.03  trades=49  (2/3 cells negative after fees: BTCUSDT/180d, ETHUSDT/180d)
+
+▶ EMA/MACD/RSI/Volume V2 (HTF)  @ 1h  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[180]d)
+      BTCUSDT/180d: 56 trades  net_exp=-0.350%  PF=0.55
+      ETHUSDT/180d: 68 trades  net_exp=-0.456%  PF=0.57
+      SOLUSDT/180d: 55 trades  net_exp=-0.419%  PF=0.61
+    → 🔴 REJECT  net_exp=-0.412%  PF=0.58  trades=179  (3/3 cells negative after fees: BTCUSDT/180d, ETHUSDT/180d, SOLUSDT/180d)
+
+▶ EMA/MACD/RSI/Volume V2 (HTF)  @ 4h  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[180]d)
+      BTCUSDT/180d: 16 trades  net_exp=-0.048%  PF=0.96
+      ETHUSDT/180d: 25 trades  net_exp=-0.340%  PF=0.79
+      SOLUSDT/180d: 20 trades  net_exp=+0.092%  PF=1.05
+    → 🔴 REJECT  net_exp=-0.122%  PF=0.92  trades=61  (2/3 cells negative after fees: BTCUSDT/180d, ETHUSDT/180d)
+
+============================================================================
+LEADERBOARD — ranked by NET expectancy/trade (after fees)
+============================================================================
+  #  strategy @ tf                      trades  net_exp%     PF   win%  verdict
+  ------------------------------------------------------------------------
+  1  Trend Pullback (HTF) @ 4h              49    +0.051   1.03   36.7  REJECT
+  2  EMA/MACD/RSI/Volume V2 (HTF) @ 4h      61    -0.122   0.92   34.4  REJECT
+  3  Trend Pullback (HTF) @ 1h             153    -0.214   0.76   35.9  REJECT
+  4  Reversal Scalper (1m baseline) @ 1m    182    -0.250   0.01    3.3  REJECT
+  5  EMA/MACD/RSI/Volume V2 (HTF) @ 1h     179    -0.412   0.58   28.5  REJECT
+  6  Donchian Breakout (HTF) @ 1h          128    -0.425   0.57   30.5  REJECT
+  7  Donchian Breakout (HTF) @ 4h           55    -0.489   0.72   27.3  REJECT
+
+============================================================================
+VERDICT: 🔴 NO EDGE — no strategy×timeframe clears the fee hurdle under the strict acceptance rule.
+Honest outcome: the live bot stays AUTO-DISABLED (allowlist empty). Manual trading remains available.
+============================================================================

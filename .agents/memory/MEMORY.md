@@ -14,3 +14,4 @@
 - [1m scalping fails after fees](1m-fee-structural-loss.md) — both reversal AND strict trend-confluence V2 lose on all 9 cells; fees are 2–6× the 1m gross move; it's the timeframe/fee mismatch, not the entry filter. Don't wire a rejected strategy live.
 - [Research engine Phase 1](research-engine-phase1.md) — use `typeof table.$inferInsert` (not drizzle-zod Insert) for jsonb writes; SAFE_MODE must wrap persistence too; requestId/breaker are intentionally non-deterministic.
 - [Research evidence graph + tests](research-engine-evidence-and-tests.md) — timestamp is a source-node anchor (not a 6th node type); pipeline tests inject a MarketDataPort (no network); integration test ends the shared pg pool per file.
+- [No after-fee edge verdict](alphatrade-no-edge-verdict.md) — research sweep: EVERY strategy×timeframe REJECTs after ~0.24% RT cost; live bot stays auto-disabled (empty allowlist); threshold tuning won't help.
