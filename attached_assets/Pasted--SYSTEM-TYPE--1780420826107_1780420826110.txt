@@ -1,0 +1,329 @@
+====================================================
+SYSTEM TYPE
+====================================================
+
+This is a deterministic backend system (NOT a chatbot).
+
+Core runtime: NestJS + BullMQ + PostgreSQL + Redis
+
+Architecture: Modular Monolith (Phase 1), scalable to microservices later.
+
+====================================================
+PROJECT STRUCTURE (CRITICAL MISSING PIECE FIXED)
+====================================================
+
+/src
+  /modules
+    /auth
+    /users
+    /assets
+    /market-data
+    /onchain-data
+    /news
+    /macro
+    /normalization
+    /evidence
+    /scoring
+    /decision
+    /reports
+    /forecasts
+    /audit
+    /portfolio
+    /watchlist
+    /risk
+  /workers
+    research.worker.ts
+    forecast.worker.ts
+    alert.worker.ts
+    sync.worker.ts
+  /services
+    provider.service.ts
+    normalization.service.ts
+    scoring.service.ts
+    decision.service.ts
+    evidence.service.ts
+    audit.service.ts
+  /common
+    config/
+    constants/
+    utils/
+    errors/
+    decorators/
+    guards/
+
+====================================================
+REQUEST EXECUTION FLOW (MISSING CORE RUNTIME LOGIC)
+====================================================
+
+POST /research/generate
+
+FLOW:
+
+1. Auth Middleware
+2. Validate Input (asset, timeframe, mode)
+3. Fetch Canonical Asset
+4. Trigger BullMQ Job: research-job
+
+WORKER EXECUTION:
+
+research.worker.ts:
+
+STEP 1: DATA COLLECTION
+  - MarketDataService.fetch()
+  - OnChainService.fetch()
+  - NewsService.fetch()
+  - MacroService.fetch()
+
+STEP 2: NORMALIZATION
+  - NormalizationService.transform()
+  - Convert all data → unified schema
+
+STEP 3: ENTITY RESOLUTION
+  - map asset aliases → canonical asset_id
+
+STEP 4: DATA QUALITY CHECK
+  - completeness score
+  - freshness score
+  - conflict detection
+
+STEP 5: TRUTH RESOLUTION
+  - apply source hierarchy rules
+  - resolve conflicts
+  - mark UNKNOWN if unresolved
+
+STEP 6: EVIDENCE GRAPH BUILD
+  - create nodes
+  - link sources → metrics → conclusions
+
+STEP 7: METRIC COMPUTATION
+  - compute indicators per module
+
+STEP 8: SCORING ENGINE
+  - compute weighted institutional score
+
+STEP 9: CONFIDENCE ENGINE
+  - compute confidence per metric + final
+
+STEP 10: DECISION ENGINE
+  - apply deterministic rules
+  - output: BUY / HOLD / SELL / NO TRADE
+
+STEP 11: REPORT GENERATION
+  - structured report JSON
+  - store in DB
+
+STEP 12: AUDIT LOG
+  - store full execution trace
+
+====================================================
+SERVICE RESPONSIBILITY MAP (CRITICAL FIX)
+====================================================
+
+MarketDataService → exchange APIs
+OnChainService → blockchain providers
+NewsService → news APIs
+MacroService → economic data
+
+NormalizationService → standard schema conversion
+EvidenceService → graph construction
+ScoringService → all scoring logic
+DecisionService → final rules engine
+AuditService → logging + traceability
+
+====================================================
+DECISION ENGINE (NOW FULLY EXECUTABLE)
+====================================================
+
+INPUTS:
+
+- confidence_score
+- liquidity_risk
+- institutional_score
+- data_state
+
+RULES:
+
+IF data_state == UNKNOWN:
+  RETURN "NO TRADE"
+
+IF confidence < 60:
+  RETURN "NO TRADE"
+
+IF liquidity_risk > 70:
+  RETURN "AVOID"
+
+ELSE:
+
+score mapping:
+
+90-100 → STRONG BUY
+75-89 → BUY
+55-74 → HOLD
+40-54 → REDUCE
+20-39 → SELL
+0-19 → AVOID
+
+====================================================
+STATE MACHINE (NOW IMPLEMENTED LOGICALLY)
+====================================================
+
+STATE FLOW:
+
+INIT
+→ AUTH
+→ FETCH_DATA
+→ NORMALIZE
+→ VALIDATE
+→ RESOLVE_CONFLICTS
+→ BUILD_EVIDENCE
+→ COMPUTE_METRICS
+→ SCORE
+→ DECIDE
+→ STORE
+→ COMPLETE
+
+ANY FAILURE:
+→ SAFE_MODE
+
+====================================================
+ERROR TAXONOMY (MISSING FIX)
+====================================================
+
+class ErrorType:
+  DATA_ERROR
+  PROVIDER_FAILURE
+  TIMEOUT
+  INSUFFICIENT_DATA
+  CONFLICT_UNRESOLVED
+  SCORING_FAILURE
+
+Each error must:
+- be logged
+- be traceable
+- trigger fallback logic
+
+====================================================
+FAILOVER SYSTEM (IMPLEMENTABLE LOGIC)
+====================================================
+
+MarketData:
+
+PRIMARY → Binance
+FALLBACK → Coinbase → Kraken
+
+IF failure:
+  retry 3x (exponential backoff)
+  switch provider
+  activate circuit breaker
+
+====================================================
+COST CONTROL ENFORCEMENT (FIXED LOGIC)
+
+IF monthly_cost > limit:
+  - disable heavy on-chain queries
+  - switch to cached data only
+  - reduce LLM calls
+  - activate LOW_COST_MODE
+
+====================================================
+AUDIT SYSTEM (NOW QUERYABLE)
+
+audit_logs table supports:
+
+- query by request_id
+- rebuild full decision chain
+- trace:
+  data → metric → score → decision
+
+====================================================
+DATA FLOW (FULL END-TO-END)
+
+REQUEST →
+
+AUTH →
+CACHE CHECK →
+
+IF MISS:
+  FETCH DATA →
+  NORMALIZE →
+  ENTITY MAP →
+  VALIDATE →
+  RESOLVE CONFLICTS →
+  BUILD EVIDENCE GRAPH →
+  COMPUTE METRICS →
+  SCORING →
+  CONFIDENCE →
+  DECISION →
+  STORE REPORT →
+  AUDIT LOG →
+  RESPONSE
+
+====================================================
+CONSISTENCY CHECK LAYER (NEW FIX)
+
+After decision:
+
+VERIFY:
+
+IF score > 80 AND decision != BUY:
+  FLAG INCONSISTENCY
+
+IF confidence < 60 AND decision != NO TRADE:
+  FLAG ERROR
+
+====================================================
+DATABASE RELATIONSHIPS (FIXED)
+
+assets → reports
+reports → evidence_nodes
+evidence_nodes → sources
+forecasts → forecast_results
+theses → thesis_history
+portfolios → positions
+decisions → audit_logs
+
+ALL foreign keys enforced.
+
+====================================================
+TESTING MAP (NOW REAL)
+
+Unit Tests:
+- scoring.service
+- decision.service
+- normalization.service
+
+Integration Tests:
+- research pipeline
+- provider failover
+- evidence graph build
+
+E2E Tests:
+- /research/generate full flow
+
+Critical tests:
+- conflict resolution
+- decision consistency
+- UNKNOWN handling
+
+====================================================
+DEFINITION OF DONE (FINAL)
+
+Phase 1 is COMPLETE ONLY IF:
+
+- Full pipeline executes end-to-end
+- No mock data in production mode
+- Evidence graph is traceable
+- Decisions are deterministic
+- Audit log reconstructs full flow
+- Failover works
+- Tests pass in CI
+- No undefined behavior exists
+
+====================================================
+IMPORTANT RULE
+
+If something cannot be implemented:
+→ simplify logic
+→ NEVER remove system layer
+→ NEVER hallucinate data
+→ ALWAYS fallback to SAFE MODE
