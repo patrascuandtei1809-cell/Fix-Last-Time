@@ -1,0 +1,126 @@
+Welcome to Ubuntu 24.04.4 LTS (GNU/Linux 6.8.0-71-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Tue Jun  2 15:10:59 BST 2026
+
+  System load:  0.57               Processes:             102
+  Usage of /:   15.8% of 32.86GB   Users logged in:       0
+  Memory usage: 61%                IPv4 address for eth0: 134.122.107.236
+  Swap usage:   0%                 IPv4 address for eth0: 10.16.0.5
+
+Expanded Security Maintenance for Applications is not enabled.
+
+15 updates can be applied immediately.
+14 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+3 additional security updates can be applied with ESM Apps.
+Learn more about enabling ESM Apps service at https://ubuntu.com/esm
+
+
+*** System restart required ***
+Last login: Tue Jun  2 18:18:14 2026 from 198.211.111.194
+root@AlphaTrade-bot:~# /root/restart-bot.sh
+[1/5] Stashing local settings.json and pulling...
+Saved working directory and index state On main: droplet-local-1780420726
+Already up to date.
+[2/5] Killing port 8501...
+ 1279697[3/5] OPENAI_API_KEY in shell: YES
+[4/5] Launching streamlit...
+[5/5] PID=1280200  OPENAI in process: 1
+2026-06-02 18:18:50.041 Uvicorn server started on 0.0.0.0:8501
+
+  You can now view your Streamlit app in your browser.
+
+  Local URL: http://localhost:8501
+  Network URL: http://134.122.107.236:8501
+  External URL: http://134.122.107.236:8501
+
+root@AlphaTrade-bot:~# cd trading && streamlit run dashboard.py --server.port 5000 --server.address 0.0.0.0
+-bash: cd: trading: No such file or directory
+root@AlphaTrade-bot:~# pkill -f streamlit; cd trading && streamlit run dashboard.py --server.port 5000 --server.address 0.0.0.0
+-bash: cd: trading: No such file or directory
+root@AlphaTrade-bot:~# pkill -f streamlit; cd trading && nohup streamlit run dashboard.py --server.port 80 --server.address 0.0.0.0 &
+[1] 1282822
+root@AlphaTrade-bot:~# -bash: line 4: cd: trading: No such file or directory
+^C
+[1]+  Exit 1                  cd trading && nohup streamlit run dashboard.py --server.port 80 --server.address 0.0.0.0
+root@AlphaTrade-bot:~# /root/restart-bot.sh
+[1/5] Stashing local settings.json and pulling...
+Saved working directory and index state On main: droplet-local-1780422607
+remote: Enumerating objects: 99, done.
+remote: Counting objects: 100% (99/99), done.
+remote: Compressing objects: 100% (39/39), done.
+remote: Total 62 (delta 22), reused 62 (delta 22), pack-reused 0 (from 0)
+Unpacking objects: 100% (62/62), 26.95 KiB | 599.00 KiB/s, done.
+From https://github.com/patrascuandtei1809-cell/Fix-Last-Time
+   7e77129c..2dd859eb  main       -> origin/main
+Updating 7e77129c..2dd859eb
+Fast-forward
+ .agents/memory/MEMORY.md                                               |   1 +
+ .agents/memory/research-engine-evidence-and-tests.md                   |  40 ++++++++++++++++
+ artifacts/api-server/package.json                                      |   7 ++-
+ artifacts/api-server/src/modules/decision/decision.test.ts             |  45 ++++++++++++++++++
+ artifacts/api-server/src/modules/evidence/evidence.service.ts          | 286 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ artifacts/api-server/src/modules/evidence/evidence.test.ts             | 135 ++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ artifacts/api-server/src/modules/indicators/indicators.test.ts         |  50 ++++++++++++++++++++
+ artifacts/api-server/src/modules/normalization/normalization.test.ts   |  45 ++++++++++++++++++
+ artifacts/api-server/src/modules/research/research.integration.test.ts | 126 +++++++++++++++++++++++++++++++++++++++++++++++++++
+ artifacts/api-server/src/modules/research/research.service.ts          |  61 +++++++++++++++++++++++--
+ artifacts/api-server/src/modules/scoring/scoring.test.ts               |  51 +++++++++++++++++++++
+ artifacts/api-server/src/routes/research.ts                            |  10 ++++
+ artifacts/api-server/src/test/fixtures.ts                              |  33 ++++++++++++++
+ artifacts/api-server/vitest.config.ts                                  |  11 +++++
+ attached_assets/Pasted--SYSTEM-TYPE--1780420826107_1780420826110.txt   | 329 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ lib/api-client-react/src/generated/api.schemas.ts                      |  41 +++++++++++++++++
+ lib/api-client-react/src/generated/api.ts                              |  80 ++++++++++++++++++++++++++++++++
+ lib/api-spec/openapi.yaml                                              |  90 ++++++++++++++++++++++++++++++++++++
+ lib/api-zod/src/generated/api.ts                                       |  25 ++++++++++
+ lib/api-zod/src/generated/types/evidenceEdge.ts                        |  14 ++++++
+ lib/api-zod/src/generated/types/evidenceGraph.ts                       |  15 ++++++
+ lib/api-zod/src/generated/types/evidenceNode.ts                        |  16 +++++++
+ lib/api-zod/src/generated/types/evidenceNodeData.ts                    |   9 ++++
+ lib/api-zod/src/generated/types/evidenceNodeType.ts                    |  18 ++++++++
+ lib/api-zod/src/generated/types/evidenceRelation.ts                    |  16 +++++++
+ lib/api-zod/src/generated/types/index.ts                               |   6 +++
+ lib/db/src/schema/evidenceEdges.ts                                     |  18 ++++++++
+ lib/db/src/schema/evidenceNodes.ts                                     |  25 ++++++++++
+ lib/db/src/schema/index.ts                                             |   2 +
+ pnpm-lock.yaml                                                         | 249 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ replit.md                                                              |  26 +++++++++++
+ 31 files changed, 1873 insertions(+), 7 deletions(-)
+ create mode 100644 .agents/memory/research-engine-evidence-and-tests.md
+ create mode 100644 artifacts/api-server/src/modules/decision/decision.test.ts
+ create mode 100644 artifacts/api-server/src/modules/evidence/evidence.service.ts
+ create mode 100644 artifacts/api-server/src/modules/evidence/evidence.test.ts
+ create mode 100644 artifacts/api-server/src/modules/indicators/indicators.test.ts
+ create mode 100644 artifacts/api-server/src/modules/normalization/normalization.test.ts
+ create mode 100644 artifacts/api-server/src/modules/research/research.integration.test.ts
+ create mode 100644 artifacts/api-server/src/modules/scoring/scoring.test.ts
+ create mode 100644 artifacts/api-server/src/test/fixtures.ts
+ create mode 100644 artifacts/api-server/vitest.config.ts
+ create mode 100644 attached_assets/Pasted--SYSTEM-TYPE--1780420826107_1780420826110.txt
+ create mode 100644 lib/api-zod/src/generated/types/evidenceEdge.ts
+ create mode 100644 lib/api-zod/src/generated/types/evidenceGraph.ts
+ create mode 100644 lib/api-zod/src/generated/types/evidenceNode.ts
+ create mode 100644 lib/api-zod/src/generated/types/evidenceNodeData.ts
+ create mode 100644 lib/api-zod/src/generated/types/evidenceNodeType.ts
+ create mode 100644 lib/api-zod/src/generated/types/evidenceRelation.ts
+ create mode 100644 lib/db/src/schema/evidenceEdges.ts
+ create mode 100644 lib/db/src/schema/evidenceNodes.ts
+[2/5] Killing port 8501...
+ 1282828[3/5] OPENAI_API_KEY in shell: YES
+[4/5] Launching streamlit...
+[5/5] PID=1283097  OPENAI in process: 1
+2026-06-02 18:50:10.818 Uvicorn server started on 0.0.0.0:8501
+
+  You can now view your Streamlit app in your browser.
+
+  Local URL: http://localhost:8501
+  Network URL: http://134.122.107.236:8501
+  External URL: http://134.122.107.236:8501
+
+root@AlphaTrade-bot:~# 
