@@ -513,8 +513,69 @@ def trend_pullback_signal(df: pd.DataFrame) -> Tuple[str, str, int]:
         f"RSI {rsi:.1f}{'↑' if rsi > rsi_prev else '↓'})"), 0
 
 
+# ── FUNDING-RATE SIGNALS (alternative edge source — NOT a price pattern) ──────
+#
+# Perpetual-swap funding is paid every 8h between longs and shorts. It encodes
+# CROWD POSITIONING, not price shape, so the ~0.24% spot round-trip fee cannot
+# "erase" it the way it erases a 1m price wiggle. We read funding as a sentiment
+# z-score over a rolling window and test BOTH readings of it:
+#
+#   • "Funding Contrarian" — BUY when funding is unusually NEGATIVE (z ≤ −T):
+#     shorts are over-crowded / paying longs → squeeze / mean-reversion long.
+#   • "Funding Momentum"   — BUY when funding is unusually POSITIVE (z ≥ +T):
+#     strong, persistent long demand → ride the trend the crowd is funding.
+#
+# Spot is long-only, so the opposite extreme simply yields HOLD (no short). The
+# `funding` column is the most-recent SETTLED 8h rate (fraction), forward-filled
+# onto each candle by backtest.merge_funding() with NO look-ahead.
+FUNDING_Z_WINDOW = 45   # rolling funding observations for the z-score baseline
+FUNDING_Z_THRESH = 1.0  # |z| beyond this = an unusual funding extreme
+
+
+def funding_signal(df: pd.DataFrame, mode: str = "contrarian",
+                   z_window: int = FUNDING_Z_WINDOW,
+                   z_thresh: float = FUNDING_Z_THRESH) -> Tuple[str, str, int]:
+    """LONG-ONLY funding-positioning signal. `mode` ∈ {contrarian, momentum}.
+
+    Requires a `funding` column (per-8h rate as a fraction). Returns
+    (signal, reason, confidence_0_100). HOLD if funding data is missing, flat
+    (no dispersion → no edge), or the z-score is inside the neutral band.
+    """
+    if df is None or "funding" not in df.columns or len(df) < z_window + 5:
+        return "HOLD", "Funding: insufficient funding data", 0
+    f = pd.to_numeric(df["funding"], errors="coerce")
+    if f.notna().sum() < z_window:
+        return "HOLD", "Funding: not enough non-NaN funding observations", 0
+    roll_mean = f.rolling(z_window, min_periods=z_window).mean()
+    roll_std  = f.rolling(z_window, min_periods=z_window).std()
+    cur  = float(f.iloc[-1])
+    mean = float(roll_mean.iloc[-1])
+    std  = float(roll_std.iloc[-1])
+    if not all(np.isfinite(v) for v in (cur, mean, std)):
+        return "HOLD", "Funding: non-finite funding stats", 0
+    if std < 1e-9:  # funding pinned at baseline → no dispersion → no signal
+        return "HOLD", f"Funding flat (std≈0, rate={cur*100:.4f}%/8h)", 0
+    z = (cur - mean) / std
+    conf = min(90, 50 + int((abs(z) - z_thresh) * 20))
+    if mode == "contrarian":
+        if z <= -z_thresh:
+            return "BUY", (f"Funding contrarian — rate {cur*100:+.4f}%/8h is "
+                           f"z={z:+.2f} (shorts over-crowded → long)"), conf
+        return "HOLD", f"Funding contrarian: z={z:+.2f} not ≤ -{z_thresh}", 0
+    if mode == "momentum":
+        if z >= z_thresh:
+            return "BUY", (f"Funding momentum — rate {cur*100:+.4f}%/8h is "
+                           f"z={z:+.2f} (crowd funding the long → ride)"), conf
+        return "HOLD", f"Funding momentum: z={z:+.2f} not ≥ +{z_thresh}", 0
+    return "HOLD", f"Funding: unknown mode {mode!r}", 0
+
+
 def get_signal(df: pd.DataFrame, strategy: str, threshold: float = 0.0003) -> Tuple[str, str, int]:
     """Returns (signal, reason, confidence_0_100)."""
+    if strategy == "Funding Contrarian":
+        return funding_signal(df, mode="contrarian")
+    if strategy == "Funding Momentum":
+        return funding_signal(df, mode="momentum")
     if strategy == "Reversal Scalper":
         return reversal_signal(df)
     if strategy == "Active Scalper":

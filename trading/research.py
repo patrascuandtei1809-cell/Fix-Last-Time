@@ -107,6 +107,7 @@ class StrategySpec:
     score_threshold: int = 50            # only used by qualify_mode="weighted"
     conf_floor:      int = 30
     allow_shorts: bool = False           # spot is long-only
+    needs_funding: bool = False          # merge perp funding onto candles first
     periods:     Optional[List[int]] = None   # override SUITE_PERIODS for this spec
     symbols:     Optional[List[str]] = None   # override SUITE_SYMBOLS for this spec
     note:        str   = ""
@@ -149,6 +150,42 @@ CANDIDATES: List[StrategySpec] = [
         use_atr=True, arm_be=False, max_red=0,
         qualify_mode="signal", warmup_bars=210, periods=[90, 180],
         note="Long-only confluence trend strategy on higher timeframes.",
+    ),
+    # ── ALTERNATIVE EDGE SOURCE: perpetual-swap funding (NOT a price pattern) ──
+    # Funding encodes crowd positioning, not price shape, so the ~0.24% spot
+    # round-trip fee cannot erase it the way it erases a 1m price wiggle. Both
+    # readings of the SAME signal source are tested honestly. Funding settles
+    # every 8h → only higher timeframes make sense. block_regimes=() so the
+    # funding edge is judged on its own, not gated by a price-regime filter.
+    # Data-history limit: the only Replit-reachable funding source (OKX, since
+    # Binance fapi is geo-blocked 451) serves ~92 days (3 months) of 8h funding.
+    # So periods are sized to that real window — single 90d period (1d candles
+    # would give too few bars). 4h & 8h are the economically-meaningful sweep
+    # timeframes; 5m is also included to honour the canonical-pipeline invariant
+    # that every HTF candidate sweeps 5m. NOTE: funding is a step function (one
+    # value per 8h), so at 5m the rolling z-score degenerates into a step-edge
+    # detector that fires whenever its window straddles an 8h funding change —
+    # economically meaningless, and it duly REJECTs. Kept for coverage parity,
+    # not as a real funding edge. Honest constraint, noted in the verdict: this
+    # is a SHORT-window probe, not a multi-year proof.
+    StrategySpec(
+        key="funding_contrarian", name="Funding Contrarian (perp)",
+        signal_name="Funding Contrarian", timeframes=["5m", "4h", "8h"],
+        use_atr=True, arm_be=False, max_red=0,
+        qualify_mode="signal", block_regimes=(), warmup_bars=60,
+        needs_funding=True, periods=[90],
+        note="LONG when perp funding is unusually NEGATIVE (shorts over-crowded "
+             "→ squeeze). OKX perp funding paired with Binance spot candles; "
+             "ATR exits, no scalper exits.",
+    ),
+    StrategySpec(
+        key="funding_momentum", name="Funding Momentum (perp)",
+        signal_name="Funding Momentum", timeframes=["5m", "4h", "8h"],
+        use_atr=True, arm_be=False, max_red=0,
+        qualify_mode="signal", block_regimes=(), warmup_bars=60,
+        needs_funding=True, periods=[90],
+        note="LONG when perp funding is unusually POSITIVE (crowd funding the "
+             "long → ride). Same data source as contrarian, opposite reading.",
     ),
 ]
 
@@ -267,8 +304,16 @@ def run_subcell(spec: StrategySpec, symbol: str, interval: str, days: int, *,
     if len(df) < min_bars:
         return {"trades": 0, "error": f"insufficient candles ({len(df)}<{min_bars})",
                 "_trades": []}
-    # Build the cache key AFTER fetching so it is bound to the actual data used —
-    # a refetch of fresh candles changes the fingerprint and invalidates the cell.
+    # Alternative edge sources merge their extra series onto the candles BEFORE
+    # the replay; the signal then reads it as a column (no engine changes).
+    # This happens before the cache key is built so the fingerprint binds to the
+    # actual data used (candles + funding), not the candles alone.
+    if spec.needs_funding:
+        funding = backtest.fetch_funding_rates(symbol, days, use_cache=use_cache)
+        df = backtest.merge_funding(df, funding)
+    # Build the cache key AFTER fetching/merging so it is bound to the actual data
+    # used — a refetch of fresh candles changes the fingerprint and invalidates
+    # the cell.
     ck = None
     if _subcell_cache_on() and use_cache:
         ck = _subcell_cache_key(spec, symbol, interval, days, fee, slip,
@@ -429,11 +474,31 @@ def _num_pf(m: Dict) -> float:
 def run_research(specs: Optional[List[StrategySpec]] = None, *,
                  symbols=SUITE_SYMBOLS, periods=SUITE_PERIODS,
                  fee=DEFAULT_FEE, slip=DEFAULT_SLIP,
-                 use_cache: bool = True, persist: bool = True) -> Dict:
-    """Sweep every (spec × timeframe) cell, rank by net expectancy, persist."""
+                 use_cache: bool = True, persist: bool = True,
+                 merge_latest: bool = False) -> Dict:
+    """Sweep every (spec × timeframe) cell, rank by net expectancy, persist.
+
+    When `merge_latest` is set, cells from the existing latest.json that are NOT
+    being re-run here are carried forward so the canonical report stays COMPLETE
+    even when only a subset of strategies is run (`--only`). This matters because
+    the full sweep can exceed the sandbox's per-command time budget, so an
+    alternative-edge probe (e.g. funding) is run on its own then merged into the
+    full technical sweep rather than clobbering it.
+    """
     specs = specs or CANDIDATES
     os.makedirs(RESEARCH_DIR, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    carried: List[Dict] = []
+    if merge_latest:
+        run_keys = {s.key for s in specs}
+        try:
+            with open(os.path.join(RESEARCH_DIR, "latest.json")) as f:
+                prev = json.load(f)
+            carried = [c for c in prev.get("cells", [])
+                       if c.get("strategy_key") not in run_keys]
+        except Exception:
+            carried = []
 
     lines: List[str] = []
     def emit(s: str = ""):
@@ -469,6 +534,13 @@ def run_research(specs: Optional[List[StrategySpec]] = None, *,
             else:
                 emit(f"    → {mark}  (no trades — {cell['verdict_reasons'][0]})")
             cells.append(cell)
+
+    # Carry forward cells from a prior full sweep that were NOT re-run here, so
+    # the canonical report stays complete (see merge_latest docstring).
+    if carried:
+        emit(f"\n(merge) carried forward {len(carried)} cell(s) from prior "
+             f"latest.json: {', '.join(sorted({c['strategy_key'] for c in carried}))}")
+    cells = carried + cells
 
     # ── Leaderboard — rank by NET expectancy/trade (primary metric) ──────────
     ranked = sorted(
@@ -636,6 +708,9 @@ if __name__ == "__main__":
     ap.add_argument("--no-persist", action="store_true")
     ap.add_argument("--only", default="",
                     help="comma-separated strategy keys to run (default: all)")
+    ap.add_argument("--merge", action="store_true",
+                    help="carry forward cells from latest.json that aren't re-run "
+                         "(keeps the canonical report complete when using --only)")
     args = ap.parse_args()
 
     specs = CANDIDATES
@@ -644,4 +719,5 @@ if __name__ == "__main__":
         specs = [s for s in CANDIDATES if s.key in keys]
 
     run_research(specs, fee=args.fee, slip=args.slippage,
-                 use_cache=not args.no_cache, persist=not args.no_persist)
+                 use_cache=not args.no_cache, persist=not args.no_persist,
+                 merge_latest=args.merge)

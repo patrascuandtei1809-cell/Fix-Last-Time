@@ -175,6 +175,112 @@ def fetch_klines(symbol: str, interval: str, days: int,
     return df
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Funding-rate data (alternative edge source — perpetual-swap positioning)
+# ─────────────────────────────────────────────────────────────────────────────
+# Binance futures (fapi.binance.com) is geo-blocked from Replit (HTTP 451), so
+# we source 8h funding history from OKX's public market-data API, which IS
+# reachable and serves per-asset SWAP funding. We pair OKX perp funding (the
+# market-wide positioning signal) with the Binance spot candles the bot actually
+# trades. Funding is a market-wide sentiment read, so the cross-venue pairing is
+# acceptable for this exploratory study (and noted honestly in the verdict).
+OKX_FUNDING_HOST = "https://www.okx.com"
+# Binance spot symbol → OKX SWAP instrument id.
+_OKX_INST = {
+    "BTCUSDT": "BTC-USDT-SWAP",
+    "ETHUSDT": "ETH-USDT-SWAP",
+    "SOLUSDT": "SOL-USDT-SWAP",
+}
+
+
+def _okx_inst_id(symbol: str) -> str:
+    if symbol in _OKX_INST:
+        return _OKX_INST[symbol]
+    base = symbol[:-4] if symbol.endswith("USDT") else symbol
+    return f"{base}-USDT-SWAP"
+
+
+def fetch_funding_rates(symbol: str, days: int,
+                        use_cache: bool = True) -> pd.DataFrame:
+    """Fetch ~`days` of settled 8h funding rates from OKX, paginating backward.
+
+    Returns a DataFrame [funding_time(ms), funding_rate(fraction per 8h)] sorted
+    oldest→newest. Cached to CSV per (symbol, days). The rate is the realized
+    8h funding; `funding_time` is when it SETTLED (so using it for candles whose
+    open_time ≥ funding_time introduces no look-ahead).
+    """
+    os.makedirs(DATA_DIR, exist_ok=True)
+    inst = _okx_inst_id(symbol)
+    cache = os.path.join(DATA_DIR, f"funding_{symbol}_{days}d.csv")
+    if use_cache and os.path.exists(cache):
+        age_h = (time.time() - os.path.getmtime(cache)) / 3600
+        if age_h < 12:
+            df = pd.read_csv(cache)
+            print(f"  [cache] funding {symbol} {len(df)} rates ({age_h:.1f}h old)")
+            return df
+
+    cutoff_ms = int((time.time() - days * 86400) * 1000)
+    rows: list = []
+    after = ""  # OKX cursor: returns records OLDER than this fundingTime
+    print(f"  [fetch] funding {inst} from OKX (~{days}d)…")
+    while True:
+        url = (f"{OKX_FUNDING_HOST}/api/v5/public/funding-rate-history"
+               f"?instId={inst}&limit=100")
+        if after:
+            url += f"&after={after}"
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=20) as r:
+                payload = json.loads(r.read())
+        except Exception as e:
+            print(f"  [warn] funding page fetch failed ({e}); stopping early")
+            break
+        data = payload.get("data") or []
+        if not data:
+            break
+        for d in data:
+            rows.append((int(d["fundingTime"]), float(d["fundingRate"])))
+        oldest = min(int(d["fundingTime"]) for d in data)
+        after = str(oldest)
+        if oldest <= cutoff_ms or len(data) < 100:
+            break
+        time.sleep(0.12)  # be polite to the public endpoint
+
+    if not rows:
+        raise RuntimeError(f"No funding rates fetched for {inst}")
+    df = (pd.DataFrame(rows, columns=["funding_time", "funding_rate"])
+            .drop_duplicates(subset="funding_time")
+            .sort_values("funding_time")
+            .reset_index(drop=True))
+    df = df[df["funding_time"] >= cutoff_ms].reset_index(drop=True)
+    df.to_csv(cache, index=False)
+    print(f"  [ok] funding {inst} {len(df)} rates "
+          f"({_fmt_ts(int(df.funding_time.iloc[0]))} → "
+          f"{_fmt_ts(int(df.funding_time.iloc[-1]))})")
+    return df
+
+
+def merge_funding(df: pd.DataFrame, funding: pd.DataFrame) -> pd.DataFrame:
+    """As-of merge the most-recent SETTLED funding rate onto each candle.
+
+    Adds a `funding` column (fraction per 8h). Uses merge_asof backward on
+    open_time so a candle only ever sees funding that had ALREADY settled at or
+    before its open — no look-ahead. Candles before the first funding obs get
+    NaN (the signal treats NaN as "no data" → HOLD).
+    """
+    out = df.copy()
+    if funding is None or len(funding) == 0:
+        out["funding"] = np.nan
+        return out
+    left = out.sort_values("open_time").reset_index(drop=True)
+    right = (funding.rename(columns={"funding_time": "open_time",
+                                     "funding_rate": "funding"})
+                    .sort_values("open_time").reset_index(drop=True))
+    merged = pd.merge_asof(left, right[["open_time", "funding"]],
+                           on="open_time", direction="backward")
+    return merged
+
+
 def _interval_minutes(interval: str) -> int:
     unit = interval[-1]
     n = int(interval[:-1])

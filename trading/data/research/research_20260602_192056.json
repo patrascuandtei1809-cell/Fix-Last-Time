@@ -1,0 +1,893 @@
+{
+  "generated_at": "2026-06-02T19:21:07.331918+00:00",
+  "fee_pct_per_side": 0.1,
+  "slippage_pct_per_side": 0.02,
+  "round_trip_cost_pct": 0.24000000000000002,
+  "symbols": [
+    "BTCUSDT",
+    "ETHUSDT",
+    "SOLUSDT"
+  ],
+  "periods": [
+    90,
+    180
+  ],
+  "wf_folds": 4,
+  "acceptance_rule": {
+    "min_trades_per_cell": 5,
+    "min_total_trades": 20,
+    "rule": "net expectancy>0 AND PF>=1 on every traded cell; majority WF folds positive"
+  },
+  "cells": [
+    {
+      "strategy_key": "funding_contrarian",
+      "strategy": "Funding Contrarian (perp)",
+      "signal_name": "Funding Contrarian",
+      "interval": "4h",
+      "exit_policy": {
+        "use_atr": true,
+        "sl_pct": 0.4,
+        "tp_pct": 0.8,
+        "atr_sl_mult": 1.5,
+        "atr_tp_mult": 3.0,
+        "arm_be": false,
+        "max_red": 0
+      },
+      "qualify_mode": "signal",
+      "subcells": {
+        "BTCUSDT/90d": {
+          "trades": 19,
+          "win_rate": 42.10526315789473,
+          "avg_win_pct": 3.9267003411820185,
+          "avg_loss_pct": -1.941333492327437,
+          "expectancy_pct": 0.5294175954660179,
+          "profit_factor": 1.4710414658794346,
+          "total_return_pct": 9.658020574577098,
+          "max_drawdown_pct": -12.524297694891057,
+          "sharpe": 0.7613788704237262,
+          "avg_bars_held": 11.0,
+          "sum_gross_pct": 13.858934313854343,
+          "sum_fees_pct": 3.8000000000000007,
+          "sum_net_pct": 10.05893431385434,
+          "avg_gross_pct": 0.729417595466018,
+          "avg_fee_pct": 0.20000000000000004
+        },
+        "ETHUSDT/90d": {
+          "trades": 17,
+          "win_rate": 23.52941176470588,
+          "avg_win_pct": 5.787310159923398,
+          "avg_loss_pct": -2.621949562168111,
+          "expectancy_pct": -0.6433002157936382,
+          "profit_factor": 0.6791552530726354,
+          "total_return_pct": -11.372608767953995,
+          "max_drawdown_pct": -19.26321184011065,
+          "sharpe": -0.7093935955287741,
+          "avg_bars_held": 14.0,
+          "sum_gross_pct": -7.536103668491845,
+          "sum_fees_pct": 3.4000000000000004,
+          "sum_net_pct": -10.936103668491848,
+          "avg_gross_pct": -0.44330021579363793,
+          "avg_fee_pct": 0.2
+        },
+        "SOLUSDT/90d": {
+          "trades": 23,
+          "win_rate": 39.130434782608695,
+          "avg_win_pct": 5.102746916879644,
+          "avg_loss_pct": -2.794540704036,
+          "expectancy_pct": 0.2957022780614257,
+          "profit_factor": 1.1738377254518901,
+          "total_return_pct": 5.196687435957759,
+          "max_drawdown_pct": -14.82993549582225,
+          "sharpe": 0.3550742056817017,
+          "avg_bars_held": 8.826086956521738,
+          "sum_gross_pct": 11.401152395412794,
+          "sum_fees_pct": 4.600000000000001,
+          "sum_net_pct": 6.801152395412791,
+          "avg_gross_pct": 0.4957022780614258,
+          "avg_fee_pct": 0.20000000000000004
+        }
+      },
+      "aggregate": {
+        "trades": 59,
+        "win_rate": 35.59322033898305,
+        "avg_win_pct": 4.785122172431739,
+        "avg_loss_pct": -2.488515331060296,
+        "expectancy_pct": 0.10040649221653021,
+        "profit_factor": 1.062645501356142,
+        "total_return_pct": 2.2375497603320804,
+        "max_drawdown_pct": -25.27843456838154,
+        "sharpe": 0.2139393083049845,
+        "avg_bars_held": 11.016949152542374,
+        "sum_gross_pct": 17.723983040775295,
+        "sum_fees_pct": 11.8,
+        "sum_net_pct": 5.9239830407752825,
+        "avg_gross_pct": 0.30040649221653043,
+        "avg_fee_pct": 0.2
+      },
+      "walk_forward": [
+        {
+          "trades": 14,
+          "win_rate": 35.714285714285715,
+          "avg_win_pct": 5.173636491723577,
+          "avg_loss_pct": -3.186752347184111,
+          "expectancy_pct": -0.20089919043136556,
+          "profit_factor": 0.9019346915808298,
+          "total_return_pct": -3.8862567644119217,
+          "max_drawdown_pct": -19.03134216647958,
+          "sharpe": -0.17772582697461747,
+          "avg_bars_held": 8.357142857142858,
+          "sum_gross_pct": -0.012588666039115015,
+          "sum_fees_pct": 2.800000000000001,
+          "sum_net_pct": -2.8125886660391175,
+          "avg_gross_pct": -0.0008991904313653582,
+          "avg_fee_pct": 0.2000000000000001
+        },
+        {
+          "trades": 14,
+          "win_rate": 71.42857142857143,
+          "avg_win_pct": 4.734167069755224,
+          "avg_loss_pct": -2.738347100126917,
+          "expectancy_pct": 2.5991630212174694,
+          "profit_factor": 4.322102802029557,
+          "total_return_pct": 42.03596285213631,
+          "max_drawdown_pct": -4.892975021502409,
+          "sharpe": 2.6718212543026723,
+          "avg_bars_held": 14.214285714285714,
+          "sum_gross_pct": 39.18828229704457,
+          "sum_fees_pct": 2.800000000000001,
+          "sum_net_pct": 36.38828229704457,
+          "avg_gross_pct": 2.7991630212174696,
+          "avg_fee_pct": 0.2000000000000001
+        },
+        {
+          "trades": 14,
+          "win_rate": 35.714285714285715,
+          "avg_win_pct": 4.431405347972941,
+          "avg_loss_pct": -2.4112578737064667,
+          "expectancy_pct": 0.032550419750464785,
+          "profit_factor": 1.0209989926132077,
+          "total_return_pct": -0.31497101226096724,
+          "max_drawdown_pct": -15.956929487387642,
+          "sharpe": 0.03512170378445553,
+          "avg_bars_held": 15.357142857142858,
+          "sum_gross_pct": 3.2557058765065094,
+          "sum_fees_pct": 2.800000000000001,
+          "sum_net_pct": 0.45570587650650696,
+          "avg_gross_pct": 0.23255041975046498,
+          "avg_fee_pct": 0.2000000000000001
+        },
+        {
+          "trades": 17,
+          "win_rate": 5.88235294117647,
+          "avg_win_pct": 5.120685725031704,
+          "avg_loss_pct": -2.076756386985524,
+          "expectancy_pct": -1.6533774392198046,
+          "profit_factor": 0.1541070776621198,
+          "total_return_pct": -24.872890141138004,
+          "max_drawdown_pct": -23.473600139512527,
+          "sharpe": -3.7965269079993096,
+          "avg_bars_held": 7.0,
+          "sum_gross_pct": -24.707416466736674,
+          "sum_fees_pct": 3.4000000000000004,
+          "sum_net_pct": -28.10741646673668,
+          "avg_gross_pct": -1.4533774392198044,
+          "avg_fee_pct": 0.2
+        }
+      ],
+      "attribution": {
+        "by_exit_reason": {
+          "TP": {
+            "trades": 21,
+            "win_rate": 100.0,
+            "sum_net_pct": 100.488,
+            "avg_net_pct": 4.7851
+          },
+          "SL": {
+            "trades": 38,
+            "win_rate": 0.0,
+            "sum_net_pct": -94.564,
+            "avg_net_pct": -2.4885
+          }
+        },
+        "by_regime": {
+          "VOLATILE": {
+            "trades": 59,
+            "win_rate": 35.6,
+            "sum_net_pct": 5.924,
+            "avg_net_pct": 0.1004
+          }
+        },
+        "by_symbol": {
+          "BTCUSDT": {
+            "trades": 19,
+            "win_rate": 42.1,
+            "sum_net_pct": 10.059,
+            "avg_net_pct": 0.5294
+          },
+          "SOLUSDT": {
+            "trades": 23,
+            "win_rate": 39.1,
+            "sum_net_pct": 6.801,
+            "avg_net_pct": 0.2957
+          },
+          "ETHUSDT": {
+            "trades": 17,
+            "win_rate": 23.5,
+            "sum_net_pct": -10.936,
+            "avg_net_pct": -0.6433
+          }
+        }
+      },
+      "verdict": "REJECT",
+      "verdict_reasons": [
+        "1/3 cells negative after fees: ETHUSDT/90d"
+      ],
+      "errors": [],
+      "note": "LONG when perp funding is unusually NEGATIVE (shorts over-crowded \u2192 squeeze). OKX perp funding paired with Binance spot candles; ATR exits, no scalper exits."
+    },
+    {
+      "strategy_key": "funding_contrarian",
+      "strategy": "Funding Contrarian (perp)",
+      "signal_name": "Funding Contrarian",
+      "interval": "8h",
+      "exit_policy": {
+        "use_atr": true,
+        "sl_pct": 0.4,
+        "tp_pct": 0.8,
+        "atr_sl_mult": 1.5,
+        "atr_tp_mult": 3.0,
+        "arm_be": false,
+        "max_red": 0
+      },
+      "qualify_mode": "signal",
+      "subcells": {
+        "BTCUSDT/90d": {
+          "trades": 11,
+          "win_rate": 27.27272727272727,
+          "avg_win_pct": 5.3936223657603675,
+          "avg_loss_pct": -2.920256857035988,
+          "expectancy_pct": -0.6528352508188001,
+          "profit_factor": 0.6926131796547005,
+          "total_return_pct": -7.670627769826188,
+          "max_drawdown_pct": -8.91128241761672,
+          "sharpe": -0.5466333447026405,
+          "avg_bars_held": 10.636363636363637,
+          "sum_gross_pct": -4.9811877590068,
+          "sum_fees_pct": 2.2000000000000006,
+          "sum_net_pct": -7.181187759006802,
+          "avg_gross_pct": -0.4528352508188,
+          "avg_fee_pct": 0.20000000000000004
+        },
+        "ETHUSDT/90d": {
+          "trades": 10,
+          "win_rate": 20.0,
+          "avg_win_pct": 8.518301019740548,
+          "avg_loss_pct": -3.915656173718825,
+          "expectancy_pct": -1.42886473502695,
+          "profit_factor": 0.5438616570138258,
+          "total_return_pct": -14.479418514690789,
+          "max_drawdown_pct": -19.278871975437077,
+          "sharpe": -0.8505493876981879,
+          "avg_bars_held": 11.5,
+          "sum_gross_pct": -12.2886473502695,
+          "sum_fees_pct": 2.0000000000000004,
+          "sum_net_pct": -14.288647350269502,
+          "avg_gross_pct": -1.22886473502695,
+          "avg_fee_pct": 0.20000000000000004
+        },
+        "SOLUSDT/90d": {
+          "trades": 10,
+          "win_rate": 20.0,
+          "avg_win_pct": 6.846121757647627,
+          "avg_loss_pct": -4.085555098044334,
+          "expectancy_pct": -1.8992197269059419,
+          "profit_factor": 0.41892237366500795,
+          "total_return_pct": -18.240470304331236,
+          "max_drawdown_pct": -17.688645822149336,
+          "sharpe": -1.2956940220499407,
+          "avg_bars_held": 10.4,
+          "sum_gross_pct": -16.992197269059417,
+          "sum_fees_pct": 2.0000000000000004,
+          "sum_net_pct": -18.992197269059417,
+          "avg_gross_pct": -1.6992197269059417,
+          "avg_fee_pct": 0.20000000000000004
+        }
+      },
+      "aggregate": {
+        "trades": 31,
+        "win_rate": 22.58064516129032,
+        "avg_win_pct": 6.701387521722493,
+        "avg_loss_pct": -3.640489376266382,
+        "expectancy_pct": -1.3052268509140554,
+        "profit_factor": 0.536897971257635,
+        "total_return_pct": -35.44217170298442,
+        "max_drawdown_pct": -36.30965263341124,
+        "sharpe": -1.6081668740800117,
+        "avg_bars_held": 10.838709677419354,
+        "sum_gross_pct": -34.26203237833572,
+        "sum_fees_pct": 6.200000000000001,
+        "sum_net_pct": -40.46203237833572,
+        "avg_gross_pct": -1.1052268509140553,
+        "avg_fee_pct": 0.20000000000000004
+      },
+      "walk_forward": [
+        {
+          "trades": 7,
+          "win_rate": 0.0,
+          "avg_win_pct": 0.0,
+          "avg_loss_pct": -4.504000289142274,
+          "expectancy_pct": -4.504000289142274,
+          "profit_factor": 0.0,
+          "total_return_pct": -27.588452535160847,
+          "max_drawdown_pct": -24.601306350296912,
+          "sharpe": -15.18182038650254,
+          "avg_bars_held": 10.857142857142858,
+          "sum_gross_pct": -30.128002023995915,
+          "sum_fees_pct": 1.4000000000000001,
+          "sum_net_pct": -31.528002023995917,
+          "avg_gross_pct": -4.304000289142273,
+          "avg_fee_pct": 0.2
+        },
+        {
+          "trades": 7,
+          "win_rate": 85.71428571428571,
+          "avg_win_pct": 7.08459289931697,
+          "avg_loss_pct": -3.5048507433120824,
+          "expectancy_pct": 5.571815236084248,
+          "profit_factor": 12.128207592581303,
+          "total_return_pct": 45.45021625738279,
+          "max_drawdown_pct": -3.50485074331209,
+          "sharpe": 3.5374644431440014,
+          "avg_bars_held": 12.571428571428571,
+          "sum_gross_pct": 40.402706652589735,
+          "sum_fees_pct": 1.4000000000000001,
+          "sum_net_pct": 39.00270665258974,
+          "avg_gross_pct": 5.771815236084248,
+          "avg_fee_pct": 0.2
+        },
+        {
+          "trades": 7,
+          "win_rate": 14.285714285714285,
+          "avg_win_pct": 4.402155256155638,
+          "avg_loss_pct": -3.673775294434315,
+          "expectancy_pct": -2.520070930064322,
+          "profit_factor": 0.19971078356483413,
+          "total_return_pct": -16.60385769613828,
+          "max_drawdown_pct": -13.628304408850905,
+          "sharpe": -2.159119207136744,
+          "avg_bars_held": 13.714285714285714,
+          "sum_gross_pct": -16.240496510450253,
+          "sum_fees_pct": 1.4000000000000001,
+          "sum_net_pct": -17.640496510450255,
+          "avg_gross_pct": -2.320070930064322,
+          "avg_fee_pct": 0.2
+        },
+        {
+          "trades": 10,
+          "win_rate": 0.0,
+          "avg_win_pct": 0.0,
+          "avg_loss_pct": -3.0296240496479285,
+          "expectancy_pct": -3.0296240496479285,
+          "profit_factor": 0.0,
+          "total_return_pct": -26.501114995847942,
+          "max_drawdown_pct": -25.045834361587627,
+          "sharpe": -13.16827758660671,
+          "avg_bars_held": 7.6,
+          "sum_gross_pct": -28.296240496479285,
+          "sum_fees_pct": 2.0000000000000004,
+          "sum_net_pct": -30.29624049647929,
+          "avg_gross_pct": -2.8296240496479284,
+          "avg_fee_pct": 0.20000000000000004
+        }
+      ],
+      "attribution": {
+        "by_exit_reason": {
+          "TP": {
+            "trades": 7,
+            "win_rate": 100.0,
+            "sum_net_pct": 46.91,
+            "avg_net_pct": 6.7014
+          },
+          "SL": {
+            "trades": 24,
+            "win_rate": 0.0,
+            "sum_net_pct": -87.372,
+            "avg_net_pct": -3.6405
+          }
+        },
+        "by_regime": {
+          "VOLATILE": {
+            "trades": 31,
+            "win_rate": 22.6,
+            "sum_net_pct": -40.462,
+            "avg_net_pct": -1.3052
+          }
+        },
+        "by_symbol": {
+          "BTCUSDT": {
+            "trades": 11,
+            "win_rate": 27.3,
+            "sum_net_pct": -7.181,
+            "avg_net_pct": -0.6528
+          },
+          "ETHUSDT": {
+            "trades": 10,
+            "win_rate": 20.0,
+            "sum_net_pct": -14.289,
+            "avg_net_pct": -1.4289
+          },
+          "SOLUSDT": {
+            "trades": 10,
+            "win_rate": 20.0,
+            "sum_net_pct": -18.992,
+            "avg_net_pct": -1.8992
+          }
+        }
+      },
+      "verdict": "REJECT",
+      "verdict_reasons": [
+        "aggregate not profitable after fees (net_exp=-1.305%, PF=0.54)"
+      ],
+      "errors": [],
+      "note": "LONG when perp funding is unusually NEGATIVE (shorts over-crowded \u2192 squeeze). OKX perp funding paired with Binance spot candles; ATR exits, no scalper exits."
+    },
+    {
+      "strategy_key": "funding_momentum",
+      "strategy": "Funding Momentum (perp)",
+      "signal_name": "Funding Momentum",
+      "interval": "4h",
+      "exit_policy": {
+        "use_atr": true,
+        "sl_pct": 0.4,
+        "tp_pct": 0.8,
+        "atr_sl_mult": 1.5,
+        "atr_tp_mult": 3.0,
+        "arm_be": false,
+        "max_red": 0
+      },
+      "qualify_mode": "signal",
+      "subcells": {
+        "BTCUSDT/90d": {
+          "trades": 23,
+          "win_rate": 26.08695652173913,
+          "avg_win_pct": 3.4337280177763128,
+          "avg_loss_pct": -2.1176281462467568,
+          "expectancy_pct": -0.6694482773711734,
+          "profit_factor": 0.5722931140776287,
+          "total_return_pct": -14.937508903532281,
+          "max_drawdown_pct": -14.084434366405482,
+          "sharpe": -1.2432734566027357,
+          "avg_bars_held": 13.91304347826087,
+          "sum_gross_pct": -10.797310379536984,
+          "sum_fees_pct": 4.600000000000001,
+          "sum_net_pct": -15.397310379536988,
+          "avg_gross_pct": -0.46944827737117323,
+          "avg_fee_pct": 0.20000000000000004
+        },
+        "ETHUSDT/90d": {
+          "trades": 24,
+          "win_rate": 33.33333333333333,
+          "avg_win_pct": 4.639810930592686,
+          "avg_loss_pct": -2.748270260472814,
+          "expectancy_pct": -0.2855765301176474,
+          "profit_factor": 0.8441329437874225,
+          "total_return_pct": -8.050572735854056,
+          "max_drawdown_pct": -16.993948974418988,
+          "sharpe": -0.38157477136163365,
+          "avg_bars_held": 10.875,
+          "sum_gross_pct": -2.053836722823532,
+          "sum_fees_pct": 4.8,
+          "sum_net_pct": -6.853836722823536,
+          "avg_gross_pct": -0.08557653011764718,
+          "avg_fee_pct": 0.2
+        },
+        "SOLUSDT/90d": {
+          "trades": 23,
+          "win_rate": 34.78260869565217,
+          "avg_win_pct": 4.9563639751937005,
+          "avg_loss_pct": -2.881399796565156,
+          "expectancy_pct": -0.15522109334468423,
+          "profit_factor": 0.917399287406916,
+          "total_return_pct": -5.103645293994297,
+          "max_drawdown_pct": -17.11984018694557,
+          "sharpe": -0.19001212205668883,
+          "avg_bars_held": 9.434782608695652,
+          "sum_gross_pct": 1.0299148530722668,
+          "sum_fees_pct": 4.600000000000001,
+          "sum_net_pct": -3.5700851469277373,
+          "avg_gross_pct": 0.04477890665531595,
+          "avg_fee_pct": 0.20000000000000004
+        }
+      },
+      "aggregate": {
+        "trades": 70,
+        "win_rate": 31.428571428571427,
+        "avg_win_pct": 4.425989425134044,
+        "avg_loss_pct": -2.5665208250466085,
+        "expectancy_pct": -0.3688747464184038,
+        "profit_factor": 0.7904001661404523,
+        "total_return_pct": -25.777315910054277,
+        "max_drawdown_pct": -27.4948323941747,
+        "sharpe": -0.9081589168002713,
+        "avg_bars_held": 11.4,
+        "sum_gross_pct": -11.821232249288249,
+        "sum_fees_pct": 14.000000000000002,
+        "sum_net_pct": -25.82123224928826,
+        "avg_gross_pct": -0.16887474641840355,
+        "avg_fee_pct": 0.2
+      },
+      "walk_forward": [
+        {
+          "trades": 17,
+          "win_rate": 23.52941176470588,
+          "avg_win_pct": 4.8896989280378556,
+          "avg_loss_pct": -3.1027968011576013,
+          "expectancy_pct": -1.22220957075867,
+          "profit_factor": 0.48489245139329107,
+          "total_return_pct": -19.682835967698075,
+          "max_drawdown_pct": -29.580041737019457,
+          "sharpe": -1.414683880155412,
+          "avg_bars_held": 7.0,
+          "sum_gross_pct": -17.377562702897386,
+          "sum_fees_pct": 3.4000000000000004,
+          "sum_net_pct": -20.77756270289739,
+          "avg_gross_pct": -1.0222095707586698,
+          "avg_fee_pct": 0.2
+        },
+        {
+          "trades": 17,
+          "win_rate": 47.05882352941176,
+          "avg_win_pct": 5.343586829326235,
+          "avg_loss_pct": -2.8554800607765385,
+          "expectancy_pct": 1.0029043580953552,
+          "profit_factor": 1.6634173092805244,
+          "total_return_pct": 16.765857563549204,
+          "max_drawdown_pct": -7.330183289270193,
+          "sharpe": 0.9549355622623353,
+          "avg_bars_held": 18.0,
+          "sum_gross_pct": 20.44937408762104,
+          "sum_fees_pct": 3.4000000000000004,
+          "sum_net_pct": 17.04937408762104,
+          "avg_gross_pct": 1.2029043580953553,
+          "avg_fee_pct": 0.2
+        },
+        {
+          "trades": 17,
+          "win_rate": 52.94117647058824,
+          "avg_win_pct": 3.4424437002245734,
+          "avg_loss_pct": -1.975970472306901,
+          "expectancy_pct": 0.89260173668035,
+          "profit_factor": 1.9599225884338736,
+          "total_return_pct": 15.55629696179668,
+          "max_drawdown_pct": -5.616966146419132,
+          "sharpe": 1.2815562146333792,
+          "avg_bars_held": 12.058823529411764,
+          "sum_gross_pct": 18.574229523565954,
+          "sum_fees_pct": 3.4000000000000004,
+          "sum_net_pct": 15.174229523565952,
+          "avg_gross_pct": 1.0926017366803502,
+          "avg_fee_pct": 0.2
+        },
+        {
+          "trades": 19,
+          "win_rate": 5.263157894736842,
+          "avg_win_pct": 4.0822837041665005,
+          "avg_loss_pct": -2.2971976034302424,
+          "expectancy_pct": -1.9614354293462033,
+          "profit_factor": 0.0987261778358581,
+          "total_return_pct": -31.51131926415819,
+          "max_drawdown_pct": -30.325156697977285,
+          "sharpe": -5.579572551984185,
+          "avg_bars_held": 8.842105263157896,
+          "sum_gross_pct": -33.46727315757786,
+          "sum_fees_pct": 3.8000000000000007,
+          "sum_net_pct": -37.26727315757786,
+          "avg_gross_pct": -1.7614354293462031,
+          "avg_fee_pct": 0.20000000000000004
+        }
+      ],
+      "attribution": {
+        "by_exit_reason": {
+          "TP": {
+            "trades": 22,
+            "win_rate": 100.0,
+            "sum_net_pct": 97.372,
+            "avg_net_pct": 4.426
+          },
+          "SL": {
+            "trades": 48,
+            "win_rate": 0.0,
+            "sum_net_pct": -123.193,
+            "avg_net_pct": -2.5665
+          }
+        },
+        "by_regime": {
+          "VOLATILE": {
+            "trades": 70,
+            "win_rate": 31.4,
+            "sum_net_pct": -25.821,
+            "avg_net_pct": -0.3689
+          }
+        },
+        "by_symbol": {
+          "SOLUSDT": {
+            "trades": 23,
+            "win_rate": 34.8,
+            "sum_net_pct": -3.57,
+            "avg_net_pct": -0.1552
+          },
+          "ETHUSDT": {
+            "trades": 24,
+            "win_rate": 33.3,
+            "sum_net_pct": -6.854,
+            "avg_net_pct": -0.2856
+          },
+          "BTCUSDT": {
+            "trades": 23,
+            "win_rate": 26.1,
+            "sum_net_pct": -15.397,
+            "avg_net_pct": -0.6694
+          }
+        }
+      },
+      "verdict": "REJECT",
+      "verdict_reasons": [
+        "aggregate not profitable after fees (net_exp=-0.369%, PF=0.79)"
+      ],
+      "errors": [],
+      "note": "LONG when perp funding is unusually POSITIVE (crowd funding the long \u2192 ride). Same data source as contrarian, opposite reading."
+    },
+    {
+      "strategy_key": "funding_momentum",
+      "strategy": "Funding Momentum (perp)",
+      "signal_name": "Funding Momentum",
+      "interval": "8h",
+      "exit_policy": {
+        "use_atr": true,
+        "sl_pct": 0.4,
+        "tp_pct": 0.8,
+        "atr_sl_mult": 1.5,
+        "atr_tp_mult": 3.0,
+        "arm_be": false,
+        "max_red": 0
+      },
+      "qualify_mode": "signal",
+      "subcells": {
+        "BTCUSDT/90d": {
+          "trades": 12,
+          "win_rate": 25.0,
+          "avg_win_pct": 4.6922284268510115,
+          "avg_loss_pct": -2.3585784324772296,
+          "expectancy_pct": -0.595876717645169,
+          "profit_factor": 0.663143578668661,
+          "total_return_pct": -7.473520939378342,
+          "max_drawdown_pct": -14.083938762556242,
+          "sharpe": -0.6243891700708677,
+          "avg_bars_held": 12.0,
+          "sum_gross_pct": -4.750520611742026,
+          "sum_fees_pct": 2.400000000000001,
+          "sum_net_pct": -7.150520611742028,
+          "avg_gross_pct": -0.39587671764516885,
+          "avg_fee_pct": 0.20000000000000004
+        },
+        "ETHUSDT/90d": {
+          "trades": 12,
+          "win_rate": 16.666666666666664,
+          "avg_win_pct": 7.977804766703889,
+          "avg_loss_pct": -3.4056027694144566,
+          "expectancy_pct": -1.5083681800613988,
+          "profit_factor": 0.46851058722127803,
+          "total_return_pct": -17.568082016299336,
+          "max_drawdown_pct": -23.01483662951337,
+          "sharpe": -1.1678639653756338,
+          "avg_bars_held": 10.583333333333334,
+          "sum_gross_pct": -15.700418160736785,
+          "sum_fees_pct": 2.400000000000001,
+          "sum_net_pct": -18.100418160736787,
+          "avg_gross_pct": -1.3083681800613987,
+          "avg_fee_pct": 0.20000000000000004
+        },
+        "SOLUSDT/90d": {
+          "trades": 15,
+          "win_rate": 20.0,
+          "avg_win_pct": 6.140372482457571,
+          "avg_loss_pct": -3.7687594852174744,
+          "expectancy_pct": -1.7869330916824653,
+          "profit_factor": 0.40732053256134254,
+          "total_return_pct": -24.605631841569043,
+          "max_drawdown_pct": -23.610302631084203,
+          "sharpe": -1.6704141146377818,
+          "avg_bars_held": 7.466666666666667,
+          "sum_gross_pct": -23.80399637523698,
+          "sum_fees_pct": 3.0000000000000013,
+          "sum_net_pct": -26.803996375236984,
+          "avg_gross_pct": -1.586933091682465,
+          "avg_fee_pct": 0.2000000000000001
+        }
+      },
+      "aggregate": {
+        "trades": 39,
+        "win_rate": 20.51282051282051,
+        "avg_win_pct": 6.056676532666691,
+        "avg_loss_pct": -3.242204755130623,
+        "expectancy_pct": -1.3347419268645075,
+        "profit_factor": 0.4820834638155736,
+        "total_return_pct": -42.495696576996565,
+        "max_drawdown_pct": -46.60400671822435,
+        "sharpe": -2.1141392062907136,
+        "avg_bars_held": 9.820512820512821,
+        "sum_gross_pct": -44.25493514771579,
+        "sum_fees_pct": 7.800000000000002,
+        "sum_net_pct": -52.054935147715796,
+        "avg_gross_pct": -1.1347419268645074,
+        "avg_fee_pct": 0.20000000000000004
+      },
+      "walk_forward": [
+        {
+          "trades": 9,
+          "win_rate": 44.44444444444444,
+          "avg_win_pct": 6.320745685376888,
+          "avg_loss_pct": -4.140441586636416,
+          "expectancy_pct": 0.5089749787028303,
+          "profit_factor": 1.2212698675962614,
+          "total_return_pct": 3.4056498061055596,
+          "max_drawdown_pct": -8.738083089079133,
+          "sharpe": 0.273954822668394,
+          "avg_bars_held": 11.777777777777779,
+          "sum_gross_pct": 6.380774808325473,
+          "sum_fees_pct": 1.8000000000000003,
+          "sum_net_pct": 4.580774808325472,
+          "avg_gross_pct": 0.7089749787028304,
+          "avg_fee_pct": 0.2
+        },
+        {
+          "trades": 9,
+          "win_rate": 22.22222222222222,
+          "avg_win_pct": 6.162994079026774,
+          "avg_loss_pct": -3.508044436241791,
+          "expectancy_pct": -1.35892476618211,
+          "profit_factor": 0.5019478752774671,
+          "total_return_pct": -12.286150233028724,
+          "max_drawdown_pct": -18.834919965589414,
+          "sharpe": -0.9076934668909216,
+          "avg_bars_held": 11.555555555555555,
+          "sum_gross_pct": -10.430322895638987,
+          "sum_fees_pct": 1.8000000000000003,
+          "sum_net_pct": -12.23032289563899,
+          "avg_gross_pct": -1.1589247661821098,
+          "avg_fee_pct": 0.2
+        },
+        {
+          "trades": 9,
+          "win_rate": 22.22222222222222,
+          "avg_win_pct": 5.422220680886214,
+          "avg_loss_pct": -3.135122627711273,
+          "expectancy_pct": -1.2334907813562759,
+          "profit_factor": 0.4941452353828967,
+          "total_return_pct": -11.086667192493183,
+          "max_drawdown_pct": -15.866343859188836,
+          "sharpe": -0.9693593538322995,
+          "avg_bars_held": 11.11111111111111,
+          "sum_gross_pct": -9.301417032206484,
+          "sum_fees_pct": 1.8000000000000003,
+          "sum_net_pct": -11.101417032206484,
+          "avg_gross_pct": -1.0334907813562757,
+          "avg_fee_pct": 0.2
+        },
+        {
+          "trades": 12,
+          "win_rate": 0.0,
+          "avg_win_pct": 0.0,
+          "avg_loss_pct": -2.775330835682983,
+          "expectancy_pct": -2.775330835682983,
+          "profit_factor": 0.0,
+          "total_return_pct": -28.694830476693024,
+          "max_drawdown_pct": -26.86807080108915,
+          "sharpe": -10.852581362985694,
+          "avg_bars_held": 6.083333333333333,
+          "sum_gross_pct": -30.903970028195793,
+          "sum_fees_pct": 2.400000000000001,
+          "sum_net_pct": -33.30397002819579,
+          "avg_gross_pct": -2.575330835682983,
+          "avg_fee_pct": 0.20000000000000004
+        }
+      ],
+      "attribution": {
+        "by_exit_reason": {
+          "TP": {
+            "trades": 8,
+            "win_rate": 100.0,
+            "sum_net_pct": 48.453,
+            "avg_net_pct": 6.0567
+          },
+          "end-of-data": {
+            "trades": 1,
+            "win_rate": 0.0,
+            "sum_net_pct": -0.439,
+            "avg_net_pct": -0.4394
+          },
+          "SL": {
+            "trades": 30,
+            "win_rate": 0.0,
+            "sum_net_pct": -100.069,
+            "avg_net_pct": -3.3356
+          }
+        },
+        "by_regime": {
+          "VOLATILE": {
+            "trades": 39,
+            "win_rate": 20.5,
+            "sum_net_pct": -52.055,
+            "avg_net_pct": -1.3347
+          }
+        },
+        "by_symbol": {
+          "BTCUSDT": {
+            "trades": 12,
+            "win_rate": 25.0,
+            "sum_net_pct": -7.151,
+            "avg_net_pct": -0.5959
+          },
+          "ETHUSDT": {
+            "trades": 12,
+            "win_rate": 16.7,
+            "sum_net_pct": -18.1,
+            "avg_net_pct": -1.5084
+          },
+          "SOLUSDT": {
+            "trades": 15,
+            "win_rate": 20.0,
+            "sum_net_pct": -26.804,
+            "avg_net_pct": -1.7869
+          }
+        }
+      },
+      "verdict": "REJECT",
+      "verdict_reasons": [
+        "aggregate not profitable after fees (net_exp=-1.335%, PF=0.48)"
+      ],
+      "errors": [],
+      "note": "LONG when perp funding is unusually POSITIVE (crowd funding the long \u2192 ride). Same data source as contrarian, opposite reading."
+    }
+  ],
+  "leaderboard": [
+    {
+      "strategy": "Funding Contrarian (perp)",
+      "interval": "4h",
+      "strategy_key": "funding_contrarian",
+      "trades": 59,
+      "net_expectancy_pct": 0.10040649221653021,
+      "profit_factor": 1.062645501356142,
+      "verdict": "REJECT"
+    },
+    {
+      "strategy": "Funding Momentum (perp)",
+      "interval": "4h",
+      "strategy_key": "funding_momentum",
+      "trades": 70,
+      "net_expectancy_pct": -0.3688747464184038,
+      "profit_factor": 0.7904001661404523,
+      "verdict": "REJECT"
+    },
+    {
+      "strategy": "Funding Contrarian (perp)",
+      "interval": "8h",
+      "strategy_key": "funding_contrarian",
+      "trades": 31,
+      "net_expectancy_pct": -1.3052268509140554,
+      "profit_factor": 0.536897971257635,
+      "verdict": "REJECT"
+    },
+    {
+      "strategy": "Funding Momentum (perp)",
+      "interval": "8h",
+      "strategy_key": "funding_momentum",
+      "trades": 39,
+      "net_expectancy_pct": -1.3347419268645075,
+      "profit_factor": 0.4820834638155736,
+      "verdict": "REJECT"
+    }
+  ],
+  "edge_found": false,
+  "best": null
+}
