@@ -421,3 +421,27 @@ but only when there's an edge.
 - The bot check interval is in seconds; default 30s = checks every 30 seconds.
 - `trading/data/` is auto-created on first run; safe to delete to reset all data.
 - Public chart data (24h stats, klines) works without an API key, but no orders can be placed without auth.
+
+## Research & Decision Engine (Phase 1 — June 2026)
+
+A SECOND, separate product lives in this monorepo: a deterministic crypto
+**research/decision engine** (NOT the trading bot, places no orders). It is an
+Express + Postgres service in `artifacts/api-server`. Phase 1 uses **free market
+data only**; paid feeds (on-chain/news/macro) are deferred behind provider
+interfaces.
+
+- **Endpoints** (`/api` prefix): `POST /research/generate` (asset + timeframe →
+  full pipeline → stored report + audit trace → returns BUY/HOLD/SELL/NO_TRADE),
+  `GET /research/reports/{requestId}`, `GET /research/audit/{requestId}`.
+- **Pipeline** (deterministic, identical input → identical output):
+  entity-resolution → fetch (Binance primary, Coinbase failover, retry+backoff+
+  circuit breaker) → normalize/data-quality → score (technical) → confidence →
+  decision rules → store → audit. Any failure → SAFE_MODE (NO_TRADE), never 500.
+- **Decision rules (exact):** UNKNOWN data→NO_TRADE; confidence<60→NO_TRADE;
+  liquidity risk>70→AVOID; else score band 90+→STRONG_BUY … 0-19→AVOID.
+- **Honest scope:** "institutional score" is a weighted TECHNICAL score and
+  liquidity risk is a volume/volatility proxy — there is no fundamental/on-chain
+  data until paid feeds are added (Phase 3).
+- **Where:** `artifacts/api-server/src/modules/{providers,indicators,normalization,scoring,decision,audit,research}`,
+  contract in `lib/api-spec/openapi.yaml`, tables `assets`/`reports`/`audit_logs`
+  in `lib/db/src/schema`.

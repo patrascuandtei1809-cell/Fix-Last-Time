@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: research
+    description: Deterministic research and decision engine
 paths:
   /healthz:
     get:
@@ -24,6 +26,84 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /research/generate:
+    post:
+      operationId: generateResearch
+      tags: [research]
+      summary: Generate a research report for an asset
+      description: >
+        Runs the deterministic research pipeline (data → normalize → quality →
+        metrics → score → confidence → decision) for a single asset using free
+        market data, stores the report and a full audit trace, and returns the
+        report. On any internal failure the pipeline returns a SAFE_MODE report
+        (decision NO_TRADE, dataState UNKNOWN) rather than an error.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateResearchRequest"
+      responses:
+        "200":
+          description: Research report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResearchReport"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /research/reports/{requestId}:
+    get:
+      operationId: getResearchReport
+      tags: [research]
+      summary: Fetch a previously generated research report
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Research report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResearchReport"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /research/audit/{requestId}:
+    get:
+      operationId: getResearchAudit
+      tags: [research]
+      summary: Fetch the full audit trace for a research request
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Audit trace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditTrace"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +113,164 @@ components:
           type: string
       required:
         - status
-
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+    GenerateResearchRequest:
+      type: object
+      properties:
+        asset:
+          type: string
+          description: Asset symbol, e.g. BTC, ETH, SOL
+        timeframe:
+          type: string
+          enum: ["15m", "1h", "4h", "1d"]
+          default: "1h"
+        mode:
+          type: string
+          enum: ["standard"]
+          default: "standard"
+      required:
+        - asset
+    TradingDecision:
+      type: string
+      enum:
+        - STRONG_BUY
+        - BUY
+        - HOLD
+        - REDUCE
+        - SELL
+        - AVOID
+        - NO_TRADE
+    DataState:
+      type: string
+      enum:
+        - OK
+        - PARTIAL
+        - UNKNOWN
+    ResearchMetrics:
+      type: object
+      properties:
+        lastClose:
+          type: number
+        ema50:
+          type: number
+        ema200:
+          type: number
+        rsi:
+          type: number
+        macdHistogram:
+          type: number
+        atrPercent:
+          type: number
+        volume:
+          type: number
+        avgVolume20:
+          type: number
+        volumeRatio:
+          type: number
+        trend:
+          type: string
+        regime:
+          type: string
+      required:
+        - lastClose
+        - ema50
+        - ema200
+        - rsi
+        - macdHistogram
+        - atrPercent
+        - volume
+        - avgVolume20
+        - volumeRatio
+        - trend
+        - regime
+    ResearchReport:
+      type: object
+      properties:
+        requestId:
+          type: string
+        asset:
+          type: string
+        timeframe:
+          type: string
+        mode:
+          type: string
+        generatedAt:
+          type: string
+          format: date-time
+        dataState:
+          $ref: "#/components/schemas/DataState"
+        completenessScore:
+          type: number
+        freshnessScore:
+          type: number
+        institutionalScore:
+          type: number
+        confidence:
+          type: number
+        liquidityRisk:
+          type: number
+        decision:
+          $ref: "#/components/schemas/TradingDecision"
+        metrics:
+          $ref: "#/components/schemas/ResearchMetrics"
+        reasons:
+          type: array
+          items:
+            type: string
+        dataSource:
+          type: string
+        inconsistencies:
+          type: array
+          items:
+            type: string
+      required:
+        - requestId
+        - asset
+        - timeframe
+        - mode
+        - generatedAt
+        - dataState
+        - completenessScore
+        - freshnessScore
+        - institutionalScore
+        - confidence
+        - liquidityRisk
+        - decision
+        - reasons
+        - dataSource
+        - inconsistencies
+    AuditEntry:
+      type: object
+      properties:
+        step:
+          type: string
+        status:
+          type: string
+        detail:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - step
+        - status
+        - createdAt
+    AuditTrace:
+      type: object
+      properties:
+        requestId:
+          type: string
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditEntry"
+      required:
+        - requestId
+        - entries
