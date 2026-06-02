@@ -1,0 +1,115 @@
+============================================================================
+AlphaTrade STRATEGY RESEARCH — honest after-fee edge proof
+============================================================================
+fee=0.1%/side  slippage=0.02%/side  round-trip cost≈0.24%
+symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[90, 180]d  walk-forward folds=4
+ACCEPT rule: net expectancy>0 AND PF≥1 on EVERY cell (≥5 trades), ≥20 total trades, majority WF folds positive
+----------------------------------------------------------------------------
+
+▶ Reversal Scalper (1m baseline)  @ 1m  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[7]d)
+      BTCUSDT/7d: 369 trades  net_exp=-0.241%  PF=0.03
+      ETHUSDT/7d: 352 trades  net_exp=-0.241%  PF=0.05
+      SOLUSDT/7d: 352 trades  net_exp=-0.245%  PF=0.06
+    → 🔴 REJECT  net_exp=-0.242%  PF=0.05  trades=1073  (aggregate not profitable after fees (net_exp=-0.242%, PF=0.05))
+
+▶ Donchian Breakout (HTF)  @ 15m  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[90, 180]d)
+      BTCUSDT/90d: 103 trades  net_exp=-0.314%  PF=0.40
+      BTCUSDT/180d: 182 trades  net_exp=-0.279%  PF=0.43
+      ETHUSDT/90d: 88 trades  net_exp=-0.200%  PF=0.64
+      ETHUSDT/180d: 176 trades  net_exp=-0.267%  PF=0.54
+      SOLUSDT/90d: 93 trades  net_exp=-0.291%  PF=0.54
+      SOLUSDT/180d: 175 trades  net_exp=-0.260%  PF=0.59
+    → 🔴 REJECT  net_exp=-0.269%  PF=0.52  trades=817  (aggregate not profitable after fees (net_exp=-0.269%, PF=0.52))
+
+▶ Donchian Breakout (HTF)  @ 1h  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[90, 180]d)
+      BTCUSDT/90d: 27 trades  net_exp=-0.332%  PF=0.62
+      BTCUSDT/180d: 43 trades  net_exp=-0.377%  PF=0.54
+      ETHUSDT/90d: 29 trades  net_exp=-0.462%  PF=0.60
+      ETHUSDT/180d: 44 trades  net_exp=-0.424%  PF=0.61
+      SOLUSDT/90d: 26 trades  net_exp=-0.317%  PF=0.69
+      SOLUSDT/180d: 41 trades  net_exp=-0.475%  PF=0.57
+    → 🔴 REJECT  net_exp=-0.404%  PF=0.60  trades=210  (aggregate not profitable after fees (net_exp=-0.404%, PF=0.60))
+
+▶ Donchian Breakout (HTF)  @ 4h  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[90, 180]d)
+      BTCUSDT/90d: 6 trades  net_exp=-0.167%  PF=0.87
+      BTCUSDT/180d: 15 trades  net_exp=-0.230%  PF=0.81
+      ETHUSDT/90d: 9 trades  net_exp=-2.384%  PF=0.00
+      ETHUSDT/180d: 21 trades  net_exp=-0.437%  PF=0.74
+      SOLUSDT/90d: 4 trades  net_exp=-0.402%  PF=0.76
+      SOLUSDT/180d: 19 trades  net_exp=-0.752%  PF=0.67
+    → 🔴 REJECT  net_exp=-0.689%  PF=0.62  trades=74  (aggregate not profitable after fees (net_exp=-0.689%, PF=0.62))
+
+▶ Trend Pullback (HTF)  @ 15m  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[90, 180]d)
+      BTCUSDT/90d: 128 trades  net_exp=-0.312%  PF=0.40
+      BTCUSDT/180d: 206 trades  net_exp=-0.337%  PF=0.37
+      ETHUSDT/90d: 116 trades  net_exp=-0.267%  PF=0.54
+      ETHUSDT/180d: 219 trades  net_exp=-0.227%  PF=0.60
+      SOLUSDT/90d: 120 trades  net_exp=-0.128%  PF=0.75
+      SOLUSDT/180d: 224 trades  net_exp=-0.230%  PF=0.62
+    → 🔴 REJECT  net_exp=-0.254%  PF=0.55  trades=1013  (aggregate not profitable after fees (net_exp=-0.254%, PF=0.55))
+
+▶ Trend Pullback (HTF)  @ 1h  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[90, 180]d)
+      BTCUSDT/90d: 38 trades  net_exp=-0.089%  PF=0.87
+      BTCUSDT/180d: 56 trades  net_exp=-0.123%  PF=0.82
+      ETHUSDT/90d: 29 trades  net_exp=-0.059%  PF=0.94
+      ETHUSDT/180d: 53 trades  net_exp=-0.236%  PF=0.76
+      SOLUSDT/90d: 30 trades  net_exp=-0.164%  PF=0.85
+      SOLUSDT/180d: 44 trades  net_exp=-0.302%  PF=0.72
+    → 🔴 REJECT  net_exp=-0.171%  PF=0.81  trades=250  (aggregate not profitable after fees (net_exp=-0.171%, PF=0.81))
+
+▶ Trend Pullback (HTF)  @ 4h  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[90, 180]d)
+      BTCUSDT/90d: 8 trades  net_exp=+0.039%  PF=1.03
+      BTCUSDT/180d: 16 trades  net_exp=-0.201%  PF=0.83
+      ETHUSDT/90d: 7 trades  net_exp=-0.570%  PF=0.69
+      ETHUSDT/180d: 18 trades  net_exp=-0.705%  PF=0.63
+      SOLUSDT/90d: 4 trades  net_exp=-2.864%  PF=0.00
+      SOLUSDT/180d: 15 trades  net_exp=+1.229%  PF=1.72
+    → 🔴 REJECT  net_exp=-0.186%  PF=0.89  trades=68  (aggregate not profitable after fees (net_exp=-0.186%, PF=0.89))
+
+▶ EMA/MACD/RSI/Volume V2 (HTF)  @ 15m  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[90, 180]d)
+      BTCUSDT/90d: 134 trades  net_exp=-0.282%  PF=0.43
+      BTCUSDT/180d: 240 trades  net_exp=-0.284%  PF=0.43
+      ETHUSDT/90d: 110 trades  net_exp=-0.087%  PF=0.82
+      ETHUSDT/180d: 214 trades  net_exp=-0.151%  PF=0.71
+      SOLUSDT/90d: 124 trades  net_exp=-0.268%  PF=0.56
+      SOLUSDT/180d: 232 trades  net_exp=-0.227%  PF=0.62
+    → 🔴 REJECT  net_exp=-0.222%  PF=0.59  trades=1054  (aggregate not profitable after fees (net_exp=-0.222%, PF=0.59))
+
+▶ EMA/MACD/RSI/Volume V2 (HTF)  @ 1h  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[90, 180]d)
+      BTCUSDT/90d: 32 trades  net_exp=-0.210%  PF=0.74
+      BTCUSDT/180d: 56 trades  net_exp=-0.350%  PF=0.55
+      ETHUSDT/90d: 38 trades  net_exp=-0.387%  PF=0.65
+      ETHUSDT/180d: 68 trades  net_exp=-0.456%  PF=0.57
+      SOLUSDT/90d: 34 trades  net_exp=-0.416%  PF=0.63
+      SOLUSDT/180d: 55 trades  net_exp=-0.419%  PF=0.61
+    → 🔴 REJECT  net_exp=-0.386%  PF=0.61  trades=283  (aggregate not profitable after fees (net_exp=-0.386%, PF=0.61))
+
+▶ EMA/MACD/RSI/Volume V2 (HTF)  @ 4h  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[90, 180]d)
+      BTCUSDT/90d: 7 trades  net_exp=+0.315%  PF=1.28
+      BTCUSDT/180d: 16 trades  net_exp=-0.048%  PF=0.96
+      ETHUSDT/90d: 10 trades  net_exp=-0.988%  PF=0.46
+      ETHUSDT/180d: 25 trades  net_exp=-0.340%  PF=0.79
+      SOLUSDT/90d: 5 trades  net_exp=-1.006%  PF=0.46
+      SOLUSDT/180d: 20 trades  net_exp=+0.092%  PF=1.05
+    → 🔴 REJECT  net_exp=-0.242%  PF=0.85  trades=83  (aggregate not profitable after fees (net_exp=-0.242%, PF=0.85))
+
+============================================================================
+LEADERBOARD — ranked by NET expectancy/trade (after fees)
+============================================================================
+  #  strategy @ tf                      trades  net_exp%     PF   win%  verdict
+  ------------------------------------------------------------------------
+  1  Trend Pullback (HTF) @ 1h             250    -0.171   0.81   37.2  REJECT
+  2  Trend Pullback (HTF) @ 4h              68    -0.186   0.89   33.8  REJECT
+  3  EMA/MACD/RSI/Volume V2 (HTF) @ 15m   1054    -0.222   0.59   32.2  REJECT
+  4  Reversal Scalper (1m baseline) @ 1m   1073    -0.242   0.05    5.7  REJECT
+  5  EMA/MACD/RSI/Volume V2 (HTF) @ 4h      83    -0.242   0.85   32.5  REJECT
+  6  Trend Pullback (HTF) @ 15m           1013    -0.254   0.55   30.4  REJECT
+  7  Donchian Breakout (HTF) @ 15m         817    -0.269   0.52   31.7  REJECT
+  8  EMA/MACD/RSI/Volume V2 (HTF) @ 1h     283    -0.386   0.61   29.3  REJECT
+  9  Donchian Breakout (HTF) @ 1h          210    -0.404   0.60   30.5  REJECT
+  10 Donchian Breakout (HTF) @ 4h           74    -0.689   0.62   24.3  REJECT
+
+============================================================================
+VERDICT: 🔴 NO EDGE — no strategy×timeframe clears the fee hurdle under the strict acceptance rule.
+Honest outcome: the live bot stays AUTO-DISABLED (allowlist empty). Manual trading remains available.
+============================================================================

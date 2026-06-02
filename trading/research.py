@@ -121,30 +121,32 @@ CANDIDATES: List[StrategySpec] = [
         signal_name="Reversal Scalper", timeframes=["1m"],
         use_atr=False, sl_pct=0.4, tp_pct=0.8,
         arm_be=True, max_red=backtest.AS_MAX_RED_AFTER_ENTRY,
-        qualify_mode="weighted", warmup_bars=60, periods=[3], symbols=["BTCUSDT"],
+        qualify_mode="weighted", warmup_bars=60, periods=[7],
+        symbols=["BTCUSDT", "ETHUSDT", "SOLUSDT"],
         note="Current live config — expected REJECT (fees > edge on 1m). "
-             "BTC-only/3d — the weighted gate is slow per-candle and 1m is "
-             "already exhaustively proven dead after fees.",
+             "Full multi-symbol 1m baseline (BTC/ETH/SOL, 7d) re-proves, in the "
+             "same run, that 1m is dead after fees; the weighted gate is slow "
+             "per-candle so the window is kept short.",
     ),
     StrategySpec(
         key="donchian_breakout", name="Donchian Breakout (HTF)",
-        signal_name="Donchian Breakout", timeframes=["1h", "4h"],
+        signal_name="Donchian Breakout", timeframes=["15m", "1h", "4h"],
         use_atr=True, arm_be=False, max_red=0,
-        qualify_mode="signal", warmup_bars=210, periods=[180],
+        qualify_mode="signal", warmup_bars=210, periods=[90, 180],
         note="Long-only trend breakout; ATR exits let winners run.",
     ),
     StrategySpec(
         key="trend_pullback", name="Trend Pullback (HTF)",
-        signal_name="Trend Pullback", timeframes=["1h", "4h"],
+        signal_name="Trend Pullback", timeframes=["15m", "1h", "4h"],
         use_atr=True, arm_be=False, max_red=0,
-        qualify_mode="signal", warmup_bars=210, periods=[180],
+        qualify_mode="signal", warmup_bars=210, periods=[90, 180],
         note="Long-only buy-the-dip in an uptrend; ATR exits.",
     ),
     StrategySpec(
         key="ema_macd_rsi_vol_v2", name="EMA/MACD/RSI/Volume V2 (HTF)",
-        signal_name=backtest.V2_STRATEGY, timeframes=["1h", "4h"],
+        signal_name=backtest.V2_STRATEGY, timeframes=["15m", "1h", "4h"],
         use_atr=True, arm_be=False, max_red=0,
-        qualify_mode="signal", warmup_bars=210, periods=[180],
+        qualify_mode="signal", warmup_bars=210, periods=[90, 180],
         note="Long-only confluence trend strategy on higher timeframes.",
     ),
 ]
