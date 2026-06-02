@@ -510,3 +510,27 @@ reversal baseline lost −0.250% (≈ fees alone). **The allowlist is empty, so 
 live bot is honestly AUTO-DISABLED.** Changing this requires a genuinely different
 edge source (funding/basis, cross-exchange, on-chain/news), NOT more threshold
 tuning — lowering thresholds to trade more only multiplies the fee drag.
+
+## EDGE SEARCH RESULT (June 2026) — where the after-fee edge actually lives
+
+Ran the research framework across the FULL requested matrix: strategies ×
+{5m,15m,1h,4h} × {BTC,ETH,SOL} scored SEPARATELY, all 7 metrics (win rate,
+avg winner, avg loser, expectancy, profit factor, Sharpe, max drawdown), after
+the standard ~0.24% round-trip cost. Driver: `trading/edge_search.py` (chunked
+by timeframe to fit the 120s sandbox cap; rows in `data/research/edge_rows.json`,
+human report in `data/research/edge_report.md`).
+
+**Finding (refines the earlier blanket "NO EDGE"):**
+- **5m / 15m / 1h are ALL negative** for every strategy & symbol — gross edge <
+  fee hurdle. Sub-hour scalping is dead after fees; stop tuning it.
+- **4h is the only timeframe that clears fees**, and only for higher-timeframe
+  momentum/trend strategies on **ETH & SOL**.
+- **Top 3 candidates** (positive exp + PF≥1 + ≥10 trades):
+  1. `EMA_MACD_RSI_VOLUME_V2` @ 4h SOL — +1.02%/trade, PF 1.59, Sharpe 1.24
+  2. `EMA_MACD_RSI_VOLUME_V2` @ 4h ETH — +0.99%/trade, PF 1.72, Sharpe 1.65
+  3. `Trend Pullback` @ 4h SOL — +0.98%/trade, PF 1.53, Sharpe 1.01
+
+**Why NOT live yet:** not positive on all 3 symbols (V2@4h BTC ≈ break-even),
+single 360d window, only ~30–50 trades/symbol (too thin for walk-forward). The
+live auto-disable gate stays **default-safe (allowlist empty → no auto-trading)**.
+Next step = out-of-sample confirmation across more windows, run OFF the sandbox.

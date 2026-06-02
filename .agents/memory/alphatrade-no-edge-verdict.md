@@ -47,3 +47,20 @@ symbols (`MIN_SYMBOLS`, not one lucky coin); ≥60% of attempted subcells reach
 single strong subcell could pass while others were sparse/negative and excluded.
 **How to apply:** when adding strategies/symbols, an ACCEPT must clear all guards
 — do not relax them to get a green light.
+
+## Refinement — where the edge actually lives (multi-TF × per-symbol sweep)
+A full sweep (5m/15m/1h/4h × BTC/ETH/SOL separately, after ~0.24% round-trip)
+moved the verdict from "nothing works" to a SPECIFIC, narrow finding:
+- **5m, 15m, 1h are ALL negative** for every strategy/symbol — fee drag > gross edge.
+- **4h is the only frame that clears fees**, and only for higher-timeframe
+  momentum/trend (V2, Trend Pullback, Donchian) on **ETH and SOL**.
+- Best: `EMA_MACD_RSI_VOLUME_V2` @ 4h — SOL +1.02%/trade (PF1.59), ETH +0.99%
+  (PF1.72), but BTC ≈ break-even (−0.05%, PF0.95).
+**Why it's still NOT a live green light:** not positive on all 3 symbols, single
+360d window, only ~30–50 trades/symbol (too thin for meaningful walk-forward).
+Auto-disable gate stays default-safe (allowlist empty). Next: out-of-sample
+confirmation across more windows, run OFF the 120s sandbox.
+**How to apply:** stop tuning sub-hour scalpers — the only place worth more
+research is 4h HTF momentum on ETH/SOL. Driver: `trading/edge_search.py`
+(chunked by TF to fit the sandbox cap; results in `data/research/edge_rows.json`,
+report in `edge_report.md`).
