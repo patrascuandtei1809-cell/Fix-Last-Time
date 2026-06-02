@@ -37,6 +37,23 @@ on EVERY cell with ≥5 trades, ≥20 total trades, majority walk-forward folds 
   (1h/4h) cells are fast. Background/detached jobs do NOT persist across tool calls
   in the Replit sandbox — run sweeps synchronously within the command timeout.
 
+## Canonical pipeline must cover EVERY timeframe (incl. 5m)
+The strict pipeline (`research.py` → `data/research/latest.json`) is the single
+source of truth for the verdict + allowlist gate. It must sweep the FULL frame
+set **1m/5m/15m/1h/4h under one acceptance rule** — do not let a timeframe live
+only in an exploratory side-script (`edge_report.md`). 5m was once missing from
+the strict report; now every HTF candidate's `timeframes` includes 5m and all
+5m cells REJECT (≈ −0.24%, i.e. fees alone). Pinned by
+`trading/tests/test_timeframe_coverage.py`.
+**Why:** a code review correctly blocked completion because the canonical report
+silently omitted 5m while a looser side-analysis covered it — two narratives, one
+gate. **How to apply:** when adding a timeframe, add it to the StrategySpec
+`timeframes` in `research.py` CANDIDATES (not just a script) and regenerate
+`latest.json`. Long sweeps: set `RESEARCH_SUBCELL_CACHE=1` and run
+`timeout 110 python research.py` repeatedly — subcells cache to
+`data/research/subcells/` (gitignored) and resume until exit=0; detached/background
+jobs are reaped by the sandbox between tool calls, so never rely on them.
+
 ## Hardened ACCEPT rule (breadth guards)
 `_verdict()` requires ALL of: aggregate net exp > 0 AND PF ≥ 1; edge on ≥2
 symbols (`MIN_SYMBOLS`, not one lucky coin); ≥60% of attempted subcells reach

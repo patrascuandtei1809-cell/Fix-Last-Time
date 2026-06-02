@@ -47,3 +47,6 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# AlphaTrade research resumable subcell cache (compute cache, not source of truth)
+trading/data/research/subcells/

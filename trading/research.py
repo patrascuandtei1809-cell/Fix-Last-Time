@@ -43,6 +43,7 @@ from __future__ import annotations
 import os
 import json
 import time
+import hashlib
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from collections import defaultdict
@@ -130,21 +131,21 @@ CANDIDATES: List[StrategySpec] = [
     ),
     StrategySpec(
         key="donchian_breakout", name="Donchian Breakout (HTF)",
-        signal_name="Donchian Breakout", timeframes=["15m", "1h", "4h"],
+        signal_name="Donchian Breakout", timeframes=["5m", "15m", "1h", "4h"],
         use_atr=True, arm_be=False, max_red=0,
         qualify_mode="signal", warmup_bars=210, periods=[90, 180],
         note="Long-only trend breakout; ATR exits let winners run.",
     ),
     StrategySpec(
         key="trend_pullback", name="Trend Pullback (HTF)",
-        signal_name="Trend Pullback", timeframes=["15m", "1h", "4h"],
+        signal_name="Trend Pullback", timeframes=["5m", "15m", "1h", "4h"],
         use_atr=True, arm_be=False, max_red=0,
         qualify_mode="signal", warmup_bars=210, periods=[90, 180],
         note="Long-only buy-the-dip in an uptrend; ATR exits.",
     ),
     StrategySpec(
         key="ema_macd_rsi_vol_v2", name="EMA/MACD/RSI/Volume V2 (HTF)",
-        signal_name=backtest.V2_STRATEGY, timeframes=["15m", "1h", "4h"],
+        signal_name=backtest.V2_STRATEGY, timeframes=["5m", "15m", "1h", "4h"],
         use_atr=True, arm_be=False, max_red=0,
         qualify_mode="signal", warmup_bars=210, periods=[90, 180],
         note="Long-only confluence trend strategy on higher timeframes.",
@@ -191,6 +192,73 @@ def attribution(trades: List[Trade]) -> Dict:
 # ─────────────────────────────────────────────────────────────────────────────
 # Run one (spec × symbol × interval × period) sub-cell
 # ─────────────────────────────────────────────────────────────────────────────
+# Opt-in sub-cell result cache — makes a full sweep RESUMABLE across separate
+# process invocations (each run computes a few more sub-cells and persists them;
+# a later run reuses them). OFF by default so the dashboard / tests are
+# unaffected; enable with env RESEARCH_SUBCELL_CACHE=1. Bump _SUBCELL_CACHE_VER
+# whenever the backtest math or sub-cell payload shape changes.
+_SUBCELL_CACHE_DIR = os.path.join(RESEARCH_DIR, "subcells")
+# v2: cache key now includes a fingerprint of the actual dataframe used (length +
+# first/last candle time), so a refetch of fresh klines invalidates stale results.
+_SUBCELL_CACHE_VER = 2
+
+
+def _subcell_cache_on() -> bool:
+    return os.environ.get("RESEARCH_SUBCELL_CACHE") == "1"
+
+
+def _df_fingerprint(df) -> str:
+    """Stable fingerprint of the candle data a sub-cell was computed on. Changing
+    market data (new candles, a refetch) changes this → the cache key changes →
+    the stale sub-cell is never reused."""
+    try:
+        col = "open_time" if "open_time" in df.columns else df.columns[0]
+        return f"{len(df)}:{df[col].iloc[0]}:{df[col].iloc[-1]}"
+    except Exception:
+        return f"len{len(df)}"
+
+
+def _subcell_cache_key(spec: StrategySpec, symbol: str, interval: str, days: int,
+                       fee: float, slip: float, data_fp: str) -> str:
+    sig = json.dumps({
+        "v": _SUBCELL_CACHE_VER, "key": spec.key, "sym": symbol,
+        "interval": interval, "days": days, "fee": fee, "slip": slip,
+        "signal": spec.signal_name, "sl": spec.sl_pct, "tp": spec.tp_pct,
+        "use_atr": spec.use_atr, "atr_sl": spec.atr_sl_mult,
+        "atr_tp": spec.atr_tp_mult, "arm_be": spec.arm_be, "max_red": spec.max_red,
+        "qualify": spec.qualify_mode, "score_thr": spec.score_threshold,
+        "conf": spec.conf_floor, "shorts": spec.allow_shorts,
+        "warmup": spec.warmup_bars, "wf": WF_FOLDS, "data": data_fp,
+    }, sort_keys=True)
+    return hashlib.sha256(sig.encode()).hexdigest()[:24]
+
+
+def _subcell_cache_load(key: str) -> Optional[Dict]:
+    path = os.path.join(_SUBCELL_CACHE_DIR, key + ".json")
+    try:
+        with open(path) as f:
+            payload = json.load(f)
+        m = payload["metrics"]
+        m["_trades"] = [Trade(**t) for t in payload.get("trades", [])]
+        return m
+    except Exception:
+        return None
+
+
+def _subcell_cache_save(key: str, m: Dict) -> None:
+    os.makedirs(_SUBCELL_CACHE_DIR, exist_ok=True)
+    trades = [asdict(t) for t in m.get("_trades", [])]
+    metrics_only = {k: v for k, v in m.items() if k != "_trades"}
+    path = os.path.join(_SUBCELL_CACHE_DIR, key + ".json")
+    tmp = path + ".tmp"
+    try:
+        with open(tmp, "w") as f:
+            json.dump({"metrics": metrics_only, "trades": trades}, f, default=str)
+        os.replace(tmp, path)
+    except Exception:
+        pass
+
+
 def run_subcell(spec: StrategySpec, symbol: str, interval: str, days: int, *,
                 fee: float, slip: float, use_cache: bool = True) -> Dict:
     """Backtest a single sub-cell. Returns metrics + raw trades (for attribution)."""
@@ -199,6 +267,15 @@ def run_subcell(spec: StrategySpec, symbol: str, interval: str, days: int, *,
     if len(df) < min_bars:
         return {"trades": 0, "error": f"insufficient candles ({len(df)}<{min_bars})",
                 "_trades": []}
+    # Build the cache key AFTER fetching so it is bound to the actual data used —
+    # a refetch of fresh candles changes the fingerprint and invalidates the cell.
+    ck = None
+    if _subcell_cache_on() and use_cache:
+        ck = _subcell_cache_key(spec, symbol, interval, days, fee, slip,
+                                _df_fingerprint(df))
+        cached = _subcell_cache_load(ck)
+        if cached is not None:
+            return cached
     tr = run_symbol(
         df, symbol,
         sl_pct=spec.sl_pct, tp_pct=spec.tp_pct,
@@ -213,6 +290,8 @@ def run_subcell(spec: StrategySpec, symbol: str, interval: str, days: int, *,
     )
     m = metrics(tr)
     m["_trades"] = tr
+    if ck is not None:
+        _subcell_cache_save(ck, m)
     return m
 
 

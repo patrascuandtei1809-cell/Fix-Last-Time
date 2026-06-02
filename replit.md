@@ -502,7 +502,11 @@ the api-server research engine).
 
 ### VERDICT (June 2, 2026): 🔴 NO after-fee edge
 
-Every strategy × timeframe REJECTED. The gross edge (if any) is smaller than the
+The canonical strict pipeline (`research.py` → `data/research/latest.json`) now
+sweeps **all of 1m / 5m / 15m / 1h / 4h** under ONE acceptance rule (13 cells;
+5m is included in the strict report, not only the exploratory `edge_report.md`).
+Every strategy × timeframe REJECTED — including all 5m cells (Donchian −0.238%,
+V2 −0.238%, Trend Pullback −0.243%). The gross edge (if any) is smaller than the
 ~0.24% round-trip cost; win rates ~27–37%, PF < 1 almost everywhere. Closest was
 Trend Pullback @ 4h (agg +0.051%/trade) but it is carried entirely by SOL (+1.23%,
 15 trades) while BTC/ETH are negative — not robust, correctly rejected. The 1m
