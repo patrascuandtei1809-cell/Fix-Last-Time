@@ -445,3 +445,29 @@ interfaces.
 - **Where:** `artifacts/api-server/src/modules/{providers,indicators,normalization,scoring,decision,audit,research}`,
   contract in `lib/api-spec/openapi.yaml`, tables `assets`/`reports`/`audit_logs`
   in `lib/db/src/schema`.
+
+### Evidence graph + tests (Phase 1 additions — June 2026)
+
+Two in-scope Phase 1 gaps closed (still Express + free data only; NO
+NestJS/Redis/BullMQ, NO paid feeds, nothing mock-as-production):
+
+- **Real evidence graph** (`src/modules/evidence`) ADDED alongside the kept flat
+  audit trace. Tables `evidence_nodes`/`evidence_edges` (`lib/db/src/schema`).
+  Node types `source|metric|finding|conclusion|report`; edge relations
+  `derived_from|supports|contradicts`. `buildEvidenceGraph()` is PURE and
+  deterministic; every conclusion traces
+  `conclusion → finding → metric → source → timestamp` (the `source` node carries
+  `asOf` = latest candle time + `generatedAt`). Bullish/bearish findings emit
+  `supports`/`contradicts` edges to the decision. Degraded path (no metrics)
+  still builds `finding:insufficient_data → source`. New endpoint
+  `GET /research/evidence/{requestId}`.
+- **Determinism / testability seam:** `generateResearch()` takes an injectable
+  `MarketDataPort` (default = real `marketData`) so tests feed synthetic candles
+  with no network (Replit is geo-blocked from Binance).
+- **Test suite** (vitest, `pnpm --filter @workspace/api-server run test`): unit
+  for indicators / scoring+confidence+liquidity / decision rules+consistency /
+  normalization (OK/PARTIAL/UNKNOWN) / evidence builder; integration for the full
+  `/research/generate` chain, insufficient-data→NO_TRADE, audit-trace creation,
+  and evidence-graph creation against the real DB. Integration test closes the
+  shared `pool` in `afterAll` (vitest isolates each test file in its own worker,
+  so this is per-file safe and avoids hanging open pg handles).

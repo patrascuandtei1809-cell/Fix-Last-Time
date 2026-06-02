@@ -3,6 +3,7 @@ import { GenerateResearchBody } from "@workspace/api-zod";
 import type { Timeframe } from "../modules/providers/types";
 import { generateResearch, getReport } from "../modules/research/research.service";
 import { getAuditTrace } from "../modules/audit/audit.service";
+import { getEvidenceGraph } from "../modules/evidence/evidence.service";
 
 const router: IRouter = Router();
 
@@ -37,6 +38,15 @@ router.get("/research/audit/:requestId", async (req, res) => {
     return;
   }
   res.json(trace);
+});
+
+router.get("/research/evidence/:requestId", async (req, res) => {
+  const graph = await getEvidenceGraph(req.params.requestId);
+  if (!graph) {
+    res.status(404).json({ error: "evidence graph not found" });
+    return;
+  }
+  res.json(graph);
 });
 
 export default router;

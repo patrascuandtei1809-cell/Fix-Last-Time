@@ -120,3 +120,28 @@ export const GetResearchAuditResponse = zod.object({
 })
 
 
+/**
+ * Returns the structured evidence graph that backs the decision. Nodes are typed (source | metric | finding | conclusion | report) and edges express relations (supports | contradicts | derived_from), so every conclusion can be traced conclusion → finding → metric → source.
+
+ * @summary Fetch the evidence graph (nodes + edges) for a research request
+ */
+export const GetResearchEvidenceParams = zod.object({
+  "requestId": zod.coerce.string()
+})
+
+export const GetResearchEvidenceResponse = zod.object({
+  "requestId": zod.string(),
+  "nodes": zod.array(zod.object({
+  "key": zod.string(),
+  "type": zod.enum(['source', 'metric', 'finding', 'conclusion', 'report']),
+  "label": zod.string(),
+  "data": zod.record(zod.string(), zod.unknown())
+})),
+  "edges": zod.array(zod.object({
+  "from": zod.string(),
+  "to": zod.string(),
+  "relation": zod.enum(['supports', 'contradicts', 'derived_from'])
+}))
+})
+
+

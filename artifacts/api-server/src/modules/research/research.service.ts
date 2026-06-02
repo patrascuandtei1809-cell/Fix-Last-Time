@@ -8,6 +8,11 @@ import { normalize } from "../normalization/normalization.service";
 import { score } from "../scoring/scoring.service";
 import { decide } from "../decision/decision.service";
 import { AuditRecorder, persistAudit } from "../audit/audit.service";
+import {
+  buildEvidenceGraph,
+  persistEvidenceGraph,
+  type EvidenceGraph,
+} from "../evidence/evidence.service";
 
 export type GenerateInput = {
   asset: string;
@@ -44,6 +49,9 @@ const DEFAULT_ASSETS: Record<string, { name: string; binanceSymbol: string; coin
 
 const marketData = new MarketDataService();
 
+/** Injectable market-data port — lets tests feed deterministic synthetic candles without network. */
+export type MarketDataPort = Pick<MarketDataService, "getCandles">;
+
 /** STEP 3: entity resolution — map a symbol/alias to a canonical asset row. */
 async function resolveAsset(symbol: string): Promise<Asset | null> {
   const up = symbol.trim().toUpperCase();
@@ -64,13 +72,20 @@ async function resolveAsset(symbol: string): Promise<Asset | null> {
   return again[0] ?? null;
 }
 
-export async function generateResearch(input: GenerateInput, log: Logger): Promise<ResearchReportDTO> {
+export async function generateResearch(
+  input: GenerateInput,
+  log: Logger,
+  marketDataPort: MarketDataPort = marketData,
+): Promise<ResearchReportDTO> {
   const requestId = randomUUID();
   const generatedAt = new Date();
   const recorder = new AuditRecorder();
   recorder.add("INIT", "ok", { requestId, ...input });
 
   let assetId: number | null = null;
+  let fetchCount = 0;
+  let fetchAttempts = 0;
+  let lastCandleTime: number | null = null;
   let report: ResearchReportDTO;
 
   try {
@@ -88,7 +103,10 @@ export async function generateResearch(input: GenerateInput, log: Logger): Promi
         coinbaseProduct: asset.coinbaseProduct,
       };
 
-      const fetched = await marketData.getCandles({ asset: descriptor, timeframe: input.timeframe, limit: CANDLE_LIMIT });
+      const fetched = await marketDataPort.getCandles({ asset: descriptor, timeframe: input.timeframe, limit: CANDLE_LIMIT });
+      fetchCount = fetched.candles.length;
+      fetchAttempts = fetched.attempts.length;
+      lastCandleTime = fetched.candles.length > 0 ? fetched.candles[fetched.candles.length - 1]!.openTime : null;
       recorder.add("FETCH_DATA", fetched.candles.length > 0 ? "ok" : "error", {
         source: fetched.source,
         count: fetched.candles.length,
@@ -168,9 +186,37 @@ export async function generateResearch(input: GenerateInput, log: Logger): Promi
     report = safeReport(requestId, input, generatedAt, `pipeline failure: ${message}`);
   }
 
-  // STORE: persist report first (FK target), then the audit trace.
+  // STEP 6: BUILD_EVIDENCE — construct the lineage graph from the finalized
+  // report. Pure + deterministic; wrapped so a builder fault can never throw to
+  // the client (it would only degrade traceability, not the decision).
+  let evidence: EvidenceGraph = { nodes: [], edges: [] };
+  try {
+    evidence = buildEvidenceGraph({
+      requestId,
+      source: {
+        name: report.dataSource,
+        count: fetchCount,
+        attempts: fetchAttempts,
+        timeframe: report.timeframe,
+        asOf: lastCandleTime,
+        generatedAt: generatedAt.getTime(),
+      },
+      dataState: report.dataState,
+      decision: report.decision,
+      institutionalScore: report.institutionalScore,
+      confidence: report.confidence,
+      liquidityRisk: report.liquidityRisk,
+      metrics: report.metrics,
+    });
+    recorder.add("BUILD_EVIDENCE", "ok", { nodes: evidence.nodes.length, edges: evidence.edges.length });
+  } catch (err) {
+    log.error({ err, requestId }, "failed to build evidence graph");
+    recorder.add("BUILD_EVIDENCE", "error", { error: err instanceof Error ? err.message : String(err) });
+  }
+
+  // STORE: persist report first (FK target), then the evidence graph + audit trace.
   // Persistence failures must NEVER throw to the client — the report is still
-  // returned (degraded: not durably stored / no retrievable audit trace).
+  // returned (degraded: not durably stored / no retrievable trace).
   let stored = false;
   try {
     await persistReport(report, assetId);
@@ -185,8 +231,13 @@ export async function generateResearch(input: GenerateInput, log: Logger): Promi
     dataState: report.dataState,
     stored,
   });
-  // Audit rows FK to the report; only persist the trace if the report stored.
+  // Evidence + audit rows FK to the report; only persist them if the report stored.
   if (stored) {
+    try {
+      await persistEvidenceGraph(requestId, evidence);
+    } catch (err) {
+      log.error({ err, requestId }, "failed to persist evidence graph");
+    }
     try {
       await persistAudit(requestId, recorder.entries);
     } catch (err) {

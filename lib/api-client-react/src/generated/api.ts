@@ -22,6 +22,7 @@ import type {
 import type {
   AuditTrace,
   ErrorResponse,
+  EvidenceGraph,
   GenerateResearchRequest,
   HealthStatus,
   ResearchReport
@@ -332,6 +333,85 @@ export function useGetResearchAudit<TData = Awaited<ReturnType<typeof getResearc
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetResearchAuditQueryOptions(requestId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetResearchEvidenceUrl = (requestId: string,) => {
+
+
+
+
+  return `/api/research/evidence/${requestId}`
+}
+
+/**
+ * Returns the structured evidence graph that backs the decision. Nodes are typed (source | metric | finding | conclusion | report) and edges express relations (supports | contradicts | derived_from), so every conclusion can be traced conclusion → finding → metric → source.
+
+ * @summary Fetch the evidence graph (nodes + edges) for a research request
+ */
+export const getResearchEvidence = async (requestId: string, options?: RequestInit): Promise<EvidenceGraph> => {
+
+  return customFetch<EvidenceGraph>(getGetResearchEvidenceUrl(requestId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetResearchEvidenceQueryKey = (requestId: string,) => {
+    return [
+    `/api/research/evidence/${requestId}`
+    ] as const;
+    }
+
+
+export const getGetResearchEvidenceQueryOptions = <TData = Awaited<ReturnType<typeof getResearchEvidence>>, TError = ErrorType<ErrorResponse>>(requestId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getResearchEvidence>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetResearchEvidenceQueryKey(requestId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getResearchEvidence>>> = ({ signal }) => getResearchEvidence(requestId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(requestId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getResearchEvidence>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetResearchEvidenceQueryResult = NonNullable<Awaited<ReturnType<typeof getResearchEvidence>>>
+export type GetResearchEvidenceQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Fetch the evidence graph (nodes + edges) for a research request
+ */
+
+export function useGetResearchEvidence<TData = Awaited<ReturnType<typeof getResearchEvidence>>, TError = ErrorType<ErrorResponse>>(
+ requestId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getResearchEvidence>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetResearchEvidenceQueryOptions(requestId,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

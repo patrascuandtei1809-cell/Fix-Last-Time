@@ -104,6 +104,35 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /research/evidence/{requestId}:
+    get:
+      operationId: getResearchEvidence
+      tags: [research]
+      summary: Fetch the evidence graph (nodes + edges) for a research request
+      description: >
+        Returns the structured evidence graph that backs the decision. Nodes are
+        typed (source | metric | finding | conclusion | report) and edges express
+        relations (supports | contradicts | derived_from), so every conclusion can
+        be traced conclusion → finding → metric → source.
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Evidence graph
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvidenceGraph"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -274,3 +303,64 @@ components:
       required:
         - requestId
         - entries
+    EvidenceNodeType:
+      type: string
+      enum:
+        - source
+        - metric
+        - finding
+        - conclusion
+        - report
+    EvidenceRelation:
+      type: string
+      enum:
+        - supports
+        - contradicts
+        - derived_from
+    EvidenceNode:
+      type: object
+      properties:
+        key:
+          type: string
+        type:
+          $ref: "#/components/schemas/EvidenceNodeType"
+        label:
+          type: string
+        data:
+          type: object
+          additionalProperties: true
+      required:
+        - key
+        - type
+        - label
+        - data
+    EvidenceEdge:
+      type: object
+      properties:
+        from:
+          type: string
+        to:
+          type: string
+        relation:
+          $ref: "#/components/schemas/EvidenceRelation"
+      required:
+        - from
+        - to
+        - relation
+    EvidenceGraph:
+      type: object
+      properties:
+        requestId:
+          type: string
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceNode"
+        edges:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceEdge"
+      required:
+        - requestId
+        - nodes
+        - edges

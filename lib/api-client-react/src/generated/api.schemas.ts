@@ -106,3 +106,44 @@ export interface AuditTrace {
   entries: AuditEntry[];
 }
 
+export type EvidenceNodeType = typeof EvidenceNodeType[keyof typeof EvidenceNodeType];
+
+
+export const EvidenceNodeType = {
+  source: 'source',
+  metric: 'metric',
+  finding: 'finding',
+  conclusion: 'conclusion',
+  report: 'report',
+} as const;
+
+export type EvidenceRelation = typeof EvidenceRelation[keyof typeof EvidenceRelation];
+
+
+export const EvidenceRelation = {
+  supports: 'supports',
+  contradicts: 'contradicts',
+  derived_from: 'derived_from',
+} as const;
+
+export type EvidenceNodeData = { [key: string]: unknown };
+
+export interface EvidenceNode {
+  key: string;
+  type: EvidenceNodeType;
+  label: string;
+  data: EvidenceNodeData;
+}
+
+export interface EvidenceEdge {
+  from: string;
+  to: string;
+  relation: EvidenceRelation;
+}
+
+export interface EvidenceGraph {
+  requestId: string;
+  nodes: EvidenceNode[];
+  edges: EvidenceEdge[];
+}
+
