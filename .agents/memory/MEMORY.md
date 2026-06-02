@@ -15,3 +15,4 @@
 - [Research engine Phase 1](research-engine-phase1.md) — use `typeof table.$inferInsert` (not drizzle-zod Insert) for jsonb writes; SAFE_MODE must wrap persistence too; requestId/breaker are intentionally non-deterministic.
 - [Research evidence graph + tests](research-engine-evidence-and-tests.md) — timestamp is a source-node anchor (not a 6th node type); pipeline tests inject a MarketDataPort (no network); integration test ends the shared pg pool per file.
 - [No after-fee edge verdict](alphatrade-no-edge-verdict.md) — research sweep: EVERY strategy×timeframe REJECTs after ~0.24% RT cost; live bot stays auto-disabled (empty allowlist); threshold tuning won't help.
+- [Approval-rule tests](alphatrade-approval-rule-tests.md) — verdict logic lives in pure classify_candidate/_verdict; max-DD gate BLOCKS ROBUST→WEAK but is NOT a reject trigger; don't move DD into reject.

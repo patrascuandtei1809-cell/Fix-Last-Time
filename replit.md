@@ -557,3 +557,20 @@ under-counted it), but only one candidate is robust:**
 
 None rejected. Live auto-disable gate remains default-safe (allowlist empty → no
 auto-trading); nothing was deployed.
+
+## APPROVAL-RULE LOCK-IN TESTS (June 2026)
+
+The verdict logic is now extracted into pure, importable functions and pinned by
+`trading/tests/` (run: `python -m pytest trading/tests`). Analysis-only — the
+live bot/dashboard were NOT modified.
+
+- `validate_candidates.classify_candidate(base, sens_rows, wf, mc)` → ROBUST /
+  WEAK / REJECTED. New **max-drawdown gate** (`MAX_DD_LIMIT_PCT=40`): a base
+  drawdown beyond the limit BLOCKS ROBUST (→ WEAK) but is **not** a hard-reject
+  trigger. `bootstrap_expectancy()` was split out of `_monte_carlo()` (RNG stream
+  continues → report numbers unchanged).
+- Tests lock: only V2 ETH @4h is ROBUST; both SOL stay WEAK; every failure mode
+  (MC CI<0, inconsistent walk-forward, sensitivity fail, maxDD>limit) blocks
+  approval; no 1m/15m/1h leaderboard cell is ACCEPT; and the allowlist stays
+  empty unless explicitly approved — proven by code path
+  (`research.save_validated([])` → empty → `is_strategy_validated()` False).
