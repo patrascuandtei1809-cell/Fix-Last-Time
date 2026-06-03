@@ -130,7 +130,12 @@ def test_hold_between_thresholds():
 # ── 5. Live engine reaches a LIVE BUY with NONE of the old gates ─────────────
 def test_engine_buys_on_dip_without_legacy_gates():
     ex = _FakeExchange(price=100.0, change_pct=-0.30, free=1000.0)
-    eng = le.DipLiveEngine(exchange=ex, cooldown=ls.CooldownStore())
+    # require_validation=False: this test exercises the dip ENTRY MECHANICS, not
+    # the AUTO-DISABLE allowlist gate (that gate is covered by
+    # test_dip_validation_gate.py). With the default gate ON and an empty
+    # allowlist the engine would correctly refuse to trade.
+    eng = le.DipLiveEngine(exchange=ex, cooldown=ls.CooldownStore(),
+                           require_validation=False)
     rec = eng.evaluate(symbol="BTCUSDT", settings=_settings(),
                        open_trades=[], current_exposure=0.0,
                        global_gate_fn=_pass_gate)

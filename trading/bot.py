@@ -552,13 +552,14 @@ class TradingBot:
         eng = self._dip_engines.get(key)
         if eng is None:
             eng = DipLiveEngine(
-                exchange      = worker.exchange,
-                on_log        = log_activity,
-                on_state      = _set_shared_for,
-                on_open_trade = add_trade,
-                close_fn      = worker._close_position,
-                cooldown      = self._cooldown,
-                manage_manual = worker.manage_manual_trades,
+                exchange           = worker.exchange,
+                on_log             = log_activity,
+                on_state           = _set_shared_for,
+                on_open_trade      = add_trade,
+                close_fn           = worker._close_position,
+                cooldown           = self._cooldown,
+                manage_manual      = worker.manage_manual_trades,
+                require_validation = self.require_validation,
             )
             self._dip_engines[key] = eng
         return eng

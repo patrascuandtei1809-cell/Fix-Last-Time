@@ -26,9 +26,15 @@ on EVERY cell with ≥5 trades, ≥20 total trades, majority walk-forward folds 
   round-trip cost. Win rates sit ~27–37% with PF < 1. Lowering thresholds to trade
   MORE only multiplies the fee drag — the historical failure mode of this project.
 - The live bot now has an **auto-disable gate** (`is_strategy_validated` in
-  research.py, enforced in `bot.py` before `execute_entry`). The allowlist
+  research.py). It is enforced on BOTH live paths: the legacy orchestrator
+  (`bot.py` before `execute_entry`) AND the default LIVE dip path
+  (`DipLiveEngine` in `live_engine.py`, checked in the ENTRY branch after
+  safe-mode, fail-closed). The dip path presents identity
+  `("20-Minute Dip", "1m")` to the allowlist. The allowlist
   (`data/research/validated_strategies.json`) is EMPTY, so the bot will not place
-  auto orders. This is the correct, honest default. Manual trades bypass the gate.
+  auto orders on EITHER path. This is the correct, honest default. Manual trades
+  bypass the gate. **The gate is entry-only — open positions still get their
+  stop-loss/take-profit exit** (exits run before the gate).
 - Override only for deliberate experiments: `ALPHATRADE_ALLOW_UNVALIDATED=1`.
 - To change the verdict you need a genuinely different edge source (e.g. funding/basis,
   cross-exchange, on-chain/news — Phase 3 paid feeds), NOT more threshold tuning.
