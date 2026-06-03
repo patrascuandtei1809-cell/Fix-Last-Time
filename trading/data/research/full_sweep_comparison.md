@@ -51,11 +51,12 @@ No. The two dimensions added by the full run both come back negative:
   respectively). These are isolated lucky windows, not a stable edge — exactly
   the curve-fit the multi-window acceptance rule is designed to reject.
 
-This also reconciles the more optimistic per-symbol matrix in `edge_report.md`
-(produced by the separate `edge_search.py` tool, which scored each symbol on a
-single window). Those "positive" 4h V2 ETH/SOL cells do **not** survive the
-strict, multi-window, multi-symbol acceptance rule used here: their aggregate
-across 90d+180d is negative (V2 4h -0.242%, PF 0.85).
+This also explains why an earlier exploratory per-symbol matrix (the now-retired
+`edge_search.py` tool, which scored each symbol on a single window) looked more
+optimistic. Those "positive" 4h V2 ETH/SOL cells do **not** survive the strict,
+multi-window, multi-symbol acceptance rule used here: their aggregate across
+90d+180d is negative (V2 4h -0.242%, PF 0.85). That exploratory tool and its
+report have been removed so this strict sweep is the single canonical verdict.
 
 ## Outcome
 

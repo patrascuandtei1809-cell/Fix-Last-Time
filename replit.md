@@ -503,8 +503,7 @@ the api-server research engine).
 ### VERDICT (June 2, 2026): 🔴 NO after-fee edge
 
 The canonical strict pipeline (`research.py` → `data/research/latest.json`) now
-sweeps **all of 1m / 5m / 15m / 1h / 4h** under ONE acceptance rule (13 cells;
-5m is included in the strict report, not only the exploratory `edge_report.md`).
+sweeps **all of 1m / 5m / 15m / 1h / 4h** under ONE acceptance rule (13 cells).
 Every strategy × timeframe REJECTED — including all 5m cells (Donchian −0.238%,
 V2 −0.238%, Trend Pullback −0.243%). The gross edge (if any) is smaller than the
 ~0.24% round-trip cost; win rates ~27–37%, PF < 1 almost everywhere. Closest was
@@ -515,52 +514,44 @@ live bot is honestly AUTO-DISABLED.** Changing this requires a genuinely differe
 edge source (funding/basis, cross-exchange, on-chain/news), NOT more threshold
 tuning — lowering thresholds to trade more only multiplies the fee drag.
 
-## EDGE SEARCH RESULT (June 2026) — where the after-fee edge actually lives
+## EDGE SEARCH — exploratory tool RETIRED (June 2, 2026)
 
-Ran the research framework across the FULL requested matrix: strategies ×
-{5m,15m,1h,4h} × {BTC,ETH,SOL} scored SEPARATELY, all 7 metrics (win rate,
-avg winner, avg loser, expectancy, profit factor, Sharpe, max drawdown), after
-the standard ~0.24% round-trip cost. Driver: `trading/edge_search.py` (chunked
-by timeframe to fit the 120s sandbox cap; rows in `data/research/edge_rows.json`,
-human report in `data/research/edge_report.md`).
+An earlier exploratory helper (`edge_search.py`, with `edge_report.md` /
+`edge_rows.json`) scored each symbol on a SINGLE window and looked more
+optimistic — it named 4h V2 on ETH/SOL as "profitable." That was **misleading**:
+those positive cells are isolated lucky windows that do NOT survive the canonical
+strict, multi-window, multi-symbol acceptance rule in `research.py` (their
+aggregate across 90d+180d is negative). To keep ONE source of truth, the tool and
+its reports have been **removed**. The canonical verdict is `research.py` →
+`data/research/latest.json`: 🔴 NO after-fee edge in aggregate; allowlist empty.
 
-**Finding (refines the earlier blanket "NO EDGE"):**
-- **5m / 15m / 1h are ALL negative** for every strategy & symbol — gross edge <
-  fee hurdle. Sub-hour scalping is dead after fees; stop tuning it.
-- **4h is the only timeframe that clears fees**, and only for higher-timeframe
-  momentum/trend strategies on **ETH & SOL**.
-- **Top 3 candidates** (positive exp + PF≥1 + ≥10 trades):
-  1. `EMA_MACD_RSI_VOLUME_V2` @ 4h SOL — +1.02%/trade, PF 1.59, Sharpe 1.24
-  2. `EMA_MACD_RSI_VOLUME_V2` @ 4h ETH — +0.99%/trade, PF 1.72, Sharpe 1.65
-  3. `Trend Pullback` @ 4h SOL — +0.98%/trade, PF 1.53, Sharpe 1.01
+The three 4h candidates it surfaced were not discarded — they were handed to the
+rigorous, current per-candidate validation below (`validate_candidates.py`), which
+is the proper way to judge an individual candidate (max history + walk-forward +
+Monte Carlo) rather than a single-window leaderboard.
 
-**Why NOT live yet:** not positive on all 3 symbols (V2@4h BTC ≈ break-even),
-single 360d window, only ~30–50 trades/symbol (too thin for walk-forward). The
-live auto-disable gate stays **default-safe (allowlist empty → no auto-trading)**.
-Next step = out-of-sample confirmation across more windows, run OFF the sandbox.
+## 4h EDGE — ISOLATED-CELL VALIDATION (NON-CANONICAL, June 2026)
 
-## 4h EDGE — RIGOROUS VALIDATION (June 2026)
-
-Validated the three 4h candidates from the edge search on MAXIMUM history with
-walk-forward, Monte Carlo, and full sensitivity. Tool: `trading/validate_candidates.py`
+⚠️ **This is exploratory background, NOT the edge verdict.** The single source of
+truth is `research.py` → `latest.json` + the allowlist, which REJECTS every cell
+(no after-fee edge). The study below validated three 4h candidates *in isolation*
+on MAXIMUM history (walk-forward, Monte Carlo, full sensitivity) — useful for
+judging single-cell stability, but a robust isolated cell does NOT survive the
+canonical multi-window/multi-symbol rule. Tool: `trading/validate_candidates.py`
 (analysis only — live bot/dashboard/allowlist untouched). Report:
-`data/research/validation_report.md`. Fee sensitivity is analytic (ret=gross−2·fee);
-slippage + ATR SL/TP perturbations are re-runs.
+`data/research/validation_report.md`.
 
-**Result — the 4h edge is REAL and got STRONGER on full history (the 360d window
-under-counted it), but only one candidate is robust:**
-- **🟢 ROBUST — `EMA_MACD_RSI_VOLUME_V2` @ 4h ETH:** +0.84%/trade over 295 trades
-  / 8.8y, PF1.40, Sharpe2.43, +616% total. 5/5 walk-forward folds positive (incl.
-  2018/2022 bears); Monte Carlo P(exp>0)=99.3%, bootstrap 90% CI lower bound still
-  positive; survives fee±50%, slip±50%, ATR SL/TP ±25%. Caveat: reshuffled maxDD
-  worst-5% ≈ −60%, and it's long-only.
-- **🟡 WEAK — V2 @ 4h SOL:** collapses to break-even under a 25%-tighter stop
-  (narrow-param) and MC CI lower bound negative.
-- **🟡 WEAK — Trend Pullback @ 4h SOL:** survives sensitivity but MC CI dips
-  negative (P(exp>0)=83%).
+**Result — isolated-cell stability only (NOT tradable):**
+- **🟢 most stable — `EMA_MACD_RSI_VOLUME_V2` @ 4h ETH:** statistically robust in
+  isolation (295 trades / 8.8y, 5/5 walk-forward folds positive, Monte Carlo
+  P(exp>0)=99.3%, survives fee/slip/ATR sensitivity). BUT its cross-window/
+  cross-symbol aggregate is negative, so the canonical rule REJECTS it. Caveat:
+  reshuffled maxDD worst-5% ≈ −60%, long-only.
+- **🟡 less stable — V2 @ 4h SOL / Trend Pullback @ 4h SOL:** MC CI dips negative.
 
-None rejected. Live auto-disable gate remains default-safe (allowlist empty → no
-auto-trading); nothing was deployed.
+**No candidate is approved or tradable.** Live auto-disable gate remains
+default-safe (allowlist empty → no auto-trading); nothing was deployed. Going live
+requires a genuinely different edge source that passes the canonical rule.
 
 ## APPROVAL-RULE LOCK-IN TESTS (June 2026)
 
