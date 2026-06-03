@@ -20,3 +20,4 @@
 - [Funding/alt-source probe](funding-no-edge.md) — funding, basis, AND cross-exchange spread ALL show NO after-fee edge; z-score spot directional probes just pay fees; run subset probes with `research.py --merge` so latest.json stays COMPLETE.
 - [Exit before entry gates](dip-exit-must-not-depend-on-entry-gates.md) — open-position stop-loss/TP must run right after price, before safe-mode/balance/klines/cooldown; only emergency stop halts exits.
 - [Runtime files untracked](alphatrade-runtime-files-untracked.md) — droplet `git pull` aborts on bot-rewritten tracked files (activity.json/trades/creds); keep them gitignored, settings.json stays tracked.
+- [Live path not research-gated](live-path-not-research-gated.md) — Task #11: the LIVE dip engine trades on its own price signal, NEVER on research validation/allowlist/verdict; only money-safety gates apply. Has flip-flopped twice — don't re-wire it.

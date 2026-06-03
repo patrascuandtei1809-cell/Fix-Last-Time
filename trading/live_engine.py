@@ -37,22 +37,18 @@ from live_settings import (
     SIZE_AUTO, SIZE_FIXED, SIZE_PERCENT,
 )
 
-try:
-    # AUTO-DISABLE gate — the live bot refuses to auto-trade a (strategy,
-    # timeframe) that no research run has ACCEPTED as having a positive
-    # after-fee edge. Default-safe: no validated allowlist → no auto entry.
-    # Manual trades are never routed through this engine, so they are unaffected.
-    from research import is_strategy_validated as _is_strategy_validated
-except Exception:                      # pragma: no cover - research optional
-    _is_strategy_validated = None
+# Task #11 architecture: research verdicts / allowlists / validation gates are
+# DELIBERATELY NOT consulted on the live trading path. The 20-Minute Dip engine
+# trades on its own price logic; `research.is_strategy_validated` stays importable
+# elsewhere but must never gate a live entry here. The money-safety controls
+# (emergency stop, safe mode, balance, spending limit, max position size,
+# cooldown, daily-loss protection) remain fully active in the pipeline below.
 
 BINANCE_MIN_NOTIONAL = 10.0
 RESERVE_FRACTION = 0.75          # never deploy more than 75% of free USDT
 
-# Identity the dip live path presents to the validation allowlist. The engine
-# evaluates the 20-minute price change on 1-minute candles, so the timeframe it
-# trades is "1m". `is_strategy_validated(DIP_STRATEGY_NAME, DIP_INTERVAL)` must
-# return True before any LIVE entry is placed (unless the operator overrides).
+# Identity of the live dip path (used for trade tagging / display only). The
+# engine evaluates the 20-minute price change on 1-minute candles.
 DIP_STRATEGY_NAME = "20-Minute Dip"
 DIP_INTERVAL = "1m"
 
@@ -209,8 +205,6 @@ class DipLiveEngine:
         close_fn: Optional[Callable] = None,
         cooldown: Optional[CooldownStore] = None,
         manage_manual: bool = False,
-        require_validation: bool = True,
-        validate_fn: Optional[Callable] = None,
     ):
         self.exchange = exchange
         self._log = on_log or (lambda *_a, **_kw: None)
@@ -219,12 +213,6 @@ class DipLiveEngine:
         self._close = close_fn or (lambda *_a, **_kw: None)
         self.cooldown = cooldown
         self.manage_manual = bool(manage_manual)
-        # AUTO-DISABLE gate. Default-safe ON; the operator overrides it with
-        # ALPHATRADE_ALLOW_UNVALIDATED=1 (wired through bot.TradingBot). When the
-        # research module is unimportable `_validate_fn` is None → fail closed.
-        self.require_validation = bool(require_validation)
-        self._validate_fn = validate_fn or _is_strategy_validated
-        self._validation_block_logged = False
 
     # ── helpers ──────────────────────────────────────────────────────────────
     def _skip(self, rec: ActivityRecord, reason: str, level: str = "INFO",
@@ -319,33 +307,10 @@ class DipLiveEngine:
             return self._skip(rec, "🦺 Safe mode ON — no new entries",
                               level="WARNING")
 
-        # 2b. AUTO-DISABLE gate — refuse to open a NEW position for a (strategy,
-        #     timeframe) that no research run has ACCEPTED as profitable after
-        #     fees. Default-safe: empty/missing allowlist OR an unimportable /
-        #     raising gate → block (fail closed). Operator overrides this with
-        #     ALPHATRADE_ALLOW_UNVALIDATED=1 (wired via require_validation).
-        #     Open positions are unaffected — exits ran above before this gate.
-        if self.require_validation:
-            allowed = False
-            if self._validate_fn is not None:
-                try:
-                    allowed, _entry = self._validate_fn(DIP_STRATEGY_NAME,
-                                                        DIP_INTERVAL)
-                except Exception:
-                    allowed = False        # fail closed on a broken gate
-            if not allowed:
-                if not self._validation_block_logged:
-                    self._validation_block_logged = True
-                    self._log("WARNING",
-                              f"🔒 AUTO-DISABLED: '{DIP_STRATEGY_NAME}' @ "
-                              f"{DIP_INTERVAL} has no validated after-fee edge — "
-                              f"bot will NOT auto-trade it. Run research.py to "
-                              f"validate, or set ALPHATRADE_ALLOW_UNVALIDATED=1 "
-                              f"to override. Manual trades still allowed.")
-                return self._skip(
-                    rec,
-                    f"🔒 AUTO-DISABLED: '{DIP_STRATEGY_NAME}' @ {DIP_INTERVAL} "
-                    f"not validated — no proven after-fee edge")
+        # NOTE (Task #11): research validation / allowlist / verdict gates are
+        # intentionally NOT consulted here. The live dip path trades on its own
+        # price signal. The money-safety gates below (balance, spending limit,
+        # max position size, cooldown, daily-loss) still fully apply.
 
         # 9. Compute the 20m change (entry-only — drives the BUY decision).
         try:
