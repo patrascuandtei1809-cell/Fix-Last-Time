@@ -1,0 +1,7 @@
+# Runtime state the bot rewrites constantly — must NOT be tracked, or every
+# `git pull` on the droplet aborts with "local changes would be overwritten".
+data/activity.json
+data/trades/
+
+# LIVE API credentials — never commit secrets.
+data/.binance_creds.json

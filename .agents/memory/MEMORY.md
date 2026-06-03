@@ -19,3 +19,4 @@
 - [Aggressive Mode safety separation](alphatrade-aggressive-mode.md) — mode profiles tune only frequency/threshold/size knobs; safety gates (validation/allowlist, risk caps, emergency stop, min-notional) live in separate paths a profile must never write.
 - [Funding/alt-source probe](funding-no-edge.md) — perp funding shows NO after-fee edge (~90d OKX-only window); run subset probes with `research.py --merge` so latest.json stays COMPLETE.
 - [Exit before entry gates](dip-exit-must-not-depend-on-entry-gates.md) — open-position stop-loss/TP must run right after price, before safe-mode/balance/klines/cooldown; only emergency stop halts exits.
+- [Runtime files untracked](alphatrade-runtime-files-untracked.md) — droplet `git pull` aborts on bot-rewritten tracked files (activity.json/trades/creds); keep them gitignored, settings.json stays tracked.
