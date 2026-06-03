@@ -281,6 +281,133 @@ def merge_funding(df: pd.DataFrame, funding: pd.DataFrame) -> pd.DataFrame:
     return merged
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Basis & cross-exchange spread data (alternative edge sources)
+# ─────────────────────────────────────────────────────────────────────────────
+# Both probes need an auxiliary CLOSE-price series aligned to the Binance spot
+# candles the bot trades:
+#   • BASIS    → OKX perpetual-SWAP close (perp price) vs Binance spot close.
+#   • XSPREAD  → OKX spot close (second venue) vs Binance spot close.
+# Binance futures (fapi) is geo-blocked from Replit (451); OKX market candles ARE
+# reachable and serve both SWAP and SPOT history. OKX returns candles newest→
+# oldest and paginates backward with `after` (records OLDER than the cursor).
+_OKX_BAR = {"5m": "5m", "15m": "15m", "30m": "30m",
+            "1h": "1H", "2h": "2H", "4h": "4H", "1d": "1D"}
+
+
+def _okx_bar(interval: str) -> str:
+    if interval not in _OKX_BAR:
+        raise ValueError(f"OKX has no candle bar for interval {interval!r}")
+    return _OKX_BAR[interval]
+
+
+def fetch_okx_candles(symbol: str, interval: str, days: int, kind: str,
+                      use_cache: bool = True) -> pd.DataFrame:
+    """Fetch ~`days` of OKX close prices, paginating backward.
+
+    `kind` ∈ {"SWAP","SPOT"} selects the OKX instrument (e.g. BTC-USDT-SWAP vs
+    BTC-USDT). Returns a DataFrame [open_time(ms), okx_close] sorted oldest→
+    newest. Cached to CSV per (symbol, interval, days, kind).
+    """
+    os.makedirs(DATA_DIR, exist_ok=True)
+    base = symbol[:-4] if symbol.endswith("USDT") else symbol
+    inst = f"{base}-USDT-SWAP" if kind == "SWAP" else f"{base}-USDT"
+    bar = _okx_bar(interval)
+    cache = os.path.join(DATA_DIR, f"okx_{kind.lower()}_{symbol}_{interval}_{days}d.csv")
+    if use_cache and os.path.exists(cache):
+        age_h = (time.time() - os.path.getmtime(cache)) / 3600
+        if age_h < 12:
+            df = pd.read_csv(cache)
+            print(f"  [cache] okx {kind} {symbol} {interval} {len(df)} candles "
+                  f"({age_h:.1f}h old)")
+            return df
+
+    cutoff_ms = int((time.time() - days * 86400) * 1000)
+    want = int(days * 24 * 60 / _interval_minutes(interval))
+    rows: list = []
+    seen = set()
+    after = ""  # OKX cursor: returns records OLDER than this ts
+    print(f"  [fetch] okx {kind} {inst} {bar} from OKX (~{want} candles)…")
+    while len(rows) < want:
+        url = (f"{OKX_FUNDING_HOST}/api/v5/market/history-candles"
+               f"?instId={inst}&bar={bar}&limit=300")
+        if after:
+            url += f"&after={after}"
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=20) as r:
+                payload = json.loads(r.read())
+        except Exception as e:
+            print(f"  [warn] okx candle page fetch failed ({e}); stopping early")
+            break
+        data = payload.get("data") or []
+        if not data:
+            break
+        new = [d for d in data if int(d[0]) not in seen]
+        if not new:
+            break
+        for d in new:
+            ts = int(d[0])
+            seen.add(ts)
+            rows.append((ts, float(d[4])))  # d[4] = close
+        oldest = min(int(d[0]) for d in data)
+        after = str(oldest)
+        if oldest <= cutoff_ms or len(data) < 300:
+            break
+        time.sleep(0.12)  # be polite to the public endpoint
+
+    if not rows:
+        raise RuntimeError(f"No OKX candles fetched for {inst}")
+    df = (pd.DataFrame(rows, columns=["open_time", "okx_close"])
+            .drop_duplicates(subset="open_time")
+            .sort_values("open_time")
+            .reset_index(drop=True))
+    df = df[df["open_time"] >= cutoff_ms].reset_index(drop=True)
+    df.to_csv(cache, index=False)
+    print(f"  [ok] okx {kind} {inst} {len(df)} candles "
+          f"({_fmt_ts(int(df.open_time.iloc[0]))} → "
+          f"{_fmt_ts(int(df.open_time.iloc[-1]))})")
+    return df
+
+
+def _merge_aux_ratio(df: pd.DataFrame, aux: pd.DataFrame,
+                     col: str) -> pd.DataFrame:
+    """As-of merge an OKX aux close onto each candle and compute the fractional
+    spread `(aux_close − spot_close) / spot_close` as `col`.
+
+    Uses merge_asof backward on open_time so a candle only ever sees an aux
+    close at or before its own open boundary — no look-ahead. Both series are
+    candles on the SAME interval/UTC boundaries, so the as-of match is normally
+    the exact same timestamp; a missing aux bar falls back to the most recent
+    prior one. Candles before the first aux obs (or where spot/aux is non-finite)
+    get NaN → the signal treats NaN as "no data" → HOLD.
+    """
+    out = df.copy()
+    if aux is None or len(aux) == 0:
+        out[col] = np.nan
+        return out
+    left = out.sort_values("open_time").reset_index(drop=True)
+    right = aux[["open_time", "okx_close"]].sort_values("open_time").reset_index(drop=True)
+    merged = pd.merge_asof(left, right, on="open_time", direction="backward")
+    spot = pd.to_numeric(merged["close"], errors="coerce")
+    okx = pd.to_numeric(merged["okx_close"], errors="coerce")
+    ratio = (okx - spot) / spot
+    merged[col] = ratio.where(np.isfinite(ratio), np.nan)
+    return merged.drop(columns=["okx_close"])
+
+
+def merge_basis(df: pd.DataFrame, perp: pd.DataFrame) -> pd.DataFrame:
+    """Add a `basis` column = (perp_close − spot_close)/spot_close (perp
+    premium/discount as a fraction), no look-ahead."""
+    return _merge_aux_ratio(df, perp, "basis")
+
+
+def merge_xspread(df: pd.DataFrame, other: pd.DataFrame) -> pd.DataFrame:
+    """Add an `xspread` column = (other_venue_close − spot_close)/spot_close
+    (cross-exchange price gap as a fraction), no look-ahead."""
+    return _merge_aux_ratio(df, other, "xspread")
+
+
 def _interval_minutes(interval: str) -> int:
     unit = interval[-1]
     n = int(interval[:-1])

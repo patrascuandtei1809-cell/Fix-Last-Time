@@ -570,12 +570,113 @@ def funding_signal(df: pd.DataFrame, mode: str = "contrarian",
     return "HOLD", f"Funding: unknown mode {mode!r}", 0
 
 
+# ── BASIS & CROSS-EXCHANGE SPREAD SIGNALS (alternative edge sources) ──────────
+#
+# These read a single pre-merged column as a rolling z-score, exactly like
+# funding_signal — they encode CROSS-MARKET POSITIONING / DISLOCATION, not the
+# price shape of the candle, so the ~0.24% spot round-trip fee does not erase
+# them the way it erases a 1m price wiggle. Both readings of each source are
+# tested honestly:
+#
+#   • BASIS = (perp_price − spot_price) / spot_price (perp premium/discount).
+#     A positive basis means perps trade at a premium (leveraged longs crowded);
+#     negative means a discount (shorts crowded / forced de-risking).
+#       contrarian — BUY when basis is unusually NEGATIVE (z ≤ −T): perp discount,
+#                    shorts over-crowded → mean-reversion squeeze up.
+#       momentum   — BUY when basis is unusually POSITIVE (z ≥ +T): leveraged long
+#                    demand persists → ride it.
+#   • XSPREAD = (other_venue_price − base_venue_price) / base_venue_price, the
+#     same-asset price gap between two venues (OKX vs Binance spot). A lead-lag /
+#     convergence read on the venue the bot actually trades (Binance):
+#       contrarian — BUY when the spread is unusually NEGATIVE (z ≤ −T): the other
+#                    venue is cheap vs Binance → expect Binance to revert down is a
+#                    SELL (HOLD, long-only); the long side fires when Binance is the
+#                    cheap leg (see momentum).
+#       momentum   — BUY when the spread is unusually POSITIVE (z ≥ +T): the other
+#                    venue leads higher / Binance is the cheap leg → BUY Binance to
+#                    converge up.
+#
+# Spot is long-only, so the opposite extreme simply yields HOLD (no short). The
+# extra column is forward-filled onto each candle by backtest.merge_basis() /
+# merge_xspread() with NO look-ahead (merge_asof backward on open_time).
+BASIS_Z_WINDOW = 45
+BASIS_Z_THRESH = 1.0
+XSPREAD_Z_WINDOW = 45
+XSPREAD_Z_THRESH = 1.0
+
+
+def _positioning_zscore_signal(df: pd.DataFrame, col: str, label: str,
+                               mode: str, z_window: int,
+                               z_thresh: float) -> Tuple[str, str, int]:
+    """Generic LONG-ONLY z-score positioning signal over a single pre-merged
+    column (used by basis & cross-exchange spread; mirrors funding_signal).
+
+    `mode` ∈ {contrarian, momentum}. Returns (signal, reason, conf_0_100). HOLD
+    if the column is missing, flat (no dispersion → no edge), or the z-score is
+    inside the neutral band.
+    """
+    if df is None or col not in df.columns or len(df) < z_window + 5:
+        return "HOLD", f"{label}: insufficient {label.lower()} data", 0
+    s = pd.to_numeric(df[col], errors="coerce")
+    if s.notna().sum() < z_window:
+        return "HOLD", f"{label}: not enough non-NaN observations", 0
+    roll_mean = s.rolling(z_window, min_periods=z_window).mean()
+    roll_std  = s.rolling(z_window, min_periods=z_window).std()
+    cur  = float(s.iloc[-1])
+    mean = float(roll_mean.iloc[-1])
+    std  = float(roll_std.iloc[-1])
+    if not all(np.isfinite(v) for v in (cur, mean, std)):
+        return "HOLD", f"{label}: non-finite stats", 0
+    if std < 1e-12:  # pinned at baseline → no dispersion → no signal
+        return "HOLD", f"{label} flat (std≈0, value={cur*100:+.4f}%)", 0
+    z = (cur - mean) / std
+    conf = min(90, 50 + int((abs(z) - z_thresh) * 20))
+    if mode == "contrarian":
+        if z <= -z_thresh:
+            return "BUY", (f"{label} contrarian — value {cur*100:+.4f}% is "
+                           f"z={z:+.2f} (unusually low → mean-reversion long)"), conf
+        return "HOLD", f"{label} contrarian: z={z:+.2f} not ≤ -{z_thresh}", 0
+    if mode == "momentum":
+        if z >= z_thresh:
+            return "BUY", (f"{label} momentum — value {cur*100:+.4f}% is "
+                           f"z={z:+.2f} (unusually high → ride the dislocation)"), conf
+        return "HOLD", f"{label} momentum: z={z:+.2f} not ≥ +{z_thresh}", 0
+    return "HOLD", f"{label}: unknown mode {mode!r}", 0
+
+
+def basis_signal(df: pd.DataFrame, mode: str = "contrarian",
+                 z_window: int = BASIS_Z_WINDOW,
+                 z_thresh: float = BASIS_Z_THRESH) -> Tuple[str, str, int]:
+    """LONG-ONLY perp-vs-spot BASIS positioning signal. Requires a `basis`
+    column (perp premium as a fraction). `mode` ∈ {contrarian, momentum}."""
+    return _positioning_zscore_signal(df, "basis", "Basis", mode,
+                                      z_window, z_thresh)
+
+
+def xspread_signal(df: pd.DataFrame, mode: str = "momentum",
+                   z_window: int = XSPREAD_Z_WINDOW,
+                   z_thresh: float = XSPREAD_Z_THRESH) -> Tuple[str, str, int]:
+    """LONG-ONLY cross-exchange SPREAD positioning signal. Requires an `xspread`
+    column (other-venue vs base-venue gap, fraction). `mode` ∈ {contrarian,
+    momentum}."""
+    return _positioning_zscore_signal(df, "xspread", "X-spread", mode,
+                                      z_window, z_thresh)
+
+
 def get_signal(df: pd.DataFrame, strategy: str, threshold: float = 0.0003) -> Tuple[str, str, int]:
     """Returns (signal, reason, confidence_0_100)."""
     if strategy == "Funding Contrarian":
         return funding_signal(df, mode="contrarian")
     if strategy == "Funding Momentum":
         return funding_signal(df, mode="momentum")
+    if strategy == "Basis Contrarian":
+        return basis_signal(df, mode="contrarian")
+    if strategy == "Basis Momentum":
+        return basis_signal(df, mode="momentum")
+    if strategy == "X-Spread Contrarian":
+        return xspread_signal(df, mode="contrarian")
+    if strategy == "X-Spread Momentum":
+        return xspread_signal(df, mode="momentum")
     if strategy == "Reversal Scalper":
         return reversal_signal(df)
     if strategy == "Active Scalper":

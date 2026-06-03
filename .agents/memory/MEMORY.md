@@ -17,6 +17,6 @@
 - [No after-fee edge verdict](alphatrade-no-edge-verdict.md) — research sweep: EVERY strategy×timeframe REJECTs after ~0.24% RT cost; live bot stays auto-disabled (empty allowlist); threshold tuning won't help.
 - [Approval-rule tests](alphatrade-approval-rule-tests.md) — verdict logic lives in pure classify_candidate/_verdict; max-DD gate BLOCKS ROBUST→WEAK but is NOT a reject trigger; don't move DD into reject.
 - [Aggressive Mode safety separation](alphatrade-aggressive-mode.md) — mode profiles tune only frequency/threshold/size knobs; safety gates (validation/allowlist, risk caps, emergency stop, min-notional) live in separate paths a profile must never write.
-- [Funding/alt-source probe](funding-no-edge.md) — perp funding shows NO after-fee edge (~90d OKX-only window); run subset probes with `research.py --merge` so latest.json stays COMPLETE.
+- [Funding/alt-source probe](funding-no-edge.md) — funding, basis, AND cross-exchange spread ALL show NO after-fee edge; z-score spot directional probes just pay fees; run subset probes with `research.py --merge` so latest.json stays COMPLETE.
 - [Exit before entry gates](dip-exit-must-not-depend-on-entry-gates.md) — open-position stop-loss/TP must run right after price, before safe-mode/balance/klines/cooldown; only emergency stop halts exits.
 - [Runtime files untracked](alphatrade-runtime-files-untracked.md) — droplet `git pull` aborts on bot-rewritten tracked files (activity.json/trades/creds); keep them gitignored, settings.json stays tracked.

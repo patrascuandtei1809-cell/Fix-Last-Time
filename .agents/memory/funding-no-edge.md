@@ -1,7 +1,29 @@
 ---
 name: Funding/alt-source edge probe (no edge)
-description: Result of wiring perp funding as an alternative signal source into the research sweep, and the data-access constraints that bound it.
+description: Result of wiring perp funding, perp-vs-spot basis, and cross-exchange spread as alternative signal sources into the research sweep, and the data-access constraints that bound them.
 ---
+
+# Alternative-source edge probes: ALL three (funding, basis, cross-exchange) — NO edge
+
+All three non-price sources named in the original "look beyond price charts" ask
+have now been wired as z-score positioning StrategySpecs (contrarian + momentum
+each) and run through the SAME strict fee-adjusted sweep. **Verdict for all
+three: 🔴 NO EDGE** — every cell REJECTs at ~−0.24% to −0.41%/trade (i.e. the
+gross move never beats the ~0.24% round-trip cost). Allowlist stays empty.
+
+- **Basis** = (OKX perp-SWAP close − Binance spot close)/spot. `basis_contrarian`/
+  `basis_momentum`, swept 5m/1h/4h. Best was barely-break-even noise; all REJECT.
+- **Cross-exchange spread** = (OKX spot close − Binance spot close)/spot.
+  `xspread_contrarian`/`xspread_momentum`, swept 5m/1h/4h. Same null result.
+- All four read a single pre-merged column via the shared
+  `strategy._positioning_zscore_signal` helper (mirrors `funding_signal`); data
+  merged no-look-ahead with `backtest.merge_basis`/`merge_xspread` (merge_asof
+  backward) from `backtest.fetch_okx_candles(kind=SWAP|SPOT)`.
+- **Lesson:** these spreads are tiny/fast-mean-reverting on majors; sampling them
+  as a z-score and trading SPOT round-trips just pays fees. A genuine basis/x-venue
+  edge would need to capture the spread directly (perp-vs-spot delta-neutral carry,
+  or sub-fee maker arb), not a directional long-only spot entry. Don't re-probe
+  this as another spot directional signal.
 
 # Alternative-source edge probe: perpetual funding
 

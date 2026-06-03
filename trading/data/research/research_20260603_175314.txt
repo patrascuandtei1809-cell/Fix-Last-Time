@@ -1,0 +1,123 @@
+============================================================================
+AlphaTrade STRATEGY RESEARCH — honest after-fee edge proof
+============================================================================
+fee=0.1%/side  slippage=0.02%/side  round-trip cost≈0.24%
+symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[90, 180]d  walk-forward folds=4
+ACCEPT rule: net expectancy>0 AND PF≥1 on EVERY cell (≥5 trades), ≥20 total trades, majority WF folds positive
+----------------------------------------------------------------------------
+
+▶ Basis Contrarian (perp−spot)  @ 5m  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[90]d)
+      BTCUSDT/90d: 1196 trades  net_exp=-0.256%  PF=0.23
+      ETHUSDT/90d: 1164 trades  net_exp=-0.263%  PF=0.31
+      SOLUSDT/90d: 1171 trades  net_exp=-0.257%  PF=0.36
+    → 🔴 REJECT  net_exp=-0.259%  PF=0.30  trades=3531  (aggregate not profitable after fees (net_exp=-0.259%, PF=0.30))
+
+▶ Basis Contrarian (perp−spot)  @ 1h  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[90]d)
+      BTCUSDT/90d: 91 trades  net_exp=-0.385%  PF=0.56
+      ETHUSDT/90d: 86 trades  net_exp=-0.145%  PF=0.84
+      SOLUSDT/90d: 91 trades  net_exp=-0.523%  PF=0.56
+    → 🔴 REJECT  net_exp=-0.355%  PF=0.64  trades=268  (aggregate not profitable after fees (net_exp=-0.355%, PF=0.64))
+
+▶ Basis Contrarian (perp−spot)  @ 4h  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[90]d)
+      BTCUSDT/90d: 22 trades  net_exp=-0.463%  PF=0.71
+      ETHUSDT/90d: 33 trades  net_exp=-0.097%  PF=0.94
+      SOLUSDT/90d: 21 trades  net_exp=+0.251%  PF=1.13
+    → 🔴 REJECT  net_exp=-0.107%  PF=0.94  trades=76  (aggregate not profitable after fees (net_exp=-0.107%, PF=0.94))
+
+▶ Basis Momentum (perp−spot)  @ 5m  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[90]d)
+      BTCUSDT/90d: 1206 trades  net_exp=-0.241%  PF=0.24
+      ETHUSDT/90d: 1080 trades  net_exp=-0.240%  PF=0.35
+      SOLUSDT/90d: 1164 trades  net_exp=-0.256%  PF=0.36
+    → 🔴 REJECT  net_exp=-0.246%  PF=0.32  trades=3450  (aggregate not profitable after fees (net_exp=-0.246%, PF=0.32))
+
+▶ Basis Momentum (perp−spot)  @ 1h  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[90]d)
+      BTCUSDT/90d: 95 trades  net_exp=-0.302%  PF=0.63
+      ETHUSDT/90d: 83 trades  net_exp=-0.298%  PF=0.71
+      SOLUSDT/90d: 95 trades  net_exp=-0.490%  PF=0.57
+    → 🔴 REJECT  net_exp=-0.366%  PF=0.63  trades=273  (aggregate not profitable after fees (net_exp=-0.366%, PF=0.63))
+
+▶ Basis Momentum (perp−spot)  @ 4h  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[90]d)
+      BTCUSDT/90d: 24 trades  net_exp=-0.309%  PF=0.78
+      ETHUSDT/90d: 30 trades  net_exp=-0.367%  PF=0.80
+      SOLUSDT/90d: 23 trades  net_exp=-0.567%  PF=0.72
+    → 🔴 REJECT  net_exp=-0.409%  PF=0.77  trades=77  (aggregate not profitable after fees (net_exp=-0.409%, PF=0.77))
+
+▶ X-Spread Contrarian (OKX−Binance)  @ 5m  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[90]d)
+      BTCUSDT/90d: 1262 trades  net_exp=-0.251%  PF=0.23
+      ETHUSDT/90d: 1103 trades  net_exp=-0.238%  PF=0.36
+      SOLUSDT/90d: 1153 trades  net_exp=-0.255%  PF=0.37
+    → 🔴 REJECT  net_exp=-0.248%  PF=0.32  trades=3518  (aggregate not profitable after fees (net_exp=-0.248%, PF=0.32))
+
+▶ X-Spread Contrarian (OKX−Binance)  @ 1h  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[90]d)
+      BTCUSDT/90d: 79 trades  net_exp=-0.229%  PF=0.73
+      ETHUSDT/90d: 94 trades  net_exp=-0.202%  PF=0.78
+      SOLUSDT/90d: 97 trades  net_exp=-0.406%  PF=0.64
+    → 🔴 REJECT  net_exp=-0.283%  PF=0.71  trades=270  (aggregate not profitable after fees (net_exp=-0.283%, PF=0.71))
+
+▶ X-Spread Contrarian (OKX−Binance)  @ 4h  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[90]d)
+      BTCUSDT/90d: 22 trades  net_exp=-0.147%  PF=0.89
+      ETHUSDT/90d: 34 trades  net_exp=-0.324%  PF=0.81
+      SOLUSDT/90d: 24 trades  net_exp=-0.763%  PF=0.67
+    → 🔴 REJECT  net_exp=-0.407%  PF=0.78  trades=80  (aggregate not profitable after fees (net_exp=-0.407%, PF=0.78))
+
+▶ X-Spread Momentum (OKX−Binance)  @ 5m  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[90]d)
+      BTCUSDT/90d: 1256 trades  net_exp=-0.232%  PF=0.26
+      ETHUSDT/90d: 1143 trades  net_exp=-0.242%  PF=0.35
+      SOLUSDT/90d: 1135 trades  net_exp=-0.250%  PF=0.38
+    → 🔴 REJECT  net_exp=-0.241%  PF=0.33  trades=3534  (aggregate not profitable after fees (net_exp=-0.241%, PF=0.33))
+
+▶ X-Spread Momentum (OKX−Binance)  @ 1h  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[90]d)
+      BTCUSDT/90d: 96 trades  net_exp=-0.248%  PF=0.68
+      ETHUSDT/90d: 91 trades  net_exp=-0.330%  PF=0.67
+      SOLUSDT/90d: 100 trades  net_exp=-0.475%  PF=0.57
+    → 🔴 REJECT  net_exp=-0.353%  PF=0.63  trades=287  (aggregate not profitable after fees (net_exp=-0.353%, PF=0.63))
+
+▶ X-Spread Momentum (OKX−Binance)  @ 4h  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[90]d)
+      BTCUSDT/90d: 24 trades  net_exp=+0.009%  PF=1.01
+      ETHUSDT/90d: 24 trades  net_exp=-0.390%  PF=0.80
+      SOLUSDT/90d: 26 trades  net_exp=-0.667%  PF=0.67
+    → 🔴 REJECT  net_exp=-0.358%  PF=0.80  trades=74  (aggregate not profitable after fees (net_exp=-0.358%, PF=0.80))
+
+(merge) carried forward 19 cell(s) from prior latest.json: donchian_breakout, ema_macd_rsi_vol_v2, funding_contrarian, funding_momentum, reversal_scalper_1m, trend_pullback
+
+============================================================================
+LEADERBOARD — ranked by NET expectancy/trade (after fees)
+============================================================================
+  #  strategy @ tf                      trades  net_exp%     PF   win%  verdict
+  ------------------------------------------------------------------------
+  1  Funding Contrarian (perp) @ 4h         59    +0.100   1.06   35.6  REJECT
+  2  Basis Contrarian (perp−spot) @ 4h      76    -0.107   0.94   35.5  REJECT
+  3  Trend Pullback (HTF) @ 1h             250    -0.171   0.81   37.2  REJECT
+  4  Trend Pullback (HTF) @ 4h              68    -0.186   0.89   33.8  REJECT
+  5  EMA/MACD/RSI/Volume V2 (HTF) @ 15m   1054    -0.222   0.59   32.2  REJECT
+  6  Donchian Breakout (HTF) @ 5m         2232    -0.238   0.38   29.0  REJECT
+  7  EMA/MACD/RSI/Volume V2 (HTF) @ 5m    2957    -0.238   0.38   28.7  REJECT
+  8  X-Spread Momentum (OKX−Binance) @ 5m   3534    -0.241   0.33   28.5  REJECT
+  9  Reversal Scalper (1m baseline) @ 1m   1073    -0.242   0.05    5.7  REJECT
+  10 EMA/MACD/RSI/Volume V2 (HTF) @ 4h      83    -0.242   0.85   32.5  REJECT
+  11 Trend Pullback (HTF) @ 5m            1863    -0.243   0.42   30.2  REJECT
+  12 Funding Contrarian (perp) @ 5m       1081    -0.245   0.31   27.2  REJECT
+  13 Basis Momentum (perp−spot) @ 5m      3450    -0.246   0.32   27.9  REJECT
+  14 Funding Momentum (perp) @ 5m         1106    -0.248   0.31   27.8  REJECT
+  15 X-Spread Contrarian (OKX−Binance) @ 5m   3518    -0.248   0.32   26.9  REJECT
+  16 Trend Pullback (HTF) @ 15m           1013    -0.254   0.55   30.4  REJECT
+  17 Basis Contrarian (perp−spot) @ 5m    3531    -0.259   0.30   26.0  REJECT
+  18 Donchian Breakout (HTF) @ 15m         817    -0.269   0.52   31.7  REJECT
+  19 X-Spread Contrarian (OKX−Binance) @ 1h    270    -0.283   0.71   31.9  REJECT
+  20 X-Spread Momentum (OKX−Binance) @ 1h    287    -0.353   0.63   31.0  REJECT
+  21 Basis Contrarian (perp−spot) @ 1h     268    -0.355   0.64   30.2  REJECT
+  22 X-Spread Momentum (OKX−Binance) @ 4h     74    -0.358   0.80   31.1  REJECT
+  23 Basis Momentum (perp−spot) @ 1h       273    -0.366   0.63   29.3  REJECT
+  24 Funding Momentum (perp) @ 4h           70    -0.369   0.79   31.4  REJECT
+  25 EMA/MACD/RSI/Volume V2 (HTF) @ 1h     283    -0.386   0.61   29.3  REJECT
+  26 Donchian Breakout (HTF) @ 1h          210    -0.404   0.60   30.5  REJECT
+  27 X-Spread Contrarian (OKX−Binance) @ 4h     80    -0.407   0.78   31.2  REJECT
+  28 Basis Momentum (perp−spot) @ 4h        77    -0.409   0.77   28.6  REJECT
+  29 Donchian Breakout (HTF) @ 4h           74    -0.689   0.62   24.3  REJECT
+  30 Funding Contrarian (perp) @ 8h         31    -1.305   0.54   22.6  REJECT
+  31 Funding Momentum (perp) @ 8h           39    -1.335   0.48   20.5  REJECT
+
+============================================================================
+VERDICT: 🔴 NO EDGE — no strategy×timeframe clears the fee hurdle under the strict acceptance rule.
+Honest outcome: the live bot stays AUTO-DISABLED (allowlist empty). Manual trading remains available.
+============================================================================

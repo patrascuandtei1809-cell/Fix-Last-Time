@@ -108,6 +108,8 @@ class StrategySpec:
     conf_floor:      int = 30
     allow_shorts: bool = False           # spot is long-only
     needs_funding: bool = False          # merge perp funding onto candles first
+    needs_basis:   bool = False          # merge perp-vs-spot basis onto candles
+    needs_xspread: bool = False          # merge cross-exchange spread onto candles
     periods:     Optional[List[int]] = None   # override SUITE_PERIODS for this spec
     symbols:     Optional[List[str]] = None   # override SUITE_SYMBOLS for this spec
     note:        str   = ""
@@ -186,6 +188,59 @@ CANDIDATES: List[StrategySpec] = [
         needs_funding=True, periods=[90],
         note="LONG when perp funding is unusually POSITIVE (crowd funding the "
              "long → ride). Same data source as contrarian, opposite reading.",
+    ),
+    # ── ALTERNATIVE EDGE SOURCE: perp-vs-spot BASIS (NOT a price pattern) ──────
+    # Basis = (perp_price − spot_price)/spot_price — perp premium/discount, a
+    # continuous read of leverage/positioning that the ~0.24% spot round-trip
+    # cannot trivially erase. OKX perpetual-SWAP close paired with Binance spot
+    # close (Binance fapi is geo-blocked 451 from Replit). Both readings tested.
+    # block_regimes=() so the basis edge is judged on its own. Continuous series,
+    # so unlike funding it is meaningful at every timeframe — swept at 5m/1h/4h
+    # (5m kept for the canonical coverage invariant). Honest constraint: OKX
+    # history-candles caps the window, so this is a single-period probe, not a
+    # multi-year proof.
+    StrategySpec(
+        key="basis_contrarian", name="Basis Contrarian (perp−spot)",
+        signal_name="Basis Contrarian", timeframes=["5m", "1h", "4h"],
+        use_atr=True, arm_be=False, max_red=0,
+        qualify_mode="signal", block_regimes=(), warmup_bars=60,
+        needs_basis=True, periods=[90],
+        note="LONG when perp basis is unusually NEGATIVE (perp discount / shorts "
+             "crowded → squeeze). OKX perp close vs Binance spot close; ATR exits.",
+    ),
+    StrategySpec(
+        key="basis_momentum", name="Basis Momentum (perp−spot)",
+        signal_name="Basis Momentum", timeframes=["5m", "1h", "4h"],
+        use_atr=True, arm_be=False, max_red=0,
+        qualify_mode="signal", block_regimes=(), warmup_bars=60,
+        needs_basis=True, periods=[90],
+        note="LONG when perp basis is unusually POSITIVE (leveraged longs piling "
+             "in → ride). Same data source as contrarian, opposite reading.",
+    ),
+    # ── ALTERNATIVE EDGE SOURCE: CROSS-EXCHANGE SPREAD (NOT a price pattern) ──
+    # X-spread = (OKX_spot_close − Binance_spot_close)/Binance_spot_close — a
+    # same-asset price gap between two reachable venues. A lead-lag/convergence
+    # dislocation read on the venue the bot trades (Binance). Both readings
+    # tested; block_regimes=() so it is judged on its own. Continuous series →
+    # swept at 5m/1h/4h (5m kept for the canonical coverage invariant). Same OKX
+    # history cap → single-period probe, not a multi-year proof.
+    StrategySpec(
+        key="xspread_contrarian", name="X-Spread Contrarian (OKX−Binance)",
+        signal_name="X-Spread Contrarian", timeframes=["5m", "1h", "4h"],
+        use_atr=True, arm_be=False, max_red=0,
+        qualify_mode="signal", block_regimes=(), warmup_bars=60,
+        needs_xspread=True, periods=[90],
+        note="LONG when OKX trades unusually BELOW Binance (z≤−T). OKX spot close "
+             "vs Binance spot close; ATR exits.",
+    ),
+    StrategySpec(
+        key="xspread_momentum", name="X-Spread Momentum (OKX−Binance)",
+        signal_name="X-Spread Momentum", timeframes=["5m", "1h", "4h"],
+        use_atr=True, arm_be=False, max_red=0,
+        qualify_mode="signal", block_regimes=(), warmup_bars=60,
+        needs_xspread=True, periods=[90],
+        note="LONG when OKX leads ABOVE Binance (z≥+T) → Binance the cheap leg, "
+             "expect convergence up. Same data source as contrarian, opposite read.",
     ),
 ]
 
@@ -311,6 +366,14 @@ def run_subcell(spec: StrategySpec, symbol: str, interval: str, days: int, *,
     if spec.needs_funding:
         funding = backtest.fetch_funding_rates(symbol, days, use_cache=use_cache)
         df = backtest.merge_funding(df, funding)
+    if spec.needs_basis:
+        perp = backtest.fetch_okx_candles(symbol, interval, days, "SWAP",
+                                          use_cache=use_cache)
+        df = backtest.merge_basis(df, perp)
+    if spec.needs_xspread:
+        other = backtest.fetch_okx_candles(symbol, interval, days, "SPOT",
+                                           use_cache=use_cache)
+        df = backtest.merge_xspread(df, other)
     # Build the cache key AFTER fetching/merging so it is bound to the actual data
     # used — a refetch of fresh candles changes the fingerprint and invalidates
     # the cell.
