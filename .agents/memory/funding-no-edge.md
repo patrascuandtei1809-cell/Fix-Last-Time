@@ -25,6 +25,38 @@ gross move never beats the ~0.24% round-trip cost). Allowlist stays empty.
   or sub-fee maker arb), not a directional long-only spot entry. Don't re-probe
   this as another spot directional signal.
 
+# Delta-neutral CARRY (long spot + short perp) — also NO edge
+
+The one remaining angle after the directional spread probes all rejected:
+CAPTURE the perp-vs-spot gap delta-neutral instead of betting on its direction.
+Long spot + short perp cancels the price exposure, so you harvest the perp 8h
+funding stream while you hold. Modeled honestly as ONE buy-and-hold per symbol
+(the BEST case — fees paid once and amortized): four taker legs
+(spot+perp open, spot+perp close) at spot 0.10%/perp 0.05%/side + slip, plus the
+realized funding settlements in (t0,tN] and the basis convergence.
+
+**Verdict: 🔴 NO EDGE** (single-venue OKX, ~92d OKX-reachable window). Per-symbol
+NET carry: ETH **+0.191%** (APR +0.78%), BTC **−0.072%**, SOL **−0.506%** → mean
+−0.129%/hold, only 1/3 symbols positive → fails breadth → REJECT. The funding
+harvest is REAL (ETH funding-only-net +0.312%, BTC +0.037%) but thin, and gets
+eaten by the four-leg fees + negative-funding stretches (SOL funding was net
+negative). Consistent with every other AlphaTrade finding.
+
+- **Implementation is a cash-flow study, NOT a StrategySpec.** `backtest.carry_pnl`
+  (pure accumulator) + `research.run_carry`/`_carry_verdict`/`build_carry_cell`,
+  injected into the report via `run_research(extra_cells=[…])` and tagged
+  `kind=="carry"`. Run with `python research.py --carry --merge`.
+- **Two non-obvious traps:** (1) carry MUST stay out of `CANDIDATES` or it trips
+  the 5m-coverage / timeframe lock-in tests — inject it as an extra cell instead.
+  (2) `run_research(specs=[])` must run NOTHING; the old `specs or CANDIDATES`
+  treated `[]` as falsy and ran the FULL sweep — guard with `specs is None`.
+- **Funding source for carry = `fetch_funding_rates(source="okx")`** (forced OKX,
+  ~92d, distinct `_okx` cache suffix) so the funding harvested is from the SAME
+  perp being shorted (single-venue consistency), not the Vision archive.
+- **Lesson:** carry/funding is not free money on majors — the 8h funding you
+  collect does not reliably beat a 4-leg round trip. Don't re-probe carry as a
+  live strategy; it never feeds the directional allowlist (excluded by `kind`).
+
 # Alternative-source edge probe: perpetual funding
 
 Probed whether a non-price signal (perp-swap FUNDING rate) clears the after-fee

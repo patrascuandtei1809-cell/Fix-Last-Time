@@ -551,7 +551,8 @@ def run_research(specs: Optional[List[StrategySpec]] = None, *,
                  symbols=SUITE_SYMBOLS, periods=SUITE_PERIODS,
                  fee=DEFAULT_FEE, slip=DEFAULT_SLIP,
                  use_cache: bool = True, persist: bool = True,
-                 merge_latest: bool = False) -> Dict:
+                 merge_latest: bool = False,
+                 extra_cells: Optional[List[Dict]] = None) -> Dict:
     """Sweep every (spec × timeframe) cell, rank by net expectancy, persist.
 
     When `merge_latest` is set, cells from the existing latest.json that are NOT
@@ -560,14 +561,25 @@ def run_research(specs: Optional[List[StrategySpec]] = None, *,
     the full sweep can exceed the sandbox's per-command time budget, so an
     alternative-edge probe (e.g. funding) is run on its own then merged into the
     full technical sweep rather than clobbering it.
+
+    `extra_cells` are pre-built report cells produced OUTSIDE the StrategySpec
+    sweep (e.g. the delta-neutral CARRY evaluation, which is a cash-flow study,
+    not a directional replay). They slot into the leaderboard/persistence exactly
+    like spec cells, but cells tagged `kind=="carry"` are NEVER written to the
+    live allowlist — the auto-disable gate is for the directional bot only.
     """
-    specs = specs or CANDIDATES
+    # NB: distinguish specs=None (default → full sweep) from specs=[] (run no
+    # directional cells — used by the carry-only path). `specs or CANDIDATES`
+    # would wrongly treat the empty list as "run everything".
+    specs = CANDIDATES if specs is None else specs
+    extra_cells = list(extra_cells or [])
     os.makedirs(RESEARCH_DIR, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     carried: List[Dict] = []
     if merge_latest:
-        run_keys = {s.key for s in specs}
+        run_keys = {s.key for s in specs} | {
+            c.get("strategy_key") for c in extra_cells}
         try:
             with open(os.path.join(RESEARCH_DIR, "latest.json")) as f:
                 prev = json.load(f)
@@ -616,7 +628,10 @@ def run_research(specs: Optional[List[StrategySpec]] = None, *,
     if carried:
         emit(f"\n(merge) carried forward {len(carried)} cell(s) from prior "
              f"latest.json: {', '.join(sorted({c['strategy_key'] for c in carried}))}")
-    cells = carried + cells
+    if extra_cells:
+        emit(f"(carry) added {len(extra_cells)} carry/cash-flow cell(s): "
+             f"{', '.join(sorted({c['strategy_key'] for c in extra_cells}))}")
+    cells = carried + cells + extra_cells
 
     # ── Leaderboard — rank by NET expectancy/trade (primary metric) ──────────
     ranked = sorted(
@@ -642,7 +657,11 @@ def run_research(specs: Optional[List[StrategySpec]] = None, *,
             emit(f"  {i:<3}{label:<34}{'0':>7}{'—':>10}{'—':>7}{'—':>7}  "
                  f"{c['verdict']}")
 
-    accepted = [c for c in ranked if c["verdict"] == "ACCEPT"]
+    # Live allowlist is the DIRECTIONAL bot's auto-disable gate — carry cells
+    # (kind=="carry") are a delta-neutral cash-flow study, not a bot strategy, so
+    # they never feed the allowlist even when ACCEPTed.
+    accepted = [c for c in ranked
+                if c["verdict"] == "ACCEPT" and c.get("kind") != "carry"]
     best = accepted[0] if accepted else None
 
     emit("\n" + "=" * 76)
@@ -775,6 +794,216 @@ def validation_status() -> Dict:
     }
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Delta-neutral CARRY evaluation (NOT a directional signal — a cash-flow study)
+# ─────────────────────────────────────────────────────────────────────────────
+# Task #13: the directional basis_*/xspread_* probes all REJECT because trading a
+# tiny, fast-mean-reverting spread as a long-only SPOT entry just pays the round-
+# trip fee twice (see .agents/memory/funding-no-edge.md). The remaining untested
+# angle is to CAPTURE the gap directly — hold it delta-neutral (long spot + short
+# perp), let the price exposure cancel, and harvest the perp funding stream while
+# you wait. This is a fundamentally different test: a CARRY / cash-flow study, not
+# a price-direction bet, so it must NOT be confused with the rejected directional
+# basis specs and never feeds the live directional allowlist.
+#
+# Single-venue OKX over the OKX-reachable window (~92d cap): OKX perp (SWAP) +
+# OKX spot + OKX funding, so the funding we harvest comes from the SAME perp we
+# short. Modeled honestly: all four taker legs' fees+slippage paid once, plus the
+# realized 8h funding cash-flows and the basis convergence over the hold.
+CARRY_SYMBOLS  = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+CARRY_DAYS     = 90       # OKX history-candles cap (~92d) bounds the window
+CARRY_INTERVAL = "1h"     # price-leg candle granularity (label only)
+# Realistic taker costs: Binance/OKX SPOT taker ≈0.1%/side, perp taker ≈0.05%/side.
+CARRY_SPOT_FEE = 0.10
+CARRY_PERP_FEE = 0.05
+
+
+def run_carry_symbol(symbol: str, *, days: int = CARRY_DAYS,
+                     interval: str = CARRY_INTERVAL,
+                     spot_fee: float = CARRY_SPOT_FEE,
+                     perp_fee: float = CARRY_PERP_FEE, slip: float = DEFAULT_SLIP,
+                     use_cache: bool = True) -> Dict:
+    """Fetch OKX perp+spot+funding for one symbol and accumulate the carry hold."""
+    perp = backtest.fetch_okx_candles(symbol, interval, days, "SWAP",
+                                      use_cache=use_cache)
+    spot = backtest.fetch_okx_candles(symbol, interval, days, "SPOT",
+                                      use_cache=use_cache)
+    funding = backtest.fetch_funding_rates(symbol, days, use_cache=use_cache,
+                                           source="okx")
+    res = backtest.carry_pnl(spot, perp, funding,
+                             spot_fee_pct=spot_fee, perp_fee_pct=perp_fee,
+                             slip_pct=slip)
+    res["symbol"] = symbol
+    return res
+
+
+def _carry_verdict(results: List[Dict]) -> Tuple[str, List[str]]:
+    """Honest ACCEPT/REJECT for the carry study.
+
+    ACCEPT only if, across ≥MIN_SYMBOLS held symbols, the harvested carry beats
+    total costs ROBUSTLY:
+      • the FUNDING harvest alone beats the four-leg fees (funding_only_net>0) on
+        ≥MIN_SYMBOLS symbols — we do not credit the path-dependent basis term, and
+      • net carry (funding + basis − fees) is positive on those same symbols, and
+      • the mean net carry across held symbols is positive.
+    Anything else → REJECT (carry does not clear costs here).
+    """
+    held = [r for r in results if r.get("held")]
+    reasons: List[str] = []
+    if len(held) < MIN_SYMBOLS:
+        reasons.append(f"only {len(held)} symbol(s) produced a carry hold "
+                       f"(need ≥{MIN_SYMBOLS}) — not enough to trust")
+        return "REJECT", reasons
+    mean_net = sum(r["net_carry_pct"] for r in held) / len(held)
+    winners = [r for r in held
+               if r["net_carry_pct"] > 0 and r["funding_only_net_pct"] > 0]
+    if mean_net <= 0:
+        reasons.append(f"mean net carry across {len(held)} symbols is "
+                       f"{mean_net:+.3f}% per hold — does not beat the 4-leg cost")
+        return "REJECT", reasons
+    if len(winners) < MIN_SYMBOLS:
+        losers = ", ".join(f"{r['symbol']}({r['net_carry_pct']:+.3f}%)"
+                           for r in held if r not in winners)
+        reasons.append(f"carry beats costs on only {len(winners)} symbol(s) "
+                       f"(need ≥{MIN_SYMBOLS}); not robust — {losers}")
+        return "REJECT", reasons
+    reasons.append(f"harvested carry beats total cost on {len(winners)}/{len(held)} "
+                   f"symbols (mean net {mean_net:+.3f}% per hold, funding alone "
+                   f"clears the four-leg fee)")
+    return "ACCEPT", reasons
+
+
+def build_carry_cell(results: List[Dict], *, interval: str,
+                     spot_fee: float, perp_fee: float, slip: float) -> Dict:
+    """Assemble the carry results into a report cell (same shape as a spec cell).
+
+    Tagged `kind=="carry"` so it sits alongside the directional verdicts in the
+    leaderboard but is excluded from the live allowlist. The `aggregate` exposes
+    mean net-carry-per-hold as `expectancy_pct` so the leaderboard renders it,
+    and the per-symbol economics live in `subcells` + the `carry` detail block.
+    """
+    held = [r for r in results if r.get("held")]
+    verdict, reasons = _carry_verdict(results)
+    n = len(held)
+    mean_net = (sum(r["net_carry_pct"] for r in held) / n) if n else 0.0
+    wins = sum(1 for r in held if r["net_carry_pct"] > 0)
+    pos = sum(r["net_carry_pct"] for r in held if r["net_carry_pct"] > 0)
+    neg = -sum(r["net_carry_pct"] for r in held if r["net_carry_pct"] <= 0)
+
+    subcells = {}
+    for r in results:
+        tag = r["symbol"]
+        if not r.get("held"):
+            subcells[tag] = {"trades": 0, "error": r.get("error", "no hold")}
+            continue
+        subcells[tag] = {
+            "trades": 1, "expectancy_pct": r["net_carry_pct"],
+            "profit_factor": float("inf") if r["net_carry_pct"] > 0 else 0.0,
+            "win_rate": 100.0 if r["net_carry_pct"] > 0 else 0.0,
+            "funding_sum_pct": r.get("funding_sum_pct", 0.0),
+            "funding_apr_pct": r.get("funding_apr_pct", 0.0),
+            "basis_pnl_pct": r.get("basis_pnl_pct", 0.0),
+            "fees_pct": r.get("fees_pct", 0.0),
+            "net_carry_pct": r["net_carry_pct"],
+            "funding_only_net_pct": r["funding_only_net_pct"],
+            "apr_pct": r.get("apr_pct", 0.0),
+            "days_held": r.get("days_held", 0.0),
+            "n_funding": r.get("n_funding", 0),
+            "n_funding_neg": r.get("n_funding_neg", 0),
+        }
+
+    return {
+        "kind":         "carry",
+        "strategy_key": "carry_okx_delta_neutral",
+        "strategy":     "Delta-Neutral Carry (long spot + short perp)",
+        "signal_name":  "Delta-Neutral Carry",
+        "interval":     interval,
+        "exit_policy":  {"model": "buy-and-hold carry, 4 taker legs",
+                         "spot_fee_pct": spot_fee, "perp_fee_pct": perp_fee,
+                         "slip_pct": slip},
+        "qualify_mode": "carry",
+        "subcells":     subcells,
+        "aggregate": {
+            "trades": n,
+            "expectancy_pct": mean_net,           # mean NET carry % per hold
+            "profit_factor": (pos / neg) if neg > 0 else (float("inf") if pos > 0 else 0.0),
+            "win_rate": (wins / n * 100) if n else 0.0,
+        },
+        "walk_forward": [],
+        "attribution":  {},
+        "verdict":      verdict,
+        "verdict_reasons": reasons,
+        "errors":       [f"{r['symbol']}: {r.get('error')}"
+                         for r in results if not r.get("held")],
+        "note": "CARRY / CASH-FLOW STUDY — delta-neutral long spot + short perp, "
+                "harvesting OKX perp funding (NOT a directional price bet, NOT the "
+                "rejected basis_*/xspread_* signals). Single-venue OKX over the "
+                "~92d OKX-reachable window. 'net_exp%' = mean NET carry per hold "
+                "(funding + basis − four-leg fees). Excluded from the live "
+                "directional allowlist by design.",
+    }
+
+
+def run_carry(*, symbols=CARRY_SYMBOLS, days: int = CARRY_DAYS,
+              interval: str = CARRY_INTERVAL, spot_fee: float = CARRY_SPOT_FEE,
+              perp_fee: float = CARRY_PERP_FEE, slip: float = DEFAULT_SLIP,
+              use_cache: bool = True, persist: bool = True,
+              merge_latest: bool = True) -> Dict:
+    """Run the carry study for all symbols and MERGE it into the canonical report.
+
+    Carry is fast to compute (a handful of OKX fetches) so it runs standalone and,
+    by default, merges into latest.json via run_research(extra_cells=[…]) so the
+    full directional sweep is preserved (the carry cell is added/replaced, nothing
+    else is clobbered).
+    """
+    print("=" * 76)
+    print("AlphaTrade DELTA-NEUTRAL CARRY study — harvest the perp-vs-spot gap")
+    print("=" * 76)
+    print(f"long spot + short perp (delta-neutral) · OKX single-venue · ~{days}d "
+          f"window · {interval} candles")
+    print(f"fees: spot {spot_fee}%/side · perp {perp_fee}%/side · slip {slip}%/side "
+          f"→ 4 legs = {2*(spot_fee+slip)+2*(perp_fee+slip):.2f}% one-time")
+    print("-" * 76)
+    results: List[Dict] = []
+    for sym in symbols:
+        try:
+            r = run_carry_symbol(sym, days=days, interval=interval,
+                                 spot_fee=spot_fee, perp_fee=perp_fee, slip=slip,
+                                 use_cache=use_cache)
+        except Exception as e:
+            print(f"  [skip] {sym}: {e}")
+            results.append({"symbol": sym, "held": False, "error": str(e)})
+            continue
+        if r.get("held"):
+            print(f"  {sym}: held {r['days_held']:.0f}d · funding "
+                  f"{r['funding_sum_pct']:+.3f}% ({r['n_funding']} pays, "
+                  f"{r['n_funding_neg']} neg) · basis {r['basis_pnl_pct']:+.3f}% · "
+                  f"fees -{r['fees_pct']:.3f}% → NET {r['net_carry_pct']:+.3f}% "
+                  f"(APR {r['apr_pct']:+.2f}%)  [funding-only net "
+                  f"{r['funding_only_net_pct']:+.3f}%]")
+        else:
+            print(f"  {sym}: no hold ({r.get('error')})")
+        results.append(r)
+
+    cell = build_carry_cell(results, interval=interval, spot_fee=spot_fee,
+                            perp_fee=perp_fee, slip=slip)
+    mark = "🟢 ACCEPT" if cell["verdict"] == "ACCEPT" else "🔴 REJECT"
+    print("-" * 76)
+    print(f"CARRY VERDICT: {mark} — {cell['verdict_reasons'][0]}")
+    if cell["verdict"] != "ACCEPT":
+        print("Honest outcome: harvesting the perp-vs-spot carry does NOT reliably "
+              "beat costs over the OKX-reachable window. This is a cash-flow result, "
+              "separate from (and consistent with) the rejected directional probes.")
+    print("=" * 76)
+
+    if persist:
+        return run_research(specs=[], symbols=symbols,
+                            fee=DEFAULT_FEE, slip=slip, use_cache=use_cache,
+                            persist=True, merge_latest=merge_latest,
+                            extra_cells=[cell])
+    return {"cells": [cell], "carry_verdict": cell["verdict"]}
+
+
 if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser(description="AlphaTrade strategy research sweep")
@@ -787,13 +1016,23 @@ if __name__ == "__main__":
     ap.add_argument("--merge", action="store_true",
                     help="carry forward cells from latest.json that aren't re-run "
                          "(keeps the canonical report complete when using --only)")
+    ap.add_argument("--carry", action="store_true",
+                    help="run the DELTA-NEUTRAL CARRY study (long spot + short "
+                         "perp, harvest funding) and merge it into latest.json — a "
+                         "cash-flow test, separate from the directional sweep")
     args = ap.parse_args()
 
-    specs = CANDIDATES
-    if args.only:
-        keys = {k.strip() for k in args.only.split(",") if k.strip()}
-        specs = [s for s in CANDIDATES if s.key in keys]
+    if args.carry:
+        # Carry runs standalone and merges into the canonical report by default,
+        # so the directional sweep is preserved and not re-run.
+        run_carry(slip=args.slippage, use_cache=not args.no_cache,
+                  persist=not args.no_persist, merge_latest=True)
+    else:
+        specs = CANDIDATES
+        if args.only:
+            keys = {k.strip() for k in args.only.split(",") if k.strip()}
+            specs = [s for s in CANDIDATES if s.key in keys]
 
-    run_research(specs, fee=args.fee, slip=args.slippage,
-                 use_cache=not args.no_cache, persist=not args.no_persist,
-                 merge_latest=args.merge)
+        run_research(specs, fee=args.fee, slip=args.slippage,
+                     use_cache=not args.no_cache, persist=not args.no_persist,
+                     merge_latest=args.merge)

@@ -305,18 +305,27 @@ def _fetch_funding_okx(symbol: str, days: int, cutoff_ms: int) -> list:
 
 
 def fetch_funding_rates(symbol: str, days: int,
-                        use_cache: bool = True) -> pd.DataFrame:
+                        use_cache: bool = True,
+                        source: str = "auto") -> pd.DataFrame:
     """Fetch ~`days` of settled 8h funding rates, multi-year capable.
 
-    Source priority: Binance Vision monthly archive (PRIMARY, multi-year,
-    single-venue) → OKX REST (FALLBACK, ~92d). Returns a DataFrame
-    [funding_time(ms), funding_rate(fraction per 8h)] sorted oldest→newest,
-    cached to CSV per (symbol, days). The rate is the realized 8h funding;
-    `funding_time` is when it SETTLED (so using it for candles whose
-    open_time ≥ funding_time introduces no look-ahead).
+    `source`:
+      • "auto" (default) — Binance Vision monthly archive (PRIMARY, multi-year,
+        single-venue) → OKX REST (FALLBACK, ~92d). Used by the directional
+        funding probes.
+      • "okx" — force OKX REST only (~92d cap). The delta-neutral CARRY test
+        uses this so the funding it harvests comes from the SAME venue as the
+        OKX perp it shorts (single-venue consistency: you only receive the
+        funding of the perp you are actually short).
+
+    Returns a DataFrame [funding_time(ms), funding_rate(fraction per 8h)] sorted
+    oldest→newest, cached to CSV per (symbol, days, source). The rate is the
+    realized 8h funding; `funding_time` is when it SETTLED (so using it for
+    candles whose open_time ≥ funding_time introduces no look-ahead).
     """
     os.makedirs(DATA_DIR, exist_ok=True)
-    cache = os.path.join(DATA_DIR, f"funding_{symbol}_{days}d.csv")
+    suffix = "" if source == "auto" else f"_{source}"
+    cache = os.path.join(DATA_DIR, f"funding_{symbol}_{days}d{suffix}.csv")
     if use_cache and os.path.exists(cache):
         age_h = (time.time() - os.path.getmtime(cache)) / 3600
         if age_h < 12:
@@ -326,17 +335,22 @@ def fetch_funding_rates(symbol: str, days: int,
 
     cutoff_ms = int((time.time() - days * 86400) * 1000)
     rows: list = []
-    source = "binance-vision"
-    try:
-        rows = _fetch_funding_binance_vision(symbol, days)
-    except Exception as e:
-        print(f"  [warn] Binance Vision funding fetch errored ({e}); "
-              f"falling back to OKX")
-        rows = []
-    if not rows:
-        source = "okx"
+    used_source = source
+    if source == "okx":
         rows = _fetch_funding_okx(symbol, days, cutoff_ms)
+    else:
+        used_source = "binance-vision"
+        try:
+            rows = _fetch_funding_binance_vision(symbol, days)
+        except Exception as e:
+            print(f"  [warn] Binance Vision funding fetch errored ({e}); "
+                  f"falling back to OKX")
+            rows = []
+        if not rows:
+            used_source = "okx"
+            rows = _fetch_funding_okx(symbol, days, cutoff_ms)
 
+    source = used_source
     if not rows:
         raise RuntimeError(f"No funding rates fetched for {symbol}")
     df = (pd.DataFrame(rows, columns=["funding_time", "funding_rate"])
@@ -497,6 +511,108 @@ def merge_xspread(df: pd.DataFrame, other: pd.DataFrame) -> pd.DataFrame:
     """Add an `xspread` column = (other_venue_close − spot_close)/spot_close
     (cross-exchange price gap as a fraction), no look-ahead."""
     return _merge_aux_ratio(df, other, "xspread")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Delta-neutral CARRY accumulator (NOT a directional replay)
+# ─────────────────────────────────────────────────────────────────────────────
+# Task #13 angle: the directional basis/x-spread probes all REJECT because trading
+# a tiny, fast-mean-reverting spread as a long-only SPOT entry just pays the
+# round-trip fee twice (see .agents/memory/funding-no-edge.md). A GENUINE basis/
+# funding edge, if one exists, is captured by HOLDING the gap delta-neutral — long
+# spot + short perp — so the price exposure cancels and you harvest the perp
+# funding stream while you wait. This accumulator models exactly that, honestly:
+#
+#   • ENTRY (once): buy spot, short perp — each leg pays a taker fee + slippage.
+#   • HOLD: every 8h funding settlement, the SHORT-perp leg RECEIVES funding when
+#     the rate is positive (longs pay shorts) and PAYS when it is negative.
+#   • EXIT (once): sell spot, buy back perp — two more taker fees + slippage.
+#   • The residual price P&L is the realized BASIS convergence over the hold
+#     (≈ 0 because the position is delta-neutral; it is the entry premium you
+#     captured/gave back, not a directional bet).
+#
+# This is a single buy-and-hold position per symbol — fees are paid ONCE and
+# amortized over the whole window, which is the BEST honest case for carry (the
+# minimum fee drag). If even that does not clear costs, carry has no edge here.
+def carry_pnl(spot_df: pd.DataFrame, perp_df: pd.DataFrame,
+              funding_df: pd.DataFrame, *,
+              spot_fee_pct: float, perp_fee_pct: float,
+              slip_pct: float) -> Dict:
+    """Accumulate one delta-neutral (long spot + short perp) carry hold.
+
+    Pure math on three pre-fetched frames (no network — testable offline):
+      • spot_df / perp_df: columns [open_time(ms), okx_close] on the SAME bars.
+      • funding_df: columns [funding_time(ms), funding_rate] (fraction per 8h),
+        the rate the SHORT-perp leg receives (signed; +ve = short is paid).
+
+    All returns are fractions on the spot notional (0.01 = +1%). Returns a dict
+    with the funding harvest, basis convergence, total leg fees, gross/net carry,
+    annualized APR, and the funding-only-net (funding − fees, ignoring the
+    path-dependent basis term) which is the conservative read of the harvest.
+    """
+    if spot_df is None or perp_df is None or len(spot_df) < 2 or len(perp_df) < 2:
+        return {"held": False, "error": "insufficient candles"}
+    m = pd.merge(
+        spot_df.rename(columns={"okx_close": "spot"})[["open_time", "spot"]],
+        perp_df.rename(columns={"okx_close": "perp"})[["open_time", "perp"]],
+        on="open_time", how="inner",
+    ).sort_values("open_time").reset_index(drop=True)
+    if len(m) < 2:
+        return {"held": False, "error": "no overlapping spot/perp candles"}
+
+    t0, tN = int(m.open_time.iloc[0]), int(m.open_time.iloc[-1])
+    s0, sN = float(m.spot.iloc[0]),  float(m.spot.iloc[-1])
+    p0, pN = float(m.perp.iloc[0]),  float(m.perp.iloc[-1])
+    if not all(np.isfinite([s0, sN, p0, pN])) or s0 <= 0 or p0 <= 0:
+        return {"held": False, "error": "non-finite or non-positive prices"}
+
+    # Funding cash-flows that SETTLE strictly inside the hold (t0, tN]. The short
+    # perp leg receives +funding_rate when funding>0 (longs pay shorts).
+    if funding_df is not None and len(funding_df) > 0:
+        fw = funding_df[(funding_df.funding_time > t0)
+                        & (funding_df.funding_time <= tN)]
+        rates = pd.to_numeric(fw.funding_rate, errors="coerce").dropna()
+    else:
+        rates = pd.Series(dtype=float)
+    funding_sum = float(rates.sum())
+    n_funding = int(len(rates))
+    n_funding_neg = int((rates < 0).sum())
+
+    # Delta-neutral price P&L: long spot return + short perp return. Sums to ~0
+    # by construction; the residual is the realized basis convergence.
+    spot_ret = (sN - s0) / s0
+    perp_ret = (p0 - pN) / p0          # short: profit when perp falls
+    basis_pnl = spot_ret + perp_ret
+    basis_entry = (p0 - s0) / s0
+    basis_exit  = (pN - sN) / sN
+
+    # Four taker legs: open spot, open perp, close spot, close perp.
+    fees = (2 * (spot_fee_pct + slip_pct) + 2 * (perp_fee_pct + slip_pct)) / 100.0
+
+    gross = funding_sum + basis_pnl
+    net = gross - fees
+    funding_only_net = funding_sum - fees
+    days_held = (tN - t0) / 86400000.0
+    apr = (net * 365.0 / days_held) if days_held > 0 else 0.0
+    funding_apr = (funding_sum * 365.0 / days_held) if days_held > 0 else 0.0
+
+    return {
+        "held": True,
+        "start_ts": t0, "end_ts": tN, "days_held": days_held,
+        "n_candles": len(m),
+        "n_funding": n_funding, "n_funding_neg": n_funding_neg,
+        "funding_mean_8h_pct": float(rates.mean() * 100) if n_funding else 0.0,
+        "funding_sum_pct": funding_sum * 100,
+        "funding_apr_pct": funding_apr * 100,
+        "basis_entry_pct": basis_entry * 100,
+        "basis_exit_pct": basis_exit * 100,
+        "basis_pnl_pct": basis_pnl * 100,
+        "fees_pct": fees * 100,
+        "gross_carry_pct": gross * 100,
+        "net_carry_pct": net * 100,
+        "funding_only_net_pct": funding_only_net * 100,
+        "apr_pct": apr * 100,
+    }
 
 
 def _interval_minutes(interval: str) -> int:
