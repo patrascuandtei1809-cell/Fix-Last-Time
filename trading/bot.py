@@ -970,7 +970,7 @@ class TradingBot:
                     if _is_strategy_validated is not None:
                         try:
                             _allowed, _entry = _is_strategy_validated(
-                                w.strategy, w.interval)
+                                w.strategy, w.interval, w.symbol)
                         except Exception:
                             _allowed = False
                     if not _allowed:

@@ -493,7 +493,10 @@ the api-server research engine).
   Trade attribution by exit-reason / regime / symbol. Walk-forward folds (4) for
   out-of-sample. Strict ACCEPT rule: net exp > 0 AND PF ≥ 1 on EVERY cell with
   ≥5 trades, ≥20 total trades, majority WF folds positive. Persists a ranked
-  leaderboard + verdict to `data/research/` (+ `latest.json`).
+  leaderboard + verdict to `data/research/` (+ `latest.json`). **Per-interval
+  windows** via StrategySpec `tf_periods`: the price + funding candidates run 1h/4h
+  over ~5y (`[1825]`d) so HTF cells get multi-year history, while cheap 5m/15m stay
+  on 90/180d (`RESEARCH_SUBCELL_CACHE=1` + `--merge` makes the long sweep resumable).
 - **`trading/backtest.py`** — engine gained backward-compatible `run_symbol`
   flags: `arm_be` (bool), `max_red` (int, 0=off), `qualify_mode`
   (auto/signal/weighted), `block_regimes`, `warmup_bars`; records entry `regime`
@@ -502,12 +505,39 @@ the api-server research engine).
 - **`trading/strategy.py`** — added HTF candidates `donchian_breakout_signal()`
   and `trend_pullback_signal()` (LONG-only, EMA200 trend filter, ≥210 bars),
   registered in `get_signal()`.
-- **AUTO-DISABLE GATE (live).** `is_strategy_validated(strategy, interval)` reads
-  the validated allowlist (`data/research/validated_strategies.json`). `bot.py`
+- **AUTO-DISABLE GATE (live).** `is_strategy_validated(strategy, interval, symbol)`
+  reads the validated allowlist (`data/research/validated_strategies.json`). `bot.py`
   enforces it BEFORE `execute_entry` — a (strategy, timeframe) with no ACCEPTED
   research result is **default-safe blocked** (no auto orders). Manual trades
   bypass it. Override with env `ALPHATRADE_ALLOW_UNVALIDATED=1`. Dashboard shows
   a colored banner (✅ enabled / 🔒 disabled / ⚠️ override) above the bot overview.
+- **SYMBOL-SCOPED allowlist.** A canonical ACCEPT is necessary but NOT sufficient
+  to go LIVE: `save_validated()` authorizes only the symbols that are BOTH
+  canonical-ACCEPTed AND deep-validation ROBUST
+  (`validate_candidates.approved_symbols_by_strategy`, the MC/WF/sensitivity/maxDD
+  bar). Such an entry carries a `symbols` list and the gate allows it only for a
+  matching `symbol` (a symbol-less query never matches a scoped entry → fail-safe).
+  Entries with no `symbols` field keep the legacy strategy/interval match.
+
+### VERDICT UPDATE (June 3, 2026): 🟢 ONE technical cell clears fees over ~5y
+
+Extending the canonical sweep to **~5y (1825d) on 1h/4h** (per-interval
+`tf_periods`; 5m/15m kept on 90/180d) flipped the verdict for exactly ONE cell.
+**`EMA_MACD_RSI_VOLUME_V2` @ 4h now ACCEPTs** after fees on the full BTC/ETH/SOL
+basket: BTC +0.333% (PF1.26), ETH +0.230% (PF1.13), SOL +0.915% (PF1.33);
+aggregate **+0.502%/trade, PF1.25, 462 trades, walk-forward 4/4** positive.
+`edge_found:true` in `latest.json`. Donchian 4h (+0.20%, 2/3 symbols) and Trend
+Pullback 4h (+0.07%, 1/3) improved but still REJECT on the breadth guards. **Every
+sub-4h cell (5m/15m/1h) stays clearly negative** — fees ≫ gross. Lesson: short
+90/180d windows were *hiding* the 4h HTF edge, not disproving it.
+
+**LIVE is symbol-scoped, NOT the whole basket (operator decision).** The canonical
+ACCEPT authorizes the live allowlist only where it ALSO clears deep validation
+(MC/WF/sensitivity/maxDD = ROBUST). That is **ETH only**, so the committed
+`validated_strategies.json` holds a single ETH-scoped V2 @ 4h entry (+0.230%,
+PF1.13, 149 trades). BTC/SOL are canonical-positive but only WEAK in deep
+validation → kept OFF the live gate. Default LIVE config (dip @1m) never presents
+V2/4h, so this entry is dormant until the operator runs that strategy on ETH.
 
 ### VERDICT (June 2, 2026): 🔴 NO after-fee edge
 
@@ -573,8 +603,12 @@ live bot/dashboard were NOT modified.
   drawdown beyond the limit BLOCKS ROBUST (→ WEAK) but is **not** a hard-reject
   trigger. `bootstrap_expectancy()` was split out of `_monte_carlo()` (RNG stream
   continues → report numbers unchanged).
-- Tests lock: only V2 ETH @4h is ROBUST; both SOL stay WEAK; every failure mode
-  (MC CI<0, inconsistent walk-forward, sensitivity fail, maxDD>limit) blocks
-  approval; no 1m/15m/1h leaderboard cell is ACCEPT; and the allowlist stays
-  empty unless explicitly approved — proven by code path
-  (`research.save_validated([])` → empty → `is_strategy_validated()` False).
+- Tests lock: only V2 ETH @4h is ROBUST in deep validation; both SOL stay WEAK;
+  every failure mode (MC CI<0, inconsistent walk-forward, sensitivity fail,
+  maxDD>limit) blocks approval. After the multi-year sweep the canonical
+  leaderboard ACCEPTs exactly ONE cell — `("ema_macd_rsi_vol_v2","4h")`,
+  `edge_found:true` — and no sub-4h cell is ACCEPT
+  (`test_only_v2_4h_is_accepted_in_leaderboard`). The committed allowlist is
+  symbol-scoped to **ETH only**: the gate returns True for ETH V2 @4h and False
+  for BTC/SOL and for any symbol-less query
+  (`test_live_allowlist_snapshot_is_eth_v2_only`).

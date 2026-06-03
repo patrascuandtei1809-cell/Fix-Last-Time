@@ -142,26 +142,45 @@ CANDIDATES: List[StrategySpec] = [
              "same run, that 1m is dead after fees; the weighted gate is slow "
              "per-candle so the window is kept short.",
     ),
+    # ── PRICE-PATTERN candidates — MULTI-YEAR proof (June 2026) ───────────────
+    # The economically-meaningful timeframes (1h/4h) now sweep a ~5y window
+    # (tf_periods={"1h":[1825],"4h":[1825]}) so the "NO EDGE" verdict for the
+    # technical strategies is a genuine multi-year proof, not a single 90/180d
+    # snapshot. Candle history is multi-year-capable: data-api.binance.vision
+    # serves Binance spot klines back to ~2017 (reachable from Replit; live
+    # api.binance.com is geo-blocked 451) and fetch_klines paginates backward.
+    # The cheap, high-cadence frames (5m/15m) stay on the short 90/180d windows
+    # — 5y of 5m candles is ~525k bars/symbol and sub-hour scalping is already
+    # proven fee-dead, so a long window there buys nothing but compute. 5m is
+    # also kept to honour the canonical-pipeline invariant (every HTF candidate
+    # sweeps 5m).
     StrategySpec(
         key="donchian_breakout", name="Donchian Breakout (HTF)",
         signal_name="Donchian Breakout", timeframes=["5m", "15m", "1h", "4h"],
         use_atr=True, arm_be=False, max_red=0,
         qualify_mode="signal", warmup_bars=210, periods=[90, 180],
-        note="Long-only trend breakout; ATR exits let winners run.",
+        tf_periods={"1h": [1825], "4h": [1825]},
+        note="Long-only trend breakout; ATR exits let winners run. 1h/4h swept "
+             "over ~5y of Binance spot candles; 5m/15m kept on short 90/180d.",
     ),
     StrategySpec(
         key="trend_pullback", name="Trend Pullback (HTF)",
         signal_name="Trend Pullback", timeframes=["5m", "15m", "1h", "4h"],
         use_atr=True, arm_be=False, max_red=0,
         qualify_mode="signal", warmup_bars=210, periods=[90, 180],
-        note="Long-only buy-the-dip in an uptrend; ATR exits.",
+        tf_periods={"1h": [1825], "4h": [1825]},
+        note="Long-only buy-the-dip in an uptrend; ATR exits. 1h/4h swept over "
+             "~5y of Binance spot candles; 5m/15m kept on short 90/180d.",
     ),
     StrategySpec(
         key="ema_macd_rsi_vol_v2", name="EMA/MACD/RSI/Volume V2 (HTF)",
         signal_name=backtest.V2_STRATEGY, timeframes=["5m", "15m", "1h", "4h"],
         use_atr=True, arm_be=False, max_red=0,
         qualify_mode="signal", warmup_bars=210, periods=[90, 180],
-        note="Long-only confluence trend strategy on higher timeframes.",
+        tf_periods={"1h": [1825], "4h": [1825]},
+        note="Long-only confluence trend strategy on higher timeframes. 1h/4h "
+             "swept over ~5y of Binance spot candles; 5m/15m kept on short "
+             "90/180d.",
     ),
     # ── ALTERNATIVE EDGE SOURCE: perpetual-swap funding (NOT a price pattern) ──
     # Funding encodes crowd positioning, not price shape, so the ~0.24% spot
@@ -736,21 +755,87 @@ def _emit_attr(attr: Dict, emit):
 # ─────────────────────────────────────────────────────────────────────────────
 # Validated allowlist — the AUTO-DISABLE gate's source of truth
 # ─────────────────────────────────────────────────────────────────────────────
+def _approved_symbols_map() -> Dict[str, set]:
+    """The deeper-validation authorization map ``{strategy_key: {ROBUST symbols}}``.
+
+    A canonical research ACCEPT (positive after-fee expectancy across the basket)
+    is necessary but NOT sufficient to go LIVE. The REAL bar is the rigorous
+    per-symbol validation (Monte-Carlo CI, walk-forward, sensitivity, max-DD) in
+    ``validate_candidates.py``. The live allowlist therefore only authorizes the
+    symbols that BOTH the canonical sweep ACCEPTed AND the deep validation rated
+    ROBUST. Lazy import (validate_candidates imports research) + best-effort:
+    if the deep-validation module/data is unavailable we return ``{}`` and a
+    canonical ACCEPT enables the whole tested basket (legacy behavior) — see
+    save_validated. A strategy with a deep-validation record but no ROBUST symbol
+    is scoped to the empty set and excluded (default-safe)."""
+    try:
+        import validate_candidates as _vc          # lazy: avoids import cycle
+        return _vc.approved_symbols_by_strategy()
+    except Exception:
+        return {}
+
+
+def _cell_symbols(c: Dict) -> List[str]:
+    """Symbols a cell actually traded, derived from its subcell keys
+    (``SYMBOL/period``). Empty when the cell carries no subcells (test stubs)."""
+    syms = []
+    for k in (c.get("subcells") or {}):
+        sym = str(k).split("/", 1)[0]
+        if sym and sym not in syms:
+            syms.append(sym)
+    return syms
+
+
+def _scoped_metrics(c: Dict, symbols: List[str]) -> Dict:
+    """Trade-weighted metrics over just ``symbols`` (informational on the entry).
+    Falls back to the cell aggregate when no per-symbol subcells are available."""
+    subs = c.get("subcells") or {}
+    rows = [v for k, v in subs.items() if str(k).split("/", 1)[0] in set(symbols)]
+    total = sum(int(r.get("trades", 0)) for r in rows)
+    if not rows or total <= 0:
+        a = c.get("aggregate", {})
+        return {"net_expectancy_pct": a.get("expectancy_pct", 0),
+                "profit_factor": _num_pf(a), "trades": a.get("trades", 0)}
+    exp = sum(float(r.get("expectancy_pct", 0)) * int(r.get("trades", 0))
+              for r in rows) / total
+    pf = sum(float(r.get("profit_factor", 0)) * int(r.get("trades", 0))
+             for r in rows) / total
+    return {"net_expectancy_pct": exp, "profit_factor": pf, "trades": total}
+
+
 def save_validated(accepted_cells: List[Dict], *, fee: float, slip: float) -> None:
-    """Persist the ACCEPTED (strategy, timeframe) pairs the live bot may trade."""
+    """Persist the ACCEPTED (strategy, timeframe) pairs the live bot may trade.
+
+    Symbol-scoped by the deeper validation: when a strategy has a deep-validation
+    record, the entry is restricted to its ROBUST symbols (``symbols`` field) and
+    dropped entirely if none qualify. Strategies with NO deep-validation record
+    keep the legacy behavior (whole tested basket, no ``symbols`` field)."""
     os.makedirs(RESEARCH_DIR, exist_ok=True)
+    approved = _approved_symbols_map()
     entries = []
     for c in accepted_cells:
-        a = c["aggregate"]
-        entries.append({
+        key = c.get("strategy_key")
+        entry = {
             "strategy":           c["signal_name"],   # matches worker.strategy
             "strategy_display":   c["strategy"],
             "interval":           c["interval"],
             "exit_policy":        c["exit_policy"],
-            "net_expectancy_pct": a.get("expectancy_pct", 0),
-            "profit_factor":      _num_pf(a),
-            "trades":             a.get("trades", 0),
-        })
+        }
+        if key in approved:
+            # Deep validation has an opinion on this strategy → authorize ONLY the
+            # symbols it rated ROBUST (intersect with what the cell actually traded).
+            scoped = [s for s in _cell_symbols(c) if s in approved[key]]
+            if not scoped:
+                continue                              # canonical-positive but no
+                                                      # ROBUST symbol → default-safe
+            entry["symbols"] = sorted(scoped)
+            entry.update(_scoped_metrics(c, scoped))
+        else:
+            a = c["aggregate"]
+            entry["net_expectancy_pct"] = a.get("expectancy_pct", 0)
+            entry["profit_factor"] = _num_pf(a)
+            entry["trades"] = a.get("trades", 0)
+        entries.append(entry)
     payload = {
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "fee_pct_per_side": fee, "slippage_pct_per_side": slip,
@@ -770,17 +855,30 @@ def load_validated() -> Dict:
         return {"validated": []}
 
 
-def is_strategy_validated(strategy_name: str, interval: str) -> Tuple[bool, Optional[Dict]]:
+def is_strategy_validated(strategy_name: str, interval: str,
+                          symbol: Optional[str] = None) -> Tuple[bool, Optional[Dict]]:
     """The live AUTO-DISABLE gate. Returns (allowed, entry).
 
     Default-safe: missing/empty allowlist → (False, None) → the bot must NOT
     auto-trade. A strategy/timeframe is only allowed if a research run ACCEPTED
     it (positive net expectancy after fees).
+
+    Symbol scoping: a symbol-scoped entry (non-empty ``symbols`` list — written
+    only for the symbols the deeper validation rated ROBUST) is allowed ONLY when
+    a matching ``symbol`` is supplied. A symbol-less query never matches a scoped
+    entry, so an unscoped caller can never accidentally trade an off-list symbol.
+    Entries WITHOUT a ``symbols`` field keep the legacy strategy/interval match.
     """
     data = load_validated()
     for e in data.get("validated", []):
-        if e.get("strategy") == strategy_name and e.get("interval") == interval:
-            return True, e
+        if e.get("strategy") != strategy_name or e.get("interval") != interval:
+            continue
+        scoped = e.get("symbols")
+        if scoped:
+            if symbol is not None and symbol in scoped:
+                return True, e
+            continue
+        return True, e
     return False, None
 
 

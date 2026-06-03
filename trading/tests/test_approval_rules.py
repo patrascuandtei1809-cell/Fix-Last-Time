@@ -16,8 +16,12 @@ Required guarantees (from the task spec):
   4. A strategy FAILS approval if ANY of: Monte-Carlo CI dips negative,
      walk-forward folds not consistently positive, a sensitivity test fails, OR
      max drawdown exceeds the allowed limit.
-  5. The live allowlist (`validated_strategies.json`) stays EMPTY unless a
-     strategy is explicitly approved.
+  5. The live allowlist (`validated_strategies.json`) authorizes ONLY the symbols
+     that BOTH the canonical sweep ACCEPTed AND the deep validation rated ROBUST.
+     Over multi-year history the canonical sweep ACCEPTs the whole V2 @ 4h basket
+     (BTC+ETH+SOL all net-positive after fees), but only ETH is deep-ROBUST, so
+     the live gate allows ETH V2 @ 4h and keeps BTC/SOL off. Everything else
+     (every sub-4h cell, all other strategies) stays blocked.
 """
 import copy
 import json
@@ -159,18 +163,33 @@ def test_no_sub_4h_cell_is_approved():
         assert c["verdict"] == "REJECT", (c["interval"], c.get("verdict_reasons"))
 
 
-def test_no_cell_in_leaderboard_is_accepted():
+def test_only_v2_4h_is_accepted_in_leaderboard():
+    """Over multi-year history exactly ONE cell clears the canonical after-fee
+    bar: EMA/MACD/RSI/Volume V2 @ 4h. Nothing else may slip through."""
     doc = json.load(open(LATEST))
-    accepted = [c for c in doc["cells"] if c["verdict"] == "ACCEPT"]
-    assert accepted == []
-    assert doc["edge_found"] is False
+    accepted = [(c["strategy_key"], c["interval"]) for c in doc["cells"]
+                if c["verdict"] == "ACCEPT"]
+    assert accepted == [("ema_macd_rsi_vol_v2", "4h")]
+    assert doc["edge_found"] is True
 
 
-# ───────────────── 5: live allowlist stays empty until approved ──────────────
-def test_live_allowlist_snapshot_is_empty():
-    """The committed allowlist (what the live bot reads on boot) is empty."""
+# ───────────────── 5: live allowlist = ETH V2 @ 4h only ──────────────────────
+def test_live_allowlist_snapshot_is_eth_v2_only():
+    """The committed allowlist (what the live bot reads on boot) authorizes ONLY
+    ETH V2 @ 4h — the lone deep-validation ROBUST cell. The canonical sweep
+    ACCEPTs the whole BTC/ETH/SOL basket, but BTC/SOL must stay off the live gate."""
     doc = json.load(open(ALLOWLIST))
-    assert doc["validated"] == []
+    assert len(doc["validated"]) == 1
+    e = doc["validated"][0]
+    assert e["strategy"] == "EMA_MACD_RSI_VOLUME_V2"
+    assert e["interval"] == "4h"
+    assert e["symbols"] == ["ETHUSDT"]
+    # the gate (reading the committed allowlist) enforces the symbol scope
+    assert R.is_strategy_validated("EMA_MACD_RSI_VOLUME_V2", "4h", "ETHUSDT")[0] is True
+    for off in ("BTCUSDT", "SOLUSDT"):
+        assert R.is_strategy_validated("EMA_MACD_RSI_VOLUME_V2", "4h", off)[0] is False
+    # a symbol-less query never matches a symbol-scoped entry (fail-safe)
+    assert R.is_strategy_validated("EMA_MACD_RSI_VOLUME_V2", "4h")[0] is False
 
 
 def _accepted_cell():

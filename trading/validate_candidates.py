@@ -87,6 +87,50 @@ def is_approved(verdict: str) -> bool:
     research.save_validated / validated_strategies.json)."""
     return verdict == "ROBUST"
 
+
+def classify_from_validation(cid: str, doc: Dict | None = None) -> Dict:
+    """Rebuild the deep-validation verdict for one candidate id (``key|SYMBOL``)
+    from the persisted ``validation.json`` scenarios. Uses the seeded, determin-
+    istic bootstrap so the result is reproducible. Raises on a missing cid."""
+    if doc is None:
+        with open(VAL_PATH) as f:
+            doc = json.load(f)
+    sc = doc["scenarios"]
+    base = sc["base"][cid]
+    rets = np.array(base["rets"], dtype=float)
+    gross = np.array(base["gross"], dtype=float)
+    ts = np.array(base["ts"], dtype=float)
+    base = {**base, "trades": len(rets)}
+    sens_rows = build_sens_rows(sc, cid, gross)
+    wf = _walk_forward(rets, ts, WF_FOLDS)
+    mc, _ = bootstrap_expectancy(rets)
+    return classify_candidate(base, sens_rows, wf, mc)
+
+
+def approved_symbols_by_strategy(doc: Dict | None = None) -> Dict[str, set]:
+    """The deeper-validation authorization map: ``{strategy_key: {symbols that
+    are ROBUST}}``. This is the REAL live bar — a canonical research ACCEPT only
+    authorizes the symbols this deep validation rated ROBUST (Monte-Carlo CI,
+    walk-forward, sensitivity, max-drawdown). Best-effort: a missing/unreadable
+    validation.json returns ``{}`` (→ default-safe, nothing authorized)."""
+    if doc is None:
+        try:
+            with open(VAL_PATH) as f:
+                doc = json.load(f)
+        except Exception:
+            return {}
+    out: Dict[str, set] = {}
+    for cid in doc.get("scenarios", {}).get("base", {}):
+        try:
+            verdict = classify_from_validation(cid, doc)["verdict"]
+        except Exception:
+            continue
+        if is_approved(verdict):
+            key, _, sym = cid.partition("|")
+            out.setdefault(key, set()).add(sym)
+    return out
+
+
 _SPEC = {s.key: s for s in CANDIDATES}
 
 

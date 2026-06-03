@@ -1,6 +1,27 @@
 {
-  "updated_at": "2026-06-03T19:04:59.014586+00:00",
+  "updated_at": "2026-06-03T20:36:07.376674+00:00",
   "fee_pct_per_side": 0.1,
   "slippage_pct_per_side": 0.02,
-  "validated": []
+  "validated": [
+    {
+      "strategy": "EMA_MACD_RSI_VOLUME_V2",
+      "strategy_display": "EMA/MACD/RSI/Volume V2 (HTF)",
+      "interval": "4h",
+      "exit_policy": {
+        "use_atr": true,
+        "sl_pct": 0.4,
+        "tp_pct": 0.8,
+        "atr_sl_mult": 1.5,
+        "atr_tp_mult": 3.0,
+        "arm_be": false,
+        "max_red": 0
+      },
+      "symbols": [
+        "ETHUSDT"
+      ],
+      "net_expectancy_pct": 0.2299363626258458,
+      "profit_factor": 1.1271648451646736,
+      "trades": 149
+    }
+  ]
 }

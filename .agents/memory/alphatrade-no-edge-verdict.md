@@ -1,9 +1,30 @@
 ---
 name: AlphaTrade after-fee edge verdict
-description: Result of the Strategy Research Framework sweep — no strategy×timeframe clears the fee hurdle; live bot stays auto-disabled.
+description: Research sweep verdict — sub-4h all fee-dead; multi-year history flips V2 @ 4h to a canonical ACCEPT, but live is symbol-scoped to the lone deep-ROBUST cell (ETH).
 ---
 
-# Honest verdict: NO after-fee edge found
+## UPDATE — multi-year history flips ONE technical cell (June 2026)
+Extending the canonical sweep to ~5y (1825d) on 1h/4h (via per-interval
+`tf_periods` in `research.py` CANDIDATES; 5m/15m stay on 90/180d) **changed the
+verdict for one cell**: `EMA_MACD_RSI_VOLUME_V2` @ **4h** now ACCEPTs over 5y —
+BTC +0.33%, ETH +0.23%, SOL +0.92% (all 3 net-positive after fees), aggregate
++0.50%/trade PF1.25, 462 trades, WF 4/4. Donchian 4h (2/3 +) and Trend Pullback
+4h (1/3 +) improve but still REJECT on breadth. EVERY 5m/15m/1h cell stays
+clearly negative (fees ≫ gross). So the short 90/180d windows were *hiding* the
+4h edge, not proving its absence — multi-year history matters for HTF cells.
+**Live consequence (operator decision):** canonical ACCEPT is necessary but NOT
+sufficient. The live allowlist is now driven by canonical-ACCEPT ∩ deep-ROBUST
+(`validate_candidates.approved_symbols_by_strategy`): only **ETH V2 @ 4h** is
+authorized; BTC/SOL stay OFF (canonical-positive but only WEAK in deep
+validation). `validated_strategies.json` entries carry a `symbols` list and
+`is_strategy_validated(strategy, interval, symbol)` enforces it (symbol-less
+query never matches a scoped entry). The default LIVE config (dip @1m) never
+presents V2/4h, so the entry is dormant until the operator runs that strategy.
+Pinned by `test_approval_rules.py` (`test_only_v2_4h_is_accepted_in_leaderboard`,
+`test_live_allowlist_snapshot_is_eth_v2_only`). The "NO after-fee edge" history
+below is the *pre-multi-year* canonical picture — kept for context.
+
+# Honest verdict: NO after-fee edge found (pre-multi-year canonical sweep)
 
 The Strategy Research Framework (`trading/research.py`, engine `trading/backtest.py`)
 sweeps strategy × timeframe × symbol × period and ranks by **net expectancy/trade
