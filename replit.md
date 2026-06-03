@@ -6,6 +6,15 @@ LIVE-only Binance Mainnet trading dashboard. **Every BUY/SELL is a real order on
 
 - **Trading Dashboard**: `cd trading && streamlit run dashboard.py --server.port 5000 --server.address 0.0.0.0`
 - Workflow name: `AlphaTrade Dashboard` — already configured, starts automatically
+- **Run all tests (single command)**: `cd trading && python -m pytest`
+  - Config is in `trading/pytest.ini`. It auto-discovers the top-level test
+    files (`test_research.py`, `test_bot_validation_gate.py`) AND everything
+    under `trading/tests/`. No arguments needed — bare `pytest` runs the whole
+    suite (offline, ~5s, no network/Binance).
+  - Also wired as the `test` validation step, so it runs as a quality gate.
+  - `pytest` is pinned in `trading/requirements.txt`. The existing
+    `unittest.TestCase` classes are pytest-compatible, so
+    `python -m unittest <module>` still works for a single module if preferred.
 
 ## Stack
 
