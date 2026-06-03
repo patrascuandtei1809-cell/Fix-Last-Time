@@ -1,0 +1,212 @@
+Refactor live trading so the NEW 20-minute dip-buy / profit-take strategy is the ONLY active live trading strategy.
+
+Do not layer it on top of old rules. Do not mix old strategy filters with the new system.
+
+====================================================
+ONLY ACTIVE LIVE STRATEGY
+====================================================
+
+BUY when:
+
+20-minute price change <= -0.10%
+
+SELL when:
+
+profit from entry >= +0.80%
+
+STOP LOSS when:
+
+price drops -1.50% from entry
+
+Formula:
+
+percent_change =
+((current_price - price_20m_ago) / price_20m_ago) * 100
+
+====================================================
+DISABLE OLD LIVE BLOCKERS
+====================================================
+
+Remove from LIVE execution path:
+
+- research verdict gates
+- strategy approval allowlists
+- confidence-based trade blocking
+- institutional scoring requirements
+- old strategy ranking
+- duplicate entry validators
+- old auto-trade filters
+- hidden approval layers
+- old conservative strategy checks
+
+Keep old code only for future use, but it must NOT block or influence live trades.
+
+====================================================
+NEW LIVE EXECUTION PATH
+====================================================
+
+Live bot must follow only this order:
+
+1. Check emergency stop
+2. Check safe mode
+3. Check exchange/provider status
+4. Check available balance
+5. Check bot spending limit
+6. Check max position size
+7. Check if position already exists
+8. Check cooldown
+9. Calculate 20-minute price change
+10. BUY if threshold reached
+11. SELL if +0.8% profit reached
+12. SELL if stop-loss reached
+
+Nothing else may block trades.
+
+====================================================
+AGGRESSIVE MODE
+====================================================
+
+Enable aggressive mode by default.
+
+Aggressive mode must:
+- persist in PostgreSQL
+- survive restart/redeploy/refresh
+- scan more often
+- allow faster re-entry after profitable sells
+- use user-selected position size
+- reduce unnecessary waiting
+
+Aggressive mode must NOT bypass:
+- balance
+- spending limit
+- max position size
+- emergency stop
+- safe mode
+- exchange errors
+- stop-loss cooldown
+
+====================================================
+POSITION SIZE CONTROL
+====================================================
+
+User must control how much the bot invests.
+
+Add modes:
+
+AUTO
+FIXED USDT
+PORTFOLIO PERCENT
+
+Persist:
+
+trade_size_mode
+fixed_trade_size_usdt
+portfolio_percent_per_trade
+bot_spending_limit_usdt
+max_position_size_usdt
+min_trade_size_usdt
+
+Bot must use these saved settings in real orders.
+
+====================================================
+PERSISTENCE
+====================================================
+
+Store all settings in PostgreSQL.
+
+No toggle/input/button may reset after:
+- refresh
+- restart
+- redeploy
+- server reboot
+
+Load saved settings on startup.
+Never overwrite saved settings with defaults unless database is empty.
+
+====================================================
+COOLDOWN
+====================================================
+
+After stop-loss:
+
+cooldown same symbol for 30 minutes.
+
+After profitable sell:
+
+allow faster re-entry according to aggressive mode.
+
+Persist cooldown state.
+
+====================================================
+ACTIVITY PANEL
+====================================================
+
+Show clearly:
+
+- current price
+- price 20 minutes ago
+- 20m change %
+- buy threshold
+- sell threshold
+- stop-loss threshold
+- aggressive mode status
+- selected trade amount
+- last decision
+- exact reason no trade happened
+
+Examples:
+
+Waiting for dip
+20m change not low enough
+Position already open
+Cooldown active
+Insufficient balance
+Spending limit reached
+Safe mode active
+Exchange error
+
+====================================================
+DIAGNOSTICS FIX
+====================================================
+
+Fix:
+
+can't compare offset-naive and offset-aware datetimes
+
+Use UTC-aware datetimes everywhere.
+
+====================================================
+TESTS
+====================================================
+
+Add tests proving:
+
+- BUY when 20m change <= -0.10%
+- SELL when profit >= +0.80%
+- SELL when stop-loss hits -1.50%
+- no trade when change is between thresholds
+- old strategy gates do not block new live strategy
+- safety limits still block trades
+- settings persist after restart
+- aggressive mode persists
+- cooldown works
+
+====================================================
+DEFINITION OF DONE
+====================================================
+
+The bot uses only the new 20-minute strategy in live trading.
+
+Old filters do not mix with the new rule.
+
+Bot is aggressive by default.
+
+User controls investment amount.
+
+Settings never reset.
+
+Activity panel explains every action or non-action.
+
+Tests pass.
+
+Deploy works.
