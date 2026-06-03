@@ -141,7 +141,13 @@ class RiskManager:
                            f"({len(ot)}/{self.settings.max_open_trades})")
 
         if last_trade_at is not None and self.settings.cooldown_seconds > 0:
-            elapsed = (datetime.now() - last_trade_at).total_seconds()
+            # tz-safe: match `now`'s awareness to `last_trade_at` so we never
+            # raise "can't compare offset-naive and offset-aware datetimes"
+            # (the dip path stores UTC-aware timestamps; legacy callers pass
+            # naive). Compare in whichever convention `last_trade_at` uses.
+            _now = datetime.now(last_trade_at.tzinfo) if last_trade_at.tzinfo \
+                else datetime.now()
+            elapsed = (_now - last_trade_at).total_seconds()
             if elapsed < self.settings.cooldown_seconds:
                 wait = int(self.settings.cooldown_seconds - elapsed)
                 return False, f"Cooldown active on {symbol} — {wait}s until next entry"

@@ -28,6 +28,11 @@ from exchanges import registry as ex_registry
 from symbol_worker import SymbolWorker
 import telegram_notifier as tg
 import diagnostics
+# ── 20-Minute Dip strategy (Task #11) — the ONLY live order path ─────────────
+# When TradingBot.dip_mode is True (default) the orchestrator runs this engine
+# per active symbol and NEVER touches the legacy worker.tick/execute_entry path.
+import live_settings
+from live_engine import DipLiveEngine
 try:
     # AUTO-DISABLE gate — the live bot refuses to auto-trade any
     # (strategy, timeframe) that a research run has not ACCEPTED as having a
@@ -527,9 +532,77 @@ class TradingBot:
         for _w in self.workers.values():
             _w._on_candidate = self._collect_candidate
 
+        # ── 20-Minute Dip strategy (Task #11) ────────────────────────────────
+        # When dip_mode is True the orchestrator runs ONLY the DipLiveEngine
+        # per symbol. The entire legacy decision stack above (score thresholds,
+        # confidence floors, GPT/AI veto, weighted scoring, ranking, anti-idle,
+        # validation/allowlist) is kept importable but never reached.
+        self.dip_mode: bool = True
+        self._dip_engines: Dict[str, DipLiveEngine] = {}
+        self._cooldown = live_settings.cooldown_store()
+
     def _collect_candidate(self, ev: Dict) -> None:
         with self._cand_lock:
             self._candidates.append(ev)
+
+    # ── 20-Minute Dip strategy (Task #11) ────────────────────────────────────
+    def _dip_engine_for(self, worker: SymbolWorker) -> DipLiveEngine:
+        """Build (once) and reuse a DipLiveEngine for a worker's exchange."""
+        key = f"{worker.exchange.name}:{worker.symbol}"
+        eng = self._dip_engines.get(key)
+        if eng is None:
+            eng = DipLiveEngine(
+                exchange      = worker.exchange,
+                on_log        = log_activity,
+                on_state      = _set_shared_for,
+                on_open_trade = add_trade,
+                close_fn      = worker._close_position,
+                cooldown      = self._cooldown,
+                manage_manual = worker.manage_manual_trades,
+            )
+            self._dip_engines[key] = eng
+        return eng
+
+    def _run_dip_cycle(self, refresh_fn) -> bool:
+        """Run the DipLiveEngine across all active symbols. Returns True if any
+        symbol placed a LIVE order this cycle."""
+        settings = live_settings.get_settings()
+        # Aggressive default ON ⇒ scan faster; calmer cadence when OFF.
+        self.check_every = 2 if settings.aggressive_on else 6
+
+        traded = False
+        for key, worker in list(self.workers.items()):
+            if not self._running:
+                break
+            all_open, daily_pct = refresh_fn()
+            exposure = sum((t.get("invested") or 0) for t in all_open)
+            emergency = bool(self.global_risk.settings.emergency_stop
+                             or getattr(worker.risk.settings, "emergency_stop", False))
+
+            def global_gate(invest: float, sym: str,
+                            _all=all_open, _dp=daily_pct):
+                return self.global_risk.check_global(
+                    all_open_trades = _all,
+                    new_invest_usdt = invest,
+                    new_symbol      = sym,
+                    daily_loss_pct  = _dp,
+                )
+            try:
+                rec = self._dip_engine_for(worker).evaluate(
+                    symbol           = worker.symbol,
+                    settings         = settings,
+                    open_trades      = all_open,
+                    current_exposure = exposure,
+                    global_gate_fn   = global_gate,
+                    daily_loss_pct   = daily_pct,
+                    emergency_stop   = emergency,
+                )
+                if rec.traded:
+                    traded = True
+                    worker._session_trades += 1
+            except Exception as exc:
+                log_activity("ERROR", f"Dip engine {key} crashed: {exc}")
+        return traded
 
     # ── Control ──────────────────────────────────────────────────────────────
     def start(self) -> bool:
@@ -654,6 +727,30 @@ class TradingBot:
                                      for w in self.workers.values()}))
             print(f"[BOT] ACTIVE SCAN {_syms} | open={len(all_open)} "
                   f"| daily_pnl={daily_pct:+.2f}%", flush=True)
+
+            # ── 20-Minute Dip strategy (Task #11) — ONLY live path ───────────
+            # Run the DipLiveEngine per symbol and skip the entire legacy
+            # Phase A/B/C decision stack below (kept importable but unreached).
+            if getattr(self, "dip_mode", True):
+                try:
+                    if self._run_dip_cycle(_refresh_global_state):
+                        self._last_trade_executed_at = datetime.now()
+                        self._last_global_trade_at   = time.time()
+                except Exception as exc:
+                    log_activity("ERROR", f"Dip cycle crashed: {exc}")
+                # Daily-loss breaker still applies (safety).
+                _, _dp = _refresh_global_state()
+                if _dp <= -abs(self.global_risk.settings.max_daily_loss_pct):
+                    log_activity("WARNING",
+                        f"🛑 Auto-stopping — daily loss {_dp:+.2f}% ≤ "
+                        f"−{self.global_risk.settings.max_daily_loss_pct}%")
+                    self._running = False
+                    break
+                for _ in range(self.check_every):
+                    if not self._running:
+                        break
+                    time.sleep(1)
+                continue
 
             # ── Auto ghost-trade reconciliation (every 5 min) ────────────
             # Close LOCAL open trades that no longer exist on Binance. Safe +

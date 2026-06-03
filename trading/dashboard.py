@@ -47,6 +47,8 @@ if _DIR not in sys.path:
 
 import bot as bot_module
 import aggressive_mode as am
+import live_settings
+import live_engine
 import diagnostics
 from bot import (
     load_trades, load_activity, get_open_trades,
@@ -842,6 +844,16 @@ if not st.session_state.get("_settings_loaded"):
     except Exception as _e:
         print(f"[AGGRO] mode load failed, using default: {_e}", flush=True)
         st.session_state.aggressive_mode = am.DEFAULT_MODE
+
+    # ── 20-Minute Dip strategy (Task #11): load PG-persisted live settings ──
+    # PostgreSQL is the source of truth for the dip strategy controls (size
+    # mode, limits, aggressive/safe toggles, thresholds). Falls back to the
+    # dataclass defaults if the DB is unavailable.
+    try:
+        st.session_state.live_settings = live_settings.get_settings()
+    except Exception as _e:
+        print(f"[LIVE-SETTINGS] load failed, using defaults: {_e}", flush=True)
+        st.session_state.live_settings = live_settings.LiveSettings()
 
     st.session_state._settings_loaded = True
     if _persisted:
@@ -2481,6 +2493,89 @@ with st.sidebar:
 
     # ── Global (account-wide) risk caps — applies across all symbols ──────────
     # ── 🔥 Aggressive Mode ────────────────────────────────────────────────────
+    with st.expander("💧 20-Minute Dip Strategy (LIVE)", expanded=True):
+        _ls = st.session_state.get("live_settings") or live_settings.LiveSettings()
+        st.caption(
+            f"**The only live strategy.** BUY when the 20-minute change ≤ "
+            f"**{_ls.buy_threshold_pct:.2f}%** · SELL at "
+            f"**+{_ls.take_profit_pct:.2f}%** profit · STOP-LOSS at "
+            f"**{_ls.stop_loss_pct:.2f}%** · then a **30-min** cooldown."
+        )
+        if not live_settings.db_available():
+            st.caption("⚠️ Database unavailable — settings use defaults and may "
+                       "not persist across restart.")
+
+        _modes = live_settings.SIZE_MODES
+        _mode_labels = {
+            live_settings.SIZE_AUTO:    "AUTO — bot picks % of free USDT",
+            live_settings.SIZE_FIXED:   "FIXED_USDT — fixed $ per trade",
+            live_settings.SIZE_PERCENT: "PORTFOLIO_PERCENT — % of free USDT",
+        }
+        _cur = live_settings.normalize_size_mode(_ls.size_mode)
+        _new_mode = st.selectbox(
+            "Position size mode", _modes,
+            index=_modes.index(_cur),
+            format_func=lambda m: _mode_labels.get(m, m),
+            key="dip_size_mode",
+        )
+        _ls.size_mode = _new_mode
+        if _new_mode == live_settings.SIZE_FIXED:
+            _ls.fixed_usdt_amount = float(st.number_input(
+                "Fixed amount per trade (USDT)",
+                min_value=10.0, value=float(_ls.fixed_usdt_amount), step=5.0,
+                key="dip_fixed_usdt",
+            ))
+        elif _new_mode == live_settings.SIZE_PERCENT:
+            _ls.portfolio_percent = float(st.slider(
+                "Portfolio % per trade", 1.0, 100.0,
+                float(_ls.portfolio_percent), 1.0, key="dip_portfolio_pct",
+            ))
+        else:
+            _ls.auto_percent = float(st.slider(
+                "AUTO base % of free USDT", 1.0, 75.0,
+                float(_ls.auto_percent), 1.0, key="dip_auto_pct",
+            ))
+
+        st.markdown("**Limits**")
+        _ls.bot_spending_limit_usdt = float(st.number_input(
+            "Bot spending limit (USDT, 0 = off)",
+            min_value=0.0, value=float(_ls.bot_spending_limit_usdt), step=10.0,
+            help="Max total USDT the bot may have deployed across all open "
+                 "trades at once.", key="dip_spend_limit",
+        ))
+        _ls.max_position_size_usdt = float(st.number_input(
+            "Max position size (USDT, 0 = off)",
+            min_value=0.0, value=float(_ls.max_position_size_usdt), step=10.0,
+            help="Hard cap on a single trade's notional.", key="dip_max_pos",
+        ))
+        _ls.min_trade_size_usdt = float(st.number_input(
+            "Min trade size (USDT)",
+            min_value=10.0, value=float(_ls.min_trade_size_usdt), step=1.0,
+            help="Binance min-notional is ~$10.", key="dip_min_pos",
+        ))
+
+        _c1, _c2 = st.columns(2)
+        with _c1:
+            _ls.aggressive_on = st.checkbox(
+                "🔥 Aggressive", value=bool(_ls.aggressive_on),
+                key="dip_aggressive",
+                help="ON (default): scan every 2s. OFF: calmer 6s cadence.",
+            )
+        with _c2:
+            _ls.safe_mode = st.checkbox(
+                "🛡️ Safe mode", value=bool(_ls.safe_mode),
+                key="dip_safe_mode",
+                help="ON: bot opens NO new trades (existing TP/SL still run).",
+            )
+
+        if st.button("💾 Save dip settings", key="dip_save", use_container_width=True):
+            st.session_state.live_settings = _ls
+            if live_settings.save_settings(_ls, actor="dashboard"):
+                st.success("Saved to database.")
+            else:
+                st.warning("Saved in session only — database unavailable.")
+        st.session_state.live_settings = _ls
+
     with st.expander("🔥 Aggressive Mode", expanded=False):
         _cur_mode = am.normalize_mode(st.session_state.get("aggressive_mode"))
         _sel_mode = st.selectbox(
@@ -4100,6 +4195,36 @@ with st.container():
                 )
 
         with tab_a:
+            # ── 💧 Dip strategy — per-symbol live decision panel ───────────────
+            try:
+                _dip_acts = live_engine.get_all_activity()
+            except Exception:
+                _dip_acts = []
+            if _dip_acts:
+                st.markdown("**💧 20-Minute Dip — live decisions**")
+                _cols = st.columns(min(len(_dip_acts), 3))
+                for _i, _rec in enumerate(_dip_acts):
+                    with _cols[_i % len(_cols)]:
+                        _chg = _rec.change_pct
+                        _chg_cls = "up" if (_chg is not None and _chg >= 0) else "dn"
+                        _chg_txt = f"{_chg:+.3f}%" if _chg is not None else "—"
+                        _px = f"${_rec.price:,.4f}" if _rec.price else "—"
+                        _ago = f"${_rec.price_20m_ago:,.4f}" if _rec.price_20m_ago else "—"
+                        _amt = (f"${_rec.amount:,.2f}"
+                                if getattr(_rec, "amount", None) else "—")
+                        st.markdown(
+                            f'<div class="card">'
+                            f'<div class="c-lbl">{_rec.symbol}</div>'
+                            f'<div class="c-val {_chg_cls}">{_chg_txt}</div>'
+                            f'<div style="font-size:11px;color:#8b949e;">'
+                            f'now {_px} · 20m ago {_ago}<br>'
+                            f'decision <b>{_rec.decision}</b> · size {_amt}<br>'
+                            f'{(_rec.reason or "")[:80]}'
+                            f'</div></div>',
+                            unsafe_allow_html=True,
+                        )
+                st.markdown("---")
+
             ac1, ac2 = st.columns([8, 1])
             with ac2:
                 if st.button("🗑 Clear", width="stretch"):
