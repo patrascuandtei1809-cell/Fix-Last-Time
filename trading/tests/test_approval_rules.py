@@ -164,11 +164,15 @@ def test_no_sub_4h_cell_is_approved():
 
 
 def test_only_v2_4h_is_accepted_in_leaderboard():
-    """Over multi-year history exactly ONE cell clears the canonical after-fee
-    bar: EMA/MACD/RSI/Volume V2 @ 4h. Nothing else may slip through."""
+    """Over multi-year history exactly ONE *directional* cell clears the canonical
+    after-fee bar: EMA/MACD/RSI/Volume V2 @ 4h. Nothing else may slip through.
+
+    The delta-neutral CARRY cells (kind=="carry") are a separate cash-flow study,
+    not directional leaderboard entries, and have their own accept/reject + live-
+    exclusion coverage in test_carry.py — so they are filtered out here."""
     doc = json.load(open(LATEST))
     accepted = [(c["strategy_key"], c["interval"]) for c in doc["cells"]
-                if c["verdict"] == "ACCEPT"]
+                if c["verdict"] == "ACCEPT" and c.get("kind") != "carry"]
     assert accepted == [("ema_macd_rsi_vol_v2", "4h")]
     assert doc["edge_found"] is True
 

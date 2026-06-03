@@ -475,6 +475,90 @@ def fetch_okx_candles(symbol: str, interval: str, days: int, kind: str,
     return df
 
 
+# USDⓈ-M perpetual klines from the same public archive as the funding dumps.
+# Reachable from Replit (the static archive is NOT geo-blocked like the live
+# fapi.binance.com API — 451) and covers ~5y (BTC/ETH 2020-08, SOL 2020-09).
+# Same monthly partitioning as the fundingRate dumps, so a multi-year carry can
+# pair the EXACT Binance perp it shorts (price leg) with the EXACT Binance perp
+# funding it harvests — a clean SINGLE-VENUE Binance study, no OKX cross-pairing.
+BINANCE_VISION_KLINES = (
+    "https://data.binance.vision/data/futures/um/monthly/klines/"
+    "{sym}/{interval}/{sym}-{interval}-{ym}.zip"
+)
+
+
+def fetch_binance_vision_perp_klines(symbol: str, interval: str, days: int,
+                                     use_cache: bool = True) -> pd.DataFrame:
+    """Download monthly USDⓈ-M perpetual klines from `data.binance.vision`.
+
+    Multi-year capable (same archive as the fundingRate dumps). Returns a
+    DataFrame [open_time(ms), close] sorted oldest→newest, cached to CSV per
+    (symbol, interval, days). Months before the archive's start (404) are skipped
+    silently. The current partial month is excluded (same `_funding_months` rule
+    as funding — monthly dumps only publish once the month is complete).
+    """
+    os.makedirs(DATA_DIR, exist_ok=True)
+    cache = os.path.join(DATA_DIR, f"vision_perp_{symbol}_{interval}_{days}d.csv")
+    if use_cache and os.path.exists(cache):
+        age_h = (time.time() - os.path.getmtime(cache)) / 3600
+        if age_h < 12:
+            df = pd.read_csv(cache)
+            print(f"  [cache] vision perp {symbol} {interval} {len(df)} candles "
+                  f"({age_h:.1f}h old)")
+            return df
+
+    months = _funding_months(days)
+    cutoff_ms = int((time.time() - days * 86400) * 1000)
+    rows: list = []
+    print(f"  [fetch] perp klines {symbol} {interval} from Binance Vision "
+          f"(~{days}d, {len(months)} monthly dumps)…")
+    for ym in months:
+        url = BINANCE_VISION_KLINES.format(sym=symbol, interval=interval, ym=ym)
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=30) as r:
+                raw = r.read()
+        except Exception as e:
+            if getattr(e, "code", None) == 404:
+                continue  # month predates the archive — expected, skip
+            print(f"  [warn] perp kline dump {ym} failed ({e}); skipping")
+            continue
+        try:
+            z = zipfile.ZipFile(io.BytesIO(raw))
+            text = z.read(z.namelist()[0]).decode()
+        except Exception as e:
+            print(f"  [warn] perp kline dump {ym} unreadable ({e}); skipping")
+            continue
+        for i, line in enumerate(text.splitlines()):
+            if not line:
+                continue
+            if i == 0 and line.lower().startswith("open_time"):
+                continue  # newer dumps carry a header row
+            parts = line.split(",")
+            if len(parts) < 5:
+                continue
+            try:
+                ts = int(float(parts[0]))
+                if ts > 1e14:          # defensive: normalize µs → ms if ever seen
+                    ts //= 1000
+                rows.append((ts, float(parts[4])))  # parts[4] = close
+            except ValueError:
+                continue
+        time.sleep(0.05)  # be polite to the public archive
+    if not rows:
+        raise RuntimeError(f"No Binance Vision perp klines fetched for {symbol}")
+    df = (pd.DataFrame(rows, columns=["open_time", "close"])
+            .drop_duplicates(subset="open_time")
+            .sort_values("open_time")
+            .reset_index(drop=True))
+    df = df[df["open_time"] >= cutoff_ms].reset_index(drop=True)
+    df.to_csv(cache, index=False)
+    print(f"  [ok] vision perp {symbol} {len(df)} candles "
+          f"({_fmt_ts(int(df.open_time.iloc[0]))} → "
+          f"{_fmt_ts(int(df.open_time.iloc[-1]))})")
+    return df
+
+
 def _merge_aux_ratio(df: pd.DataFrame, aux: pd.DataFrame,
                      col: str) -> pd.DataFrame:
     """As-of merge an OKX aux close onto each candle and compute the fractional
@@ -552,9 +636,14 @@ def carry_pnl(spot_df: pd.DataFrame, perp_df: pd.DataFrame,
     """
     if spot_df is None or perp_df is None or len(spot_df) < 2 or len(perp_df) < 2:
         return {"held": False, "error": "insufficient candles"}
+    # Accept either the OKX frame's `okx_close` (single-venue ~92d carry) or a
+    # plain `close` column (Binance spot via fetch_klines / Binance Vision perp
+    # klines used by the multi-year carry) — same math either way.
+    sc = "okx_close" if "okx_close" in spot_df.columns else "close"
+    pc = "okx_close" if "okx_close" in perp_df.columns else "close"
     m = pd.merge(
-        spot_df.rename(columns={"okx_close": "spot"})[["open_time", "spot"]],
-        perp_df.rename(columns={"okx_close": "perp"})[["open_time", "perp"]],
+        spot_df.rename(columns={sc: "spot"})[["open_time", "spot"]],
+        perp_df.rename(columns={pc: "perp"})[["open_time", "perp"]],
         on="open_time", how="inner",
     ).sort_values("open_time").reset_index(drop=True)
     if len(m) < 2:

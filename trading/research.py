@@ -920,14 +920,32 @@ def run_carry_symbol(symbol: str, *, days: int = CARRY_DAYS,
                      interval: str = CARRY_INTERVAL,
                      spot_fee: float = CARRY_SPOT_FEE,
                      perp_fee: float = CARRY_PERP_FEE, slip: float = DEFAULT_SLIP,
-                     use_cache: bool = True) -> Dict:
-    """Fetch OKX perp+spot+funding for one symbol and accumulate the carry hold."""
-    perp = backtest.fetch_okx_candles(symbol, interval, days, "SWAP",
-                                      use_cache=use_cache)
-    spot = backtest.fetch_okx_candles(symbol, interval, days, "SPOT",
-                                      use_cache=use_cache)
-    funding = backtest.fetch_funding_rates(symbol, days, use_cache=use_cache,
-                                           source="okx")
+                     use_cache: bool = True, source: str = "okx") -> Dict:
+    """Fetch perp+spot+funding for one symbol and accumulate the carry hold.
+
+    `source`:
+      • "okx" (default) — OKX single-venue over the ~92d OKX-reachable window:
+        OKX perp (SWAP) + OKX spot + OKX funding (the funding harvested comes from
+        the SAME perp shorted).
+      • "binance_vision" — Binance single-venue MULTI-YEAR: Binance spot klines
+        (fetch_klines) + Binance USDⓈ-M perp klines (data.binance.vision) +
+        Binance perp funding (data.binance.vision). Pairs the EXACT perp shorted
+        with the EXACT funding harvested over ~5y, matching the directional
+        funding sweep's window/venue.
+    """
+    if source == "binance_vision":
+        spot = backtest.fetch_klines(symbol, interval, days, use_cache=use_cache)
+        perp = backtest.fetch_binance_vision_perp_klines(symbol, interval, days,
+                                                         use_cache=use_cache)
+        funding = backtest.fetch_funding_rates(symbol, days, use_cache=use_cache,
+                                               source="auto")
+    else:
+        perp = backtest.fetch_okx_candles(symbol, interval, days, "SWAP",
+                                          use_cache=use_cache)
+        spot = backtest.fetch_okx_candles(symbol, interval, days, "SPOT",
+                                          use_cache=use_cache)
+        funding = backtest.fetch_funding_rates(symbol, days, use_cache=use_cache,
+                                               source="okx")
     res = backtest.carry_pnl(spot, perp, funding,
                              spot_fee_pct=spot_fee, perp_fee_pct=perp_fee,
                              slip_pct=slip)
@@ -971,8 +989,22 @@ def _carry_verdict(results: List[Dict]) -> Tuple[str, List[str]]:
     return "ACCEPT", reasons
 
 
+_CARRY_OKX_NOTE = (
+    "CARRY / CASH-FLOW STUDY — delta-neutral long spot + short perp, "
+    "harvesting OKX perp funding (NOT a directional price bet, NOT the "
+    "rejected basis_*/xspread_* signals). Single-venue OKX over the "
+    "~92d OKX-reachable window. 'net_exp%' = mean NET carry per hold "
+    "(funding + basis − four-leg fees). Excluded from the live "
+    "directional allowlist by design."
+)
+
+
 def build_carry_cell(results: List[Dict], *, interval: str,
-                     spot_fee: float, perp_fee: float, slip: float) -> Dict:
+                     spot_fee: float, perp_fee: float, slip: float,
+                     strategy_key: str = "carry_okx_delta_neutral",
+                     strategy: str = "Delta-Neutral Carry (long spot + short perp)",
+                     signal_name: str = "Delta-Neutral Carry",
+                     note: str = _CARRY_OKX_NOTE) -> Dict:
     """Assemble the carry results into a report cell (same shape as a spec cell).
 
     Tagged `kind=="carry"` so it sits alongside the directional verdicts in the
@@ -1012,9 +1044,9 @@ def build_carry_cell(results: List[Dict], *, interval: str,
 
     return {
         "kind":         "carry",
-        "strategy_key": "carry_okx_delta_neutral",
-        "strategy":     "Delta-Neutral Carry (long spot + short perp)",
-        "signal_name":  "Delta-Neutral Carry",
+        "strategy_key": strategy_key,
+        "strategy":     strategy,
+        "signal_name":  signal_name,
         "interval":     interval,
         "exit_policy":  {"model": "buy-and-hold carry, 4 taker legs",
                          "spot_fee_pct": spot_fee, "perp_fee_pct": perp_fee,
@@ -1033,32 +1065,61 @@ def build_carry_cell(results: List[Dict], *, interval: str,
         "verdict_reasons": reasons,
         "errors":       [f"{r['symbol']}: {r.get('error')}"
                          for r in results if not r.get("held")],
-        "note": "CARRY / CASH-FLOW STUDY — delta-neutral long spot + short perp, "
-                "harvesting OKX perp funding (NOT a directional price bet, NOT the "
-                "rejected basis_*/xspread_* signals). Single-venue OKX over the "
-                "~92d OKX-reachable window. 'net_exp%' = mean NET carry per hold "
-                "(funding + basis − four-leg fees). Excluded from the live "
-                "directional allowlist by design.",
+        "note": note,
     }
+
+
+# ── Multi-year carry (Task #17) ──────────────────────────────────────────────
+# The OKX carry above is bounded to ~92d (OKX history-candle cap). A short window
+# could in principle hide a longer-horizon carry regime, so this variant confirms
+# the result over the FULL multi-year window the directional funding sweep uses.
+# It is a CLEAN single-venue Binance study: long Binance spot (fetch_klines) +
+# short Binance USDⓈ-M perp (data.binance.vision klines) + harvest Binance perp
+# funding (data.binance.vision) — the EXACT perp shorted paired with the EXACT
+# funding harvested, over ~5y. 1d candles: a buy-and-hold carry only needs t0/tN
+# + the 8h funding settlements in between, so daily granularity is sufficient and
+# keeps the spot fetch light (5y of intraday candles buys nothing for one hold).
+CARRY_MY_DAYS     = 1825    # ~5y — same window as the directional funding sweep
+CARRY_MY_INTERVAL = "1d"    # buy-and-hold price leg granularity (label only)
+_CARRY_MY_NOTE = (
+    "CARRY / CASH-FLOW STUDY (MULTI-YEAR) — delta-neutral long spot + short perp "
+    "over ~5y. Single-venue BINANCE: Binance spot klines + Binance USDⓈ-M perp "
+    "klines + Binance perp funding (all from data.binance.vision). Pairs the EXACT "
+    "perp shorted with the EXACT funding harvested over the SAME multi-year window "
+    "the directional funding sweep uses. 'net_exp%' = mean NET carry per hold "
+    "(funding + basis − four-leg fees). NOT a directional bet; excluded from the "
+    "live directional allowlist by design."
+)
 
 
 def run_carry(*, symbols=CARRY_SYMBOLS, days: int = CARRY_DAYS,
               interval: str = CARRY_INTERVAL, spot_fee: float = CARRY_SPOT_FEE,
               perp_fee: float = CARRY_PERP_FEE, slip: float = DEFAULT_SLIP,
               use_cache: bool = True, persist: bool = True,
-              merge_latest: bool = True) -> Dict:
+              merge_latest: bool = True, source: str = "okx",
+              strategy_key: str = "carry_okx_delta_neutral",
+              strategy: str = "Delta-Neutral Carry (long spot + short perp)",
+              signal_name: str = "Delta-Neutral Carry",
+              note: str = _CARRY_OKX_NOTE,
+              venue_label: str = "OKX single-venue",
+              window_label: Optional[str] = None) -> Dict:
     """Run the carry study for all symbols and MERGE it into the canonical report.
 
-    Carry is fast to compute (a handful of OKX fetches) so it runs standalone and,
-    by default, merges into latest.json via run_research(extra_cells=[…]) so the
-    full directional sweep is preserved (the carry cell is added/replaced, nothing
-    else is clobbered).
+    Carry is a handful of data fetches, so it runs standalone and, by default,
+    merges into latest.json via run_research(extra_cells=[…]) so the full
+    directional sweep is preserved (the carry cell is added/replaced, nothing else
+    is clobbered).
+
+    `source` ∈ {"okx" (~92d), "binance_vision" (~5y multi-year)} selects which
+    data legs `run_carry_symbol` fetches; the label/strategy_key kwargs tag the
+    resulting cell so the OKX and multi-year studies coexist in the report.
     """
+    win = window_label or f"~{days}d window"
     print("=" * 76)
     print("AlphaTrade DELTA-NEUTRAL CARRY study — harvest the perp-vs-spot gap")
     print("=" * 76)
-    print(f"long spot + short perp (delta-neutral) · OKX single-venue · ~{days}d "
-          f"window · {interval} candles")
+    print(f"long spot + short perp (delta-neutral) · {venue_label} · {win} "
+          f"· {interval} candles")
     print(f"fees: spot {spot_fee}%/side · perp {perp_fee}%/side · slip {slip}%/side "
           f"→ 4 legs = {2*(spot_fee+slip)+2*(perp_fee+slip):.2f}% one-time")
     print("-" * 76)
@@ -1067,7 +1128,7 @@ def run_carry(*, symbols=CARRY_SYMBOLS, days: int = CARRY_DAYS,
         try:
             r = run_carry_symbol(sym, days=days, interval=interval,
                                  spot_fee=spot_fee, perp_fee=perp_fee, slip=slip,
-                                 use_cache=use_cache)
+                                 use_cache=use_cache, source=source)
         except Exception as e:
             print(f"  [skip] {sym}: {e}")
             results.append({"symbol": sym, "held": False, "error": str(e)})
@@ -1084,14 +1145,16 @@ def run_carry(*, symbols=CARRY_SYMBOLS, days: int = CARRY_DAYS,
         results.append(r)
 
     cell = build_carry_cell(results, interval=interval, spot_fee=spot_fee,
-                            perp_fee=perp_fee, slip=slip)
+                            perp_fee=perp_fee, slip=slip,
+                            strategy_key=strategy_key, strategy=strategy,
+                            signal_name=signal_name, note=note)
     mark = "🟢 ACCEPT" if cell["verdict"] == "ACCEPT" else "🔴 REJECT"
     print("-" * 76)
     print(f"CARRY VERDICT: {mark} — {cell['verdict_reasons'][0]}")
     if cell["verdict"] != "ACCEPT":
         print("Honest outcome: harvesting the perp-vs-spot carry does NOT reliably "
-              "beat costs over the OKX-reachable window. This is a cash-flow result, "
-              "separate from (and consistent with) the rejected directional probes.")
+              f"beat costs over the {win}. This is a cash-flow result, separate "
+              "from (and consistent with) the rejected directional probes.")
     print("=" * 76)
 
     if persist:
@@ -1100,6 +1163,31 @@ def run_carry(*, symbols=CARRY_SYMBOLS, days: int = CARRY_DAYS,
                             persist=True, merge_latest=merge_latest,
                             extra_cells=[cell])
     return {"cells": [cell], "carry_verdict": cell["verdict"]}
+
+
+def run_carry_multiyear(*, symbols=CARRY_SYMBOLS, days: int = CARRY_MY_DAYS,
+                        interval: str = CARRY_MY_INTERVAL,
+                        spot_fee: float = CARRY_SPOT_FEE,
+                        perp_fee: float = CARRY_PERP_FEE, slip: float = DEFAULT_SLIP,
+                        use_cache: bool = True, persist: bool = True,
+                        merge_latest: bool = True) -> Dict:
+    """Multi-year (~5y) delta-neutral carry over Binance single-venue data.
+
+    Confirms the OKX ~92d carry REJECT over the FULL window the directional funding
+    sweep uses, so the no-edge conclusion is airtight over a complete market cycle.
+    Merges its own `kind=="carry"` cell into latest.json alongside the OKX carry —
+    distinct `strategy_key`, never wired live.
+    """
+    return run_carry(
+        symbols=symbols, days=days, interval=interval, spot_fee=spot_fee,
+        perp_fee=perp_fee, slip=slip, use_cache=use_cache, persist=persist,
+        merge_latest=merge_latest, source="binance_vision",
+        strategy_key="carry_binance_multiyear_delta_neutral",
+        strategy="Delta-Neutral Carry (Binance, ~5y)",
+        signal_name="Delta-Neutral Carry (multi-year)",
+        note=_CARRY_MY_NOTE, venue_label="Binance single-venue (multi-year)",
+        window_label=f"~{days}d (~{days/365:.0f}y) window",
+    )
 
 
 if __name__ == "__main__":
@@ -1118,9 +1206,17 @@ if __name__ == "__main__":
                     help="run the DELTA-NEUTRAL CARRY study (long spot + short "
                          "perp, harvest funding) and merge it into latest.json — a "
                          "cash-flow test, separate from the directional sweep")
+    ap.add_argument("--carry-multiyear", action="store_true",
+                    help="run the MULTI-YEAR (~5y) delta-neutral carry over Binance "
+                         "single-venue data (spot + UM perp + funding from "
+                         "data.binance.vision) and merge it into latest.json — "
+                         "confirms the carry result over a full market cycle")
     args = ap.parse_args()
 
-    if args.carry:
+    if args.carry_multiyear:
+        run_carry_multiyear(slip=args.slippage, use_cache=not args.no_cache,
+                            persist=not args.no_persist, merge_latest=True)
+    elif args.carry:
         # Carry runs standalone and merges into the canonical report by default,
         # so the directional sweep is preserved and not re-run.
         run_carry(slip=args.slippage, use_cache=not args.no_cache,
