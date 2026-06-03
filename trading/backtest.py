@@ -50,12 +50,14 @@ from __future__ import annotations
 
 import argparse
 import os
+import io
 import sys
 import time
 import json
+import zipfile
 import urllib.request
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Optional, Tuple
 
 import numpy as np
@@ -178,14 +180,23 @@ def fetch_klines(symbol: str, interval: str, days: int,
 # ─────────────────────────────────────────────────────────────────────────────
 # Funding-rate data (alternative edge source — perpetual-swap positioning)
 # ─────────────────────────────────────────────────────────────────────────────
-# Binance futures (fapi.binance.com) is geo-blocked from Replit (HTTP 451), so
-# we source 8h funding history from OKX's public market-data API, which IS
-# reachable and serves per-asset SWAP funding. We pair OKX perp funding (the
-# market-wide positioning signal) with the Binance spot candles the bot actually
-# trades. Funding is a market-wide sentiment read, so the cross-venue pairing is
-# acceptable for this exploratory study (and noted honestly in the verdict).
+# PRIMARY (multi-year): Binance's public data archive `data.binance.vision` ships
+# monthly USDⓈ-M perpetual `fundingRate` dumps reachable from Replit (the static
+# archive is NOT geo-blocked the way the live `fapi.binance.com` API is — 451).
+# Coverage runs from 2020-08 (SOL from 2020-09) up to the last COMPLETE month, so
+# this is a true MULTI-YEAR, SINGLE-VENUE proof: Binance perp funding paired with
+# the Binance spot candles the bot actually trades (no cross-venue pairing).
+#
+# FALLBACK (recent ~92d only): OKX's `funding-rate-history` REST endpoint, which
+# is also Replit-reachable but caps at ~92 days and is a different venue. Used
+# only if the Vision archive yields nothing (e.g. archive outage), so an
+# exploratory short-window run still works.
+BINANCE_VISION_FUNDING = (
+    "https://data.binance.vision/data/futures/um/monthly/fundingRate/"
+    "{sym}/{sym}-fundingRate-{ym}.zip"
+)
 OKX_FUNDING_HOST = "https://www.okx.com"
-# Binance spot symbol → OKX SWAP instrument id.
+# Binance spot symbol → OKX SWAP instrument id (fallback source only).
 _OKX_INST = {
     "BTCUSDT": "BTC-USDT-SWAP",
     "ETHUSDT": "ETH-USDT-SWAP",
@@ -200,29 +211,74 @@ def _okx_inst_id(symbol: str) -> str:
     return f"{base}-USDT-SWAP"
 
 
-def fetch_funding_rates(symbol: str, days: int,
-                        use_cache: bool = True) -> pd.DataFrame:
-    """Fetch ~`days` of settled 8h funding rates from OKX, paginating backward.
+def _funding_months(days: int) -> List[str]:
+    """`YYYY-MM` strings from (now-`days`) back through the last COMPLETE month.
 
-    Returns a DataFrame [funding_time(ms), funding_rate(fraction per 8h)] sorted
-    oldest→newest. Cached to CSV per (symbol, days). The rate is the realized
-    8h funding; `funding_time` is when it SETTLED (so using it for candles whose
-    open_time ≥ funding_time introduces no look-ahead).
+    The current (partial) month is excluded because Binance only publishes a
+    monthly dump once the month is finished (there is no daily fundingRate feed).
     """
-    os.makedirs(DATA_DIR, exist_ok=True)
-    inst = _okx_inst_id(symbol)
-    cache = os.path.join(DATA_DIR, f"funding_{symbol}_{days}d.csv")
-    if use_cache and os.path.exists(cache):
-        age_h = (time.time() - os.path.getmtime(cache)) / 3600
-        if age_h < 12:
-            df = pd.read_csv(cache)
-            print(f"  [cache] funding {symbol} {len(df)} rates ({age_h:.1f}h old)")
-            return df
+    now = datetime.now(timezone.utc)
+    start = now - timedelta(days=days)
+    months: List[str] = []
+    y, m = start.year, start.month
+    while (y < now.year) or (y == now.year and m < now.month):
+        months.append(f"{y:04d}-{m:02d}")
+        m += 1
+        if m > 12:
+            m, y = 1, y + 1
+    return months
 
-    cutoff_ms = int((time.time() - days * 86400) * 1000)
+
+def _fetch_funding_binance_vision(symbol: str, days: int) -> list:
+    """Download monthly perp-funding dumps from `data.binance.vision`.
+
+    Each zip holds a CSV `calc_time,funding_interval_hours,last_funding_rate`.
+    Returns [(funding_time_ms, funding_rate_fraction), …]. Months before the
+    archive's start (404) are skipped silently.
+    """
+    rows: list = []
+    months = _funding_months(days)
+    print(f"  [fetch] funding {symbol} from Binance Vision "
+          f"(~{days}d, {len(months)} monthly dumps)…")
+    for ym in months:
+        url = BINANCE_VISION_FUNDING.format(sym=symbol, ym=ym)
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=30) as r:
+                raw = r.read()
+        except Exception as e:
+            if getattr(e, "code", None) == 404:
+                continue  # month predates the archive — expected, skip
+            print(f"  [warn] funding dump {ym} failed ({e}); skipping")
+            continue
+        try:
+            z = zipfile.ZipFile(io.BytesIO(raw))
+            text = z.read(z.namelist()[0]).decode()
+        except Exception as e:
+            print(f"  [warn] funding dump {ym} unreadable ({e}); skipping")
+            continue
+        for i, line in enumerate(text.splitlines()):
+            if not line:
+                continue
+            if i == 0 and line.lower().startswith("calc_time"):
+                continue
+            parts = line.split(",")
+            if len(parts) < 3:
+                continue
+            try:
+                rows.append((int(parts[0]), float(parts[2])))
+            except ValueError:
+                continue
+        time.sleep(0.05)  # be polite to the public archive
+    return rows
+
+
+def _fetch_funding_okx(symbol: str, days: int, cutoff_ms: int) -> list:
+    """Fallback: paginate OKX `funding-rate-history` backward (~92d cap)."""
+    inst = _okx_inst_id(symbol)
     rows: list = []
     after = ""  # OKX cursor: returns records OLDER than this fundingTime
-    print(f"  [fetch] funding {inst} from OKX (~{days}d)…")
+    print(f"  [fetch] funding {inst} from OKX fallback (~{days}d)…")
     while True:
         url = (f"{OKX_FUNDING_HOST}/api/v5/public/funding-rate-history"
                f"?instId={inst}&limit=100")
@@ -245,16 +301,51 @@ def fetch_funding_rates(symbol: str, days: int,
         if oldest <= cutoff_ms or len(data) < 100:
             break
         time.sleep(0.12)  # be polite to the public endpoint
+    return rows
+
+
+def fetch_funding_rates(symbol: str, days: int,
+                        use_cache: bool = True) -> pd.DataFrame:
+    """Fetch ~`days` of settled 8h funding rates, multi-year capable.
+
+    Source priority: Binance Vision monthly archive (PRIMARY, multi-year,
+    single-venue) → OKX REST (FALLBACK, ~92d). Returns a DataFrame
+    [funding_time(ms), funding_rate(fraction per 8h)] sorted oldest→newest,
+    cached to CSV per (symbol, days). The rate is the realized 8h funding;
+    `funding_time` is when it SETTLED (so using it for candles whose
+    open_time ≥ funding_time introduces no look-ahead).
+    """
+    os.makedirs(DATA_DIR, exist_ok=True)
+    cache = os.path.join(DATA_DIR, f"funding_{symbol}_{days}d.csv")
+    if use_cache and os.path.exists(cache):
+        age_h = (time.time() - os.path.getmtime(cache)) / 3600
+        if age_h < 12:
+            df = pd.read_csv(cache)
+            print(f"  [cache] funding {symbol} {len(df)} rates ({age_h:.1f}h old)")
+            return df
+
+    cutoff_ms = int((time.time() - days * 86400) * 1000)
+    rows: list = []
+    source = "binance-vision"
+    try:
+        rows = _fetch_funding_binance_vision(symbol, days)
+    except Exception as e:
+        print(f"  [warn] Binance Vision funding fetch errored ({e}); "
+              f"falling back to OKX")
+        rows = []
+    if not rows:
+        source = "okx"
+        rows = _fetch_funding_okx(symbol, days, cutoff_ms)
 
     if not rows:
-        raise RuntimeError(f"No funding rates fetched for {inst}")
+        raise RuntimeError(f"No funding rates fetched for {symbol}")
     df = (pd.DataFrame(rows, columns=["funding_time", "funding_rate"])
             .drop_duplicates(subset="funding_time")
             .sort_values("funding_time")
             .reset_index(drop=True))
     df = df[df["funding_time"] >= cutoff_ms].reset_index(drop=True)
     df.to_csv(cache, index=False)
-    print(f"  [ok] funding {inst} {len(df)} rates "
+    print(f"  [ok] funding {symbol} {len(df)} rates via {source} "
           f"({_fmt_ts(int(df.funding_time.iloc[0]))} → "
           f"{_fmt_ts(int(df.funding_time.iloc[-1]))})")
     return df

@@ -111,8 +111,18 @@ class StrategySpec:
     needs_basis:   bool = False          # merge perp-vs-spot basis onto candles
     needs_xspread: bool = False          # merge cross-exchange spread onto candles
     periods:     Optional[List[int]] = None   # override SUITE_PERIODS for this spec
+    # Per-interval period override (e.g. run 4h/8h over a multi-year window but
+    # keep the coverage-only 5m cell short). Falls back to `periods` then SUITE.
+    tf_periods:  Optional[Dict[str, List[int]]] = None
     symbols:     Optional[List[str]] = None   # override SUITE_SYMBOLS for this spec
     note:        str   = ""
+
+    def period_for(self, interval: str, default: List[int]) -> List[int]:
+        """Resolve the period list for a given interval: per-interval override
+        wins, then the spec-wide `periods`, then the suite default."""
+        if self.tf_periods and interval in self.tf_periods:
+            return self.tf_periods[interval]
+        return self.periods or default
 
 
 # Candidate registry. The first entry is the CURRENT LIVE config (1m reversal
@@ -159,35 +169,38 @@ CANDIDATES: List[StrategySpec] = [
     # readings of the SAME signal source are tested honestly. Funding settles
     # every 8h → only higher timeframes make sense. block_regimes=() so the
     # funding edge is judged on its own, not gated by a price-regime filter.
-    # Data-history limit: the only Replit-reachable funding source (OKX, since
-    # Binance fapi is geo-blocked 451) serves ~92 days (3 months) of 8h funding.
-    # So periods are sized to that real window — single 90d period (1d candles
-    # would give too few bars). 4h & 8h are the economically-meaningful sweep
-    # timeframes; 5m is also included to honour the canonical-pipeline invariant
-    # that every HTF candidate sweeps 5m. NOTE: funding is a step function (one
-    # value per 8h), so at 5m the rolling z-score degenerates into a step-edge
-    # detector that fires whenever its window straddles an 8h funding change —
-    # economically meaningless, and it duly REJECTs. Kept for coverage parity,
-    # not as a real funding edge. Honest constraint, noted in the verdict: this
-    # is a SHORT-window probe, not a multi-year proof.
+    # MULTI-YEAR proof: funding history now comes from Binance's public data
+    # archive (data.binance.vision monthly fundingRate dumps), which IS reachable
+    # from Replit (only the live fapi.binance.com API is geo-blocked 451) and
+    # covers ~5 years (2020-08→last complete month). This is a CLEAN single-venue
+    # study — Binance perp funding paired with the Binance spot candles the bot
+    # trades — and a genuine multi-year window, not the old ~92d OKX probe (OKX
+    # remains a short-window fallback in backtest.fetch_funding_rates).
+    # 4h & 8h are the economically-meaningful cells, run over the full 5y window
+    # (tf_periods). 5m is included only to honour the canonical-pipeline invariant
+    # that every HTF candidate sweeps 5m, and is kept SHORT (90d) because funding
+    # is a step function (one value per 8h): at 5m the rolling z-score degenerates
+    # into a step-edge detector that fires whenever its window straddles an 8h
+    # funding change — economically meaningless, and it duly REJECTs. Running 5m
+    # over 5y would also fetch ~525k candles per symbol for no signal value.
     StrategySpec(
         key="funding_contrarian", name="Funding Contrarian (perp)",
         signal_name="Funding Contrarian", timeframes=["5m", "4h", "8h"],
         use_atr=True, arm_be=False, max_red=0,
         qualify_mode="signal", block_regimes=(), warmup_bars=60,
-        needs_funding=True, periods=[90],
+        needs_funding=True, periods=[1825], tf_periods={"5m": [90]},
         note="LONG when perp funding is unusually NEGATIVE (shorts over-crowded "
-             "→ squeeze). OKX perp funding paired with Binance spot candles; "
-             "ATR exits, no scalper exits.",
+             "→ squeeze). Binance perp funding (data.binance.vision, ~5y) paired "
+             "with Binance spot candles; ATR exits, no scalper exits.",
     ),
     StrategySpec(
         key="funding_momentum", name="Funding Momentum (perp)",
         signal_name="Funding Momentum", timeframes=["5m", "4h", "8h"],
         use_atr=True, arm_be=False, max_red=0,
         qualify_mode="signal", block_regimes=(), warmup_bars=60,
-        needs_funding=True, periods=[90],
+        needs_funding=True, periods=[1825], tf_periods={"5m": [90]},
         note="LONG when perp funding is unusually POSITIVE (crowd funding the "
-             "long → ride). Same data source as contrarian, opposite reading.",
+             "long → ride). Same data source as contrarian (~5y), opposite reading.",
     ),
     # ── ALTERNATIVE EDGE SOURCE: perp-vs-spot BASIS (NOT a price pattern) ──────
     # Basis = (perp_price − spot_price)/spot_price — perp premium/discount, a
@@ -582,7 +595,7 @@ def run_research(specs: Optional[List[StrategySpec]] = None, *,
     cells: List[Dict] = []
     for spec in specs:
         for interval in spec.timeframes:
-            _periods = spec.periods or periods
+            _periods = spec.period_for(interval, periods)
             _symbols = spec.symbols or symbols
             emit(f"\n▶ {spec.name}  @ {interval}  "
                  f"(symbols={','.join(_symbols)}  periods={_periods}d)")

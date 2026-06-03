@@ -35,17 +35,30 @@ whole sweep (+0.100%/trade, PF 1.06) but still REJECTs under the strict rule
 (per-cell breadth guard — ETH leg negative). Momentum sign and all 8h cells were
 clearly negative. Allowlist stayed empty; nothing wired live.
 
-**Why this is a short-window probe, not a proof:** Binance fapi funding is
-geo-blocked (451) from Replit. OKX `funding-rate-history` IS reachable (per-asset
-SWAP, 8h cadence) but caps at ~92 days. So the funding test is ~90d only, vs the
-multi-year technical sweep. Cross-source pairing (OKX perp funding merged onto
-Binance/`data-api.binance.vision` spot candles via `merge_asof` backward, no
-look-ahead) is acceptable for an exploratory study but not a clean single-venue
-backtest.
+**Now a MULTI-YEAR, SINGLE-VENUE proof (June 2026):** funding history is sourced
+from Binance's public data archive `data.binance.vision`
+(`/data/futures/um/monthly/fundingRate/<SYM>/<SYM>-fundingRate-YYYY-MM.zip`),
+which IS reachable from Replit even though the live `fapi.binance.com` API is
+geo-blocked (451). Coverage ≈5y (BTC/ETH from 2020-08, SOL 2020-09) up to the
+LAST COMPLETE month (no daily fundingRate dump exists, so the current partial
+month is excluded). CSV cols `calc_time,funding_interval_hours,last_funding_rate`
+(calc_time = settlement ms). This is a CLEAN single-venue study — Binance perp
+funding paired with Binance spot candles — not the old cross-venue OKX pairing.
+**Verdict over 5y is UNCHANGED: still 🔴 NO EDGE.** All 4h/8h/5m funding cells
+REJECT (best = Funding Momentum @8h, +0.368%/trade but 1/3 symbol legs negative
+→ per-cell breadth guard fails). The short window did not hide an edge.
 
-**Data-source reachability from Replit (futures/funding):** OKX = OK;
-Binance fapi = 451; Bybit = 403; binance.us = no futures; Kraken futures schema
-messy. Use OKX for any funding/basis probe.
+`backtest.fetch_funding_rates` now: Binance Vision (PRIMARY, multi-year) →
+OKX REST (FALLBACK, ~92d cap) if the archive yields nothing. Funding StrategySpecs
+run 4h/8h over `periods=[1825]`; the coverage-only 5m cell stays `tf_periods={"5m":[90]}`
+(funding is an 8h step function — 5m z-score is a meaningless step-edge detector,
+and 5y of 5m candles = ~525k bars/symbol for no signal). `StrategySpec.tf_periods`
++ `period_for(interval, default)` give per-interval period overrides.
+
+**Data-source reachability from Replit (futures/funding):** `data.binance.vision`
+static archive = OK (multi-year); OKX REST = OK (~92d cap); Binance fapi = 451;
+Bybit = 403; binance.us = no futures; Kraken futures schema messy. Prefer the
+Vision archive for any multi-year funding history; OKX only for short windows.
 
 ## latest.json must stay COMPLETE — use the merge path
 **Rule:** Running `research.py --only <subset>` OVERWRITES `latest.json` with
