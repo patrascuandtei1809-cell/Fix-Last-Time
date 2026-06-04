@@ -157,7 +157,15 @@ def test_drawdown_exactly_at_limit_still_allows_approval():
 def test_no_sub_4h_cell_is_approved():
     doc = json.load(open(LATEST))
     cells = doc["cells"]
-    sub_4h = [c for c in cells if c["interval"] in SUB_4H_INTERVALS]
+    # Carry cells (kind=="carry") are a delta-neutral cash-flow study, NOT
+    # directional timeframe strategies — their `interval` is only a price-leg
+    # candle label, so a buy-and-hold carry priced on 1h candles is not a "sub-4h
+    # directional cell". They have their own accept/reject + live-exclusion
+    # coverage in test_carry.py and are excluded from the live allowlist by `kind`
+    # regardless of verdict, so they are filtered out of this directional rule
+    # (mirrors test_only_v2_4h_is_accepted_in_leaderboard).
+    sub_4h = [c for c in cells
+              if c["interval"] in SUB_4H_INTERVALS and c.get("kind") != "carry"]
     assert sub_4h, "expected some 1m/15m/1h cells in the leaderboard"
     for c in sub_4h:
         assert c["verdict"] == "REJECT", (c["interval"], c.get("verdict_reasons"))

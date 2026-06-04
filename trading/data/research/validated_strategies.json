@@ -1,7 +1,7 @@
 {
-  "updated_at": "2026-06-03T21:12:57.051325+00:00",
+  "updated_at": "2026-06-03T21:25:00.681826+00:00",
   "fee_pct_per_side": 0.1,
-  "slippage_pct_per_side": 0.02,
+  "slippage_pct_per_side": 0.0,
   "validated": [
     {
       "strategy": "EMA_MACD_RSI_VOLUME_V2",

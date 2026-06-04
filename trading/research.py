@@ -1190,6 +1190,80 @@ def run_carry_multiyear(*, symbols=CARRY_SYMBOLS, days: int = CARRY_MY_DAYS,
     )
 
 
+# ── Maker-fee carry (Task #18) ───────────────────────────────────────────────
+# The taker carry pays four CROSSING legs — spot 0.10% + perp 0.05% per side, plus
+# 0.02% slippage each → ~0.38% one-time — and that 4-leg drag eats the thin funding
+# harvest over the ~92d OKX window (taker OKX carry REJECTs). The standing lesson
+# (funding-no-edge.md) is that a genuine basis/carry edge would have to be captured
+# at SUB-FEE cost — i.e. as RESTING MAKER orders. Maker orders pay much lower (often
+# near-zero or rebate) fees on perps AND do not cross the spread, so they pay ~no
+# slippage. This variant re-runs the SAME delta-neutral carry under maker-fill
+# assumptions to honestly answer: "does carry work if you DON'T cross the spread?".
+#
+# HONESTY CAVEAT: maker fills are NOT guaranteed. A resting leg may not fill at the
+# moment you want in/out (you give up immediacy for the cheaper fee). So an ACCEPT
+# under maker fees is CONDITIONAL on the assumed fills — it is flagged in the note
+# and printed at the verdict line, and (like every carry cell) it is NEVER promoted
+# to the live directional allowlist.
+CARRY_MAKER_SPOT_FEE = 0.075   # Binance spot maker (BNB-discounted) ≈0.075%/side
+CARRY_MAKER_PERP_FEE = 0.0     # USDⓈ-M perp maker ≈0%/side (rebate at higher VIP tiers)
+CARRY_MAKER_SLIP     = 0.0     # resting maker orders PROVIDE liquidity → no spread crossing
+_CARRY_MAKER_NOTE = (
+    "CARRY / CASH-FLOW STUDY (MAKER FILLS) — same delta-neutral long spot + short "
+    "perp carry as the taker baseline, but priced as RESTING MAKER orders: spot "
+    "maker ≈0.075%/side, perp maker ≈0%/side (rebate at higher tiers), ~0 slippage "
+    "because resting orders do not cross the spread (4 legs ≈0.15% vs ~0.38% taker). "
+    "'net_exp%' = mean NET carry per hold (funding + basis − maker fees). "
+    "CONDITIONAL: maker fills are NOT guaranteed — a resting leg may not fill when "
+    "you want in/out — so an ACCEPT here depends on the assumed maker fills. NOT a "
+    "directional bet; excluded from the live directional allowlist by design."
+)
+
+
+def run_carry_maker(*, symbols=CARRY_SYMBOLS, days: int = CARRY_DAYS,
+                    interval: str = CARRY_INTERVAL,
+                    spot_fee: float = CARRY_MAKER_SPOT_FEE,
+                    perp_fee: float = CARRY_MAKER_PERP_FEE,
+                    slip: float = CARRY_MAKER_SLIP,
+                    use_cache: bool = True, persist: bool = True,
+                    merge_latest: bool = True,
+                    include_taker_baseline: bool = True) -> Dict:
+    """Maker-fee delta-neutral carry — does carry pay off if you DON'T cross the spread?
+
+    Re-runs the OKX ~92d carry under RESTING MAKER fill assumptions (spot ≈0.075%,
+    perp ≈0%, ~0 slippage) and merges a distinct kind=="carry" cell
+    (strategy_key="carry_okx_delta_neutral_maker") into latest.json — NEVER wired
+    live. With include_taker_baseline (default), the taker baseline carry is re-run
+    in the SAME invocation first so both fee reads sit side by side in the report.
+    """
+    if include_taker_baseline:
+        # Refresh the taker baseline carry so both reads coexist even on a fresh
+        # report (the maker cell is merged alongside it, neither clobbers the other).
+        run_carry(symbols=symbols, days=days, interval=interval,
+                  spot_fee=CARRY_SPOT_FEE, perp_fee=CARRY_PERP_FEE,
+                  slip=DEFAULT_SLIP, use_cache=use_cache, persist=persist,
+                  merge_latest=merge_latest, source="okx")
+    out = run_carry(
+        symbols=symbols, days=days, interval=interval, spot_fee=spot_fee,
+        perp_fee=perp_fee, slip=slip, use_cache=use_cache, persist=persist,
+        merge_latest=merge_latest, source="okx",
+        strategy_key="carry_okx_delta_neutral_maker",
+        strategy="Delta-Neutral Carry (maker fills)",
+        signal_name="Delta-Neutral Carry (maker)",
+        note=_CARRY_MAKER_NOTE,
+        venue_label="OKX single-venue · MAKER fills",
+        window_label=f"~{days}d window · MAKER fees",
+    )
+    maker_cells = [c for c in out.get("cells", [])
+                   if c.get("strategy_key") == "carry_okx_delta_neutral_maker"]
+    if maker_cells and maker_cells[0]["verdict"] == "ACCEPT":
+        print("⚠️  MAKER CARRY ACCEPTS — but ONLY under RESTING MAKER FILLS, which "
+              "are NOT guaranteed (a leg may not fill when you want in/out). The "
+              "edge is conditional on that assumption. Carry stays EXCLUDED from "
+              "the live directional allowlist.")
+    return out
+
+
 if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser(description="AlphaTrade strategy research sweep")
@@ -1211,9 +1285,18 @@ if __name__ == "__main__":
                          "single-venue data (spot + UM perp + funding from "
                          "data.binance.vision) and merge it into latest.json — "
                          "confirms the carry result over a full market cycle")
+    ap.add_argument("--carry-maker", action="store_true",
+                    help="run the MAKER-FEE delta-neutral carry (spot ~0.075%%, perp "
+                         "~0%%, ~0 slippage as RESTING orders) ALONGSIDE the taker "
+                         "baseline and merge both into latest.json — tests whether "
+                         "carry pays off if you don't cross the spread (an ACCEPT is "
+                         "CONDITIONAL on maker fills; still never wired live)")
     args = ap.parse_args()
 
-    if args.carry_multiyear:
+    if args.carry_maker:
+        run_carry_maker(slip=CARRY_MAKER_SLIP, use_cache=not args.no_cache,
+                        persist=not args.no_persist, merge_latest=True)
+    elif args.carry_multiyear:
         run_carry_multiyear(slip=args.slippage, use_cache=not args.no_cache,
                             persist=not args.no_persist, merge_latest=True)
     elif args.carry:

@@ -73,6 +73,16 @@ perps lean short-funded — so SOL carry loses on both horizons.
   the 5m-coverage / timeframe lock-in tests — inject it as an extra cell instead.
   (2) `run_research(specs=[])` must run NOTHING; the old `specs or CANDIDATES`
   treated `[]` as falsy and ran the FULL sweep — guard with `specs is None`.
+**Maker-fee carry (does it work if you DON'T cross the spread?):** the taker carry
+pays 4 CROSSING legs (~0.38% one-time). Re-priced as RESTING MAKER orders (spot
+≈0.075%, perp ≈0% rebate, ~0 slippage → ~0.15% over 4 legs), the OKX ~92d carry
+FLIPS from REJECT (mean −0.129%/hold) to a MARGINAL ACCEPT (mean **+0.101%/hold**).
+So the thin funding harvest only clears costs once you stop crossing the spread —
+which validates the standing "capture at sub-fee cost" lesson, but the ACCEPT is
+**CONDITIONAL on maker fills that are NOT guaranteed** (a resting leg may not fill
+when you want in/out). `research.run_carry_maker` (`--carry-maker`) runs maker +
+taker baseline together so both reads sit in latest.json (cell
+`carry_okx_delta_neutral_maker`). Still `kind=="carry"` → never wired live.
 - **An ACCEPT here still NEVER goes live.** Carry cells are excluded from the
   directional allowlist by `kind` (asserted in test_carry.py), AND the live bot is
   SPOT-only — it physically cannot short a perp, so a delta-neutral carry is not

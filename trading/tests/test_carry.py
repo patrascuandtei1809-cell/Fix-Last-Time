@@ -167,6 +167,96 @@ def test_verdict_requires_funding_to_beat_fees():
     assert v == "REJECT"
 
 
+# ── maker-fee economics (Task #18) ───────────────────────────────────────────
+def _flat_carry(symbol, *, spot_fee, perp_fee, slip, funding_total_pct):
+    """A flat-price carry hold (basis P&L = 0) with a KNOWN total funding harvest,
+    priced under the given fee assumptions. Returns the carry_pnl result dict so we
+    can feed it straight into _carry_verdict — the funding harvest is fixed and only
+    the fee model changes, which is exactly the maker-vs-taker comparison."""
+    n = 5
+    spot = _candles([100] * n, step_ms=_8H)
+    perp = _candles([100] * n, step_ms=_8H)
+    per = (funding_total_pct / 100.0) / (n - 1)        # split across the in-hold settles
+    fund = _funding([(i * _8H, per) for i in range(1, n)])   # t1..t4 ∈ (t0, tN]
+    res = B.carry_pnl(spot, perp, fund, spot_fee_pct=spot_fee,
+                      perp_fee_pct=perp_fee, slip_pct=slip)
+    res["symbol"] = symbol
+    return res
+
+
+def test_maker_four_leg_cost_is_lower_than_taker():
+    """Maker fills cost ~0.15% over four legs vs ~0.38% taker, so the same hold
+    nets strictly more under maker fees."""
+    flat = _candles([100, 100, 100])
+    taker = B.carry_pnl(flat, flat, _funding([]),
+                        spot_fee_pct=0.10, perp_fee_pct=0.05, slip_pct=0.02)
+    maker = B.carry_pnl(flat, flat, _funding([]),
+                        spot_fee_pct=R.CARRY_MAKER_SPOT_FEE,
+                        perp_fee_pct=R.CARRY_MAKER_PERP_FEE,
+                        slip_pct=R.CARRY_MAKER_SLIP)
+    assert taker["fees_pct"] == approx(0.38)
+    assert maker["fees_pct"] == approx(0.15)           # 2*(0.075+0) + 2*(0+0)
+    assert maker["fees_pct"] < taker["fees_pct"]
+    assert maker["net_carry_pct"] > taker["net_carry_pct"]
+
+
+def test_maker_can_flip_a_taker_reject_to_accept():
+    """A thin funding harvest (0.25%/hold) loses to the four taker legs (0.38%) but
+    clears the cheaper maker legs (0.15%) — the whole point of the probe. The flip
+    is REAL but CONDITIONAL on resting maker fills."""
+    taker_res = [_flat_carry("BTCUSDT", spot_fee=0.10, perp_fee=0.05, slip=0.02,
+                             funding_total_pct=0.25),
+                 _flat_carry("ETHUSDT", spot_fee=0.10, perp_fee=0.05, slip=0.02,
+                             funding_total_pct=0.25)]
+    assert R._carry_verdict(taker_res)[0] == "REJECT"
+
+    maker_res = [_flat_carry("BTCUSDT", spot_fee=R.CARRY_MAKER_SPOT_FEE,
+                             perp_fee=R.CARRY_MAKER_PERP_FEE,
+                             slip=R.CARRY_MAKER_SLIP, funding_total_pct=0.25),
+                 _flat_carry("ETHUSDT", spot_fee=R.CARRY_MAKER_SPOT_FEE,
+                             perp_fee=R.CARRY_MAKER_PERP_FEE,
+                             slip=R.CARRY_MAKER_SLIP, funding_total_pct=0.25)]
+    assert R._carry_verdict(maker_res)[0] == "ACCEPT"
+
+
+def test_maker_still_rejects_when_funding_loses_to_maker_fees():
+    """Honest: cheaper fees don't rescue a hold whose funding can't even beat the
+    0.15% maker cost — a 0.10%/hold harvest still REJECTs under maker fees."""
+    maker_res = [_flat_carry("BTCUSDT", spot_fee=R.CARRY_MAKER_SPOT_FEE,
+                             perp_fee=R.CARRY_MAKER_PERP_FEE,
+                             slip=R.CARRY_MAKER_SLIP, funding_total_pct=0.10),
+                 _flat_carry("ETHUSDT", spot_fee=R.CARRY_MAKER_SPOT_FEE,
+                             perp_fee=R.CARRY_MAKER_PERP_FEE,
+                             slip=R.CARRY_MAKER_SLIP, funding_total_pct=0.10)]
+    assert R._carry_verdict(maker_res)[0] == "REJECT"
+
+
+def test_maker_carry_cell_excluded_from_allowlist_even_on_accept():
+    """A maker carry that ACCEPTs is STILL tagged kind=='carry' and must never be
+    promoted to the live directional allowlist."""
+    maker_res = [_flat_carry("BTCUSDT", spot_fee=R.CARRY_MAKER_SPOT_FEE,
+                             perp_fee=R.CARRY_MAKER_PERP_FEE,
+                             slip=R.CARRY_MAKER_SLIP, funding_total_pct=0.25),
+                 _flat_carry("ETHUSDT", spot_fee=R.CARRY_MAKER_SPOT_FEE,
+                             perp_fee=R.CARRY_MAKER_PERP_FEE,
+                             slip=R.CARRY_MAKER_SLIP, funding_total_pct=0.25)]
+    cell = R.build_carry_cell(maker_res, interval="1h",
+                              spot_fee=R.CARRY_MAKER_SPOT_FEE,
+                              perp_fee=R.CARRY_MAKER_PERP_FEE,
+                              slip=R.CARRY_MAKER_SLIP,
+                              strategy_key="carry_okx_delta_neutral_maker",
+                              note=R._CARRY_MAKER_NOTE)
+    assert cell["kind"] == "carry"
+    assert cell["verdict"] == "ACCEPT"                 # even when it ACCEPTs…
+    assert cell["exit_policy"]["spot_fee_pct"] == R.CARRY_MAKER_SPOT_FEE
+    assert cell["exit_policy"]["perp_fee_pct"] == R.CARRY_MAKER_PERP_FEE
+    # …a maker carry ACCEPT must NOT be promoted to the live directional allowlist.
+    out = R.run_research(specs=[], persist=False, extra_cells=[cell])
+    promoted = {c["strategy_key"] for c in out.get("cells", [])
+               if c["verdict"] == "ACCEPT" and c.get("kind") != "carry"}
+    assert "carry_okx_delta_neutral_maker" not in promoted
+
+
 # ── allowlist exclusion: carry never goes live ───────────────────────────────
 def test_carry_cell_excluded_from_allowlist():
     res = [_held("BTCUSDT", 0.30, 0.20), _held("ETHUSDT", 0.25, 0.15)]
