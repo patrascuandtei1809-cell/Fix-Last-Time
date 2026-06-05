@@ -5,7 +5,8 @@ This is ANALYSIS ONLY — a thin runner over the existing backtest engine
 dashboard, the validated allowlist, or any infrastructure. It answers ONE
 question: does the 4h edge survive rigorous validation?
 
-Candidates (from the edge search):
+Candidates (from the edge search; BTC re-checked over max history June 2026):
+  - EMA_MACD_RSI_VOLUME_V2 @ 4h on BTC
   - EMA_MACD_RSI_VOLUME_V2 @ 4h on ETH
   - EMA_MACD_RSI_VOLUME_V2 @ 4h on SOL
   - Trend Pullback        @ 4h on SOL
@@ -49,7 +50,12 @@ TF = "4h"
 MAX_DAYS = 4000  # fetch_klines returns whatever is actually available (paginates back)
 
 # (strategy_key, symbol, short label)
+# BTC + SOL V2 @ 4h are RE-CHECKED here over max history: the canonical ~5y sweep
+# flipped to ACCEPT the whole BTC/ETH/SOL basket, so the deep per-candidate gate
+# (max-history WF + Monte-Carlo CI + sensitivity + max-DD) is re-run for both to
+# see if either promotes WEAK→ROBUST and legitimately widens the ETH-only allowlist.
 CANDS = [
+    ("ema_macd_rsi_vol_v2", "BTCUSDT", "V2 @ 4h BTC"),
     ("ema_macd_rsi_vol_v2", "ETHUSDT", "V2 @ 4h ETH"),
     ("ema_macd_rsi_vol_v2", "SOLUSDT", "V2 @ 4h SOL"),
     ("trend_pullback",      "SOLUSDT", "TrendPullback @ 4h SOL"),

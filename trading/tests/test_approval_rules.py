@@ -11,7 +11,11 @@ to the live bot. They cover both halves of the pipeline:
 
 Required guarantees (from the task spec):
   1. Only V2 ETH @ 4h is ROBUST.
-  2. Both SOL candidates stay WEAK.
+  2. Both SOL candidates AND BTC V2 @ 4h stay WEAK. BTC was re-checked over max
+     history (back to 2017): it is a NEAR-MISS — it clears every gate except the
+     relative-Sharpe-deterioration gate (its worst stress Sharpe falls just below
+     0.5×its unusually-high base Sharpe), so it is WEAK, not ROBUST. SOL fails
+     hard (Monte-Carlo CI negative, Sharpe collapse, max drawdown over limit).
   3. No 1m / 5m / 15m / 1h strategy is approved.
   4. A strategy FAILS approval if ANY of: Monte-Carlo CI dips negative,
      walk-forward folds not consistently positive, a sensitivity test fails, OR
@@ -89,6 +93,23 @@ def test_sol_candidates_stay_weak(cid):
     res = _classify_from_validation(cid)
     assert res["verdict"] == "WEAK", res["reasons"]
     assert not vc.is_approved(res["verdict"])
+
+
+def test_btc_v2_4h_stays_weak_near_miss():
+    """BTC V2 @ 4h re-checked over max history (back to 2017). It is a NEAR-MISS:
+    base/sensitivity/walk-forward/Monte-Carlo/max-drawdown gates all PASS, but the
+    relative-Sharpe-deterioration gate fails (worst stress Sharpe < 0.5×base), so
+    it stays WEAK. Lock this exactly so neither a silent promotion NOR a silent
+    downgrade-to-REJECTED can slip through unnoticed."""
+    res = _classify_from_validation("ema_macd_rsi_vol_v2|BTCUSDT")
+    assert res["verdict"] == "WEAK", res["reasons"]
+    assert not vc.is_approved(res["verdict"])
+    g = res["gates"]
+    # the ONLY failing gate is relative-Sharpe; everything else clears.
+    assert g["sharpe_ok"] is False, res["reasons"]
+    for gate in ("base_ok", "cost_param_ok", "wf_ok", "mc_ok", "dd_ok", "complete"):
+        assert g[gate] is True, (gate, res["reasons"])
+    assert g["rejected"] is False
 
 
 def test_only_eth_is_robust_across_all_validated():

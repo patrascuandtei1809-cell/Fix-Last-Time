@@ -122,6 +122,23 @@ under-counted the edge, not over-counted it.
   25%-tighter stop (narrow-param dependence) and MC CI lower bound is negative.
 - **🟡 WEAK: Trend Pullback @ 4h SOL** — survives sensitivity but MC CI dips
   negative (P(exp>0)=83%) and 1 WF fold negative.
+- **🟡 WEAK (NEAR-MISS): V2 @ 4h BTC** — re-checked June 2026 over MAX history
+  (8.8y/275 trades, back to 2017; BTC was never previously a deep-validation
+  candidate). It passes EVERY gate — base +0.65%/trade PF1.42 Sharpe2.52, all 8
+  sensitivity scenarios positive, walk-forward stable, Monte-Carlo P(exp>0)≥95%
+  with CI lower bound > 0, maxDD −31.5% within ±40% — EXCEPT the
+  **relative-Sharpe-deterioration gate**: worst stress Sharpe (+1.20, under
+  TP−25%) is just below 0.5×its unusually-high base Sharpe (0.5×2.52=1.26). The
+  gate is RELATIVE, so a HIGHER base Sharpe makes it HARDER to clear even though
+  +1.20 is excellent in absolute terms.
+  **Why it matters:** do NOT promote BTC by moving goalposts — the rule is locked
+  by `test_approval_rules.py` (`test_btc_v2_4h_stays_weak_near_miss` pins that the
+  ONLY failing gate is Sharpe). Honest verdict: BTC + SOL stay WEAK → **ETH-only
+  live allowlist stands**. If the relative-Sharpe gate is ever revisited as a
+  design question, BTC is the candidate most affected. Deep-validation candidates
+  live ONLY in `validate_candidates.CANDS`; adding a symbol there + re-running all
+  7 scenarios is the whole re-check (deterministic for fixed data; ETH stayed
+  ROBUST on re-run).
 **Why it matters:** the right edge bar is not "positive on one 360d window" but
 positive-on-max-history AND walk-forward-stable AND Monte-Carlo lower-CI>0 AND
 parameter-stable. Only ETH 4h V2 clears all four. Tooling:
