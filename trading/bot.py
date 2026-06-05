@@ -32,7 +32,7 @@ import diagnostics
 # When TradingBot.dip_mode is True (default) the orchestrator runs this engine
 # per active symbol and NEVER touches the legacy worker.tick/execute_entry path.
 import live_settings
-from live_engine import DipLiveEngine
+from live_engine import DipLiveEngine, StrategyLiveEngine, V2_STRATEGY_NAME
 try:
     # AUTO-DISABLE gate — the live bot refuses to auto-trade any
     # (strategy, timeframe) that a research run has not ACCEPTED as having a
@@ -541,6 +541,17 @@ class TradingBot:
         self._dip_engines: Dict[str, DipLiveEngine] = {}
         self._cooldown = live_settings.cooldown_store()
 
+        # ── Research-validated strategy live path (Task #19) ─────────────────
+        # When strategy_mode is True the orchestrator runs the gated
+        # StrategyLiveEngine per symbol INSTEAD of the dip engine. Unlike the dip
+        # path this IS research-gated: only the validated (strategy, interval,
+        # symbol) cell may auto-trade (e.g. EMA_MACD_RSI_VOLUME_V2 @ 4h → ETH
+        # only; BTC/SOL blocked). All money-safety gates still apply.
+        self.strategy_mode: bool = False
+        self.live_strategy_name: Optional[str] = None
+        self.live_strategy_interval: Optional[str] = None
+        self._strategy_engines: Dict[str, StrategyLiveEngine] = {}
+
     def _collect_candidate(self, ev: Dict) -> None:
         with self._cand_lock:
             self._candidates.append(ev)
@@ -602,6 +613,68 @@ class TradingBot:
                     worker._session_trades += 1
             except Exception as exc:
                 log_activity("ERROR", f"Dip engine {key} crashed: {exc}")
+        return traded
+
+    # ── Research-validated strategy live path (Task #19) ─────────────────────
+    def _strategy_engine_for(self, worker: SymbolWorker) -> StrategyLiveEngine:
+        """Build (once) and reuse a gated StrategyLiveEngine for a worker."""
+        key = f"{worker.exchange.name}:{worker.symbol}"
+        eng = self._strategy_engines.get(key)
+        if eng is None:
+            eng = StrategyLiveEngine(
+                exchange           = worker.exchange,
+                strategy_name      = self.live_strategy_name or worker.strategy,
+                interval           = self.live_strategy_interval or worker.interval,
+                validate_fn        = _is_strategy_validated,
+                require_validation = self.require_validation,
+                on_log             = log_activity,
+                on_state           = _set_shared_for,
+                on_open_trade      = add_trade,
+                close_fn           = worker._close_position,
+                cooldown           = self._cooldown,
+                manage_manual      = worker.manage_manual_trades,
+            )
+            self._strategy_engines[key] = eng
+        return eng
+
+    def _run_strategy_cycle(self, refresh_fn) -> bool:
+        """Run the gated StrategyLiveEngine across all active symbols. Returns
+        True if any symbol placed a LIVE order this cycle."""
+        settings = live_settings.get_settings()
+        self.check_every = 2 if settings.aggressive_on else 6
+
+        traded = False
+        for key, worker in list(self.workers.items()):
+            if not self._running:
+                break
+            all_open, daily_pct = refresh_fn()
+            exposure = sum((t.get("invested") or 0) for t in all_open)
+            emergency = bool(self.global_risk.settings.emergency_stop
+                             or getattr(worker.risk.settings, "emergency_stop", False))
+
+            def global_gate(invest: float, sym: str,
+                            _all=all_open, _dp=daily_pct):
+                return self.global_risk.check_global(
+                    all_open_trades = _all,
+                    new_invest_usdt = invest,
+                    new_symbol      = sym,
+                    daily_loss_pct  = _dp,
+                )
+            try:
+                rec = self._strategy_engine_for(worker).evaluate(
+                    symbol           = worker.symbol,
+                    settings         = settings,
+                    open_trades      = all_open,
+                    current_exposure = exposure,
+                    global_gate_fn   = global_gate,
+                    daily_loss_pct   = daily_pct,
+                    emergency_stop   = emergency,
+                )
+                if rec.traded:
+                    traded = True
+                    worker._session_trades += 1
+            except Exception as exc:
+                log_activity("ERROR", f"Strategy engine {key} crashed: {exc}")
         return traded
 
     # ── Control ──────────────────────────────────────────────────────────────
@@ -727,6 +800,30 @@ class TradingBot:
                                      for w in self.workers.values()}))
             print(f"[BOT] ACTIVE SCAN {_syms} | open={len(all_open)} "
                   f"| daily_pnl={daily_pct:+.2f}%", flush=True)
+
+            # ── Research-validated strategy live path (Task #19) ─────────────
+            # When strategy_mode is ON, run the GATED StrategyLiveEngine per
+            # symbol instead of the dip engine. Same daily-loss breaker + cadence
+            # tail as the dip path; skips the legacy decision stack below.
+            if getattr(self, "strategy_mode", False):
+                try:
+                    if self._run_strategy_cycle(_refresh_global_state):
+                        self._last_trade_executed_at = datetime.now()
+                        self._last_global_trade_at   = time.time()
+                except Exception as exc:
+                    log_activity("ERROR", f"Strategy cycle crashed: {exc}")
+                _, _dp = _refresh_global_state()
+                if _dp <= -abs(self.global_risk.settings.max_daily_loss_pct):
+                    log_activity("WARNING",
+                        f"🛑 Auto-stopping — daily loss {_dp:+.2f}% ≤ "
+                        f"−{self.global_risk.settings.max_daily_loss_pct}%")
+                    self._running = False
+                    break
+                for _ in range(self.check_every):
+                    if not self._running:
+                        break
+                    time.sleep(1)
+                continue
 
             # ── 20-Minute Dip strategy (Task #11) — ONLY live path ───────────
             # Run the DipLiveEngine per symbol and skip the entire legacy
@@ -1207,6 +1304,18 @@ def create_bot(
             check_every     = check_every,
             initial_balance = initial_balance,
         )
+
+        # ── Live-path selection (Task #19) ───────────────────────────────────
+        # The research-validated strategy (EMA_MACD_RSI_VOLUME_V2) runs via the
+        # GATED StrategyLiveEngine; everything else keeps the (ungated) dip path.
+        if strategy == V2_STRATEGY_NAME:
+            _bot.strategy_mode        = True
+            _bot.dip_mode             = False
+            _bot.live_strategy_name   = strategy
+            _bot.live_strategy_interval = interval
+            log_activity("INFO",
+                f"🎯 Strategy live path ON — {strategy}@{interval} "
+                f"(research-gated: only validated symbols trade)")
     return _bot
 
 

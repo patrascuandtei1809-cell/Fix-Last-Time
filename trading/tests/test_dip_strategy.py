@@ -155,10 +155,12 @@ def test_engine_buys_on_dip_without_legacy_gates():
     for banned in ("import strategy", "import scoring", "gpt_advisor",
                    "ai_engine", "market_regime", "validate_candidates"):
         assert banned not in src
-    # The live engine itself must carry NO research gate (no allowlist, no
+    # The DIP engine itself must carry NO research gate (no allowlist, no
     # require_validation param). This locks the disconnection so a merge can't
-    # silently re-introduce it.
-    le_src = inspect.getsource(le)
+    # silently re-introduce it. NOTE: scope to the DipLiveEngine class — the
+    # module also hosts StrategyLiveEngine (Task #19), a SEPARATE live path that
+    # IS research-gated on purpose, so a whole-module scan would false-positive.
+    le_src = inspect.getsource(le.DipLiveEngine)
     for banned in ("require_validation", "is_strategy_validated",
                    "validated_strategies", "AUTO-DISABLE"):
         assert banned not in le_src, f"research gate leaked back: {banned}"

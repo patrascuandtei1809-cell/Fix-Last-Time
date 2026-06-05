@@ -789,10 +789,15 @@ if not st.session_state.get("_settings_loaded"):
     # operator has no UI to change these in the new build, so override.
     # EXCEPTION: the operator MAY now opt into EMA_MACD_RSI_VOLUME_V2 from the
     # sidebar — if that was persisted, keep it. Anything else snaps back to
-    # the default Reversal Scalper.
+    # the default 20-Minute Dip live strategy.
     if st.session_state.get("strategy") != "EMA_MACD_RSI_VOLUME_V2":
-        st.session_state.strategy       = "Reversal Scalper"
-    st.session_state.interval           = "1m"
+        st.session_state.strategy       = "20-Minute Dip"
+    # Interval: V2 is research-validated at 4h ONLY — keep 4h when it's selected;
+    # every other (scalping) strategy snaps back to 1m.
+    if st.session_state.get("strategy") == "EMA_MACD_RSI_VOLUME_V2":
+        st.session_state.interval       = "4h"
+    else:
+        st.session_state.interval       = "1m"
     st.session_state.check_every        = 2
     st.session_state.threshold          = 0.01
     st.session_state.ai_assist          = True
@@ -2110,24 +2115,85 @@ with st.sidebar:
                              if st.session_state.interval in INTERVALS else 2)
     st.session_state.interval = intv_sel
 
-    # Active strategy — the ONLY live strategy is the 20-Minute Dip. The old
-    # Reversal Scalper / EMA_MACD_RSI_VOLUME_V2 selector has been removed; the
-    # live path (DipLiveEngine) ignores every other strategy. The name is kept
-    # on session_state purely so create_bot() has a label to stamp on trades.
-    st.session_state.strategy = "20-Minute Dip"
-    st.markdown(
-        '<div style="background:#15233a;border:1px solid #1f6feb;border-radius:6px;'
-        'padding:8px 10px;margin:4px 0;color:#a9c7ff;font-weight:700;font-size:13px;">'
-        '💧 20-MINUTE DIP'
-        '<div style="font-size:10px;font-weight:600;color:#79c0ff;'
-        'margin-top:4px;letter-spacing:0.5px;">'
-        'The only live strategy · tune it in the 💧 20-Minute Dip panel below'
-        '</div></div>',
-        unsafe_allow_html=True,
+    # Active strategy. The default live strategy is the 20-Minute Dip
+    # (DipLiveEngine). Task #19 adds the research-validated EMA_MACD_RSI_VOLUME_V2
+    # @ 4h (ETH only) as a SECOND, gated live path (StrategyLiveEngine). The
+    # operator picks which one runs; create_bot() routes V2 → strategy_mode and
+    # everything else → the dip live path.
+    _strat_opts = ["20-Minute Dip", "EMA_MACD_RSI_VOLUME_V2"]
+    _strat_cur  = st.session_state.get("strategy", "20-Minute Dip")
+    if _strat_cur not in _strat_opts:
+        _strat_cur = "20-Minute Dip"
+    strat_pick = st.selectbox(
+        "Live strategy", _strat_opts,
+        index=_strat_opts.index(_strat_cur),
+        help="20-Minute Dip is the default live path. EMA_MACD_RSI_VOLUME_V2 is "
+             "research-validated at 4h (ETH only).",
     )
-    st.caption("BUY on a 20-minute dip with volume + trend confirmation, sell at "
-               "target profit, stop-loss to cap the downside. Configure every "
-               "number in the 💧 20-Minute Dip Strategy panel.")
+    st.session_state.strategy = strat_pick
+    if strat_pick == "EMA_MACD_RSI_VOLUME_V2":
+        # Research-validated cell is V2 @ 4h ONLY — lock the interval to 4h so the
+        # live gate (is_strategy_validated) can authorize it.
+        st.session_state.interval = "4h"
+        st.markdown(
+            '<div style="background:#15233a;border:1px solid #1f6feb;border-radius:6px;'
+            'padding:8px 10px;margin:4px 0;color:#a9c7ff;font-weight:700;font-size:13px;">'
+            '📈 EMA · MACD · RSI · VOLUME V2 · 4h'
+            '<div style="font-size:10px;font-weight:600;color:#79c0ff;'
+            'margin-top:4px;letter-spacing:0.5px;">'
+            'Research-validated · trend + momentum + volume · ATR SL/TP'
+            '</div></div>',
+            unsafe_allow_html=True,
+        )
+        # ── Live research-validation banner (Task #19) ──────────────────────
+        # Show which symbols the research allowlist authorizes for V2/4h. Only
+        # validated symbols (ETH today) will place LIVE orders; the rest are
+        # blocked fail-closed by is_strategy_validated in the live engine.
+        try:
+            from research import is_strategy_validated as _isv
+            _ok_syms, _blocked_syms = [], []
+            for _s in (st.session_state.get("active_symbols")
+                       or ["BTCUSDT", "ETHUSDT", "SOLUSDT"]):
+                _allow, _ = _isv("EMA_MACD_RSI_VOLUME_V2", "4h", _s)
+                (_ok_syms if _allow else _blocked_syms).append(
+                    _s.replace("USDT", ""))
+            _ok_txt = (("✅ Enabled: " + ", ".join(_ok_syms))
+                       if _ok_syms else "⚠️ No symbol validated yet")
+            _bl_txt = (" · 🔒 Blocked: " + ", ".join(_blocked_syms)
+                       if _blocked_syms else "")
+            _bg = "#11251a" if _ok_syms else "#2d1a1a"
+            _bd = "#2ea043" if _ok_syms else "#f85149"
+            _fg = "#7ee787" if _ok_syms else "#ff9c9c"
+            st.markdown(
+                f'<div style="background:{_bg};border:1px solid {_bd};'
+                f'border-radius:6px;padding:7px 10px;margin:4px 0;color:{_fg};'
+                f'font-weight:700;font-size:12px;">{_ok_txt}{_bl_txt}'
+                '<div style="font-size:10px;font-weight:600;color:#8b949e;'
+                'margin-top:3px;">Live trades only on research-validated symbols. '
+                'Risk caps · emergency stop · manual-trade protection still apply.'
+                '</div></div>',
+                unsafe_allow_html=True,
+            )
+        except Exception:
+            pass
+        st.caption("LONG when EMA50>EMA200, MACD hist>0, RSI>50, volume>1.2×20-avg. "
+                   "Stop-loss / take-profit sized from ATR. Needs ≥200 candles — "
+                   "uses a deeper kline fetch. Validated at 4h only.")
+    else:
+        st.session_state.strategy = "20-Minute Dip"
+        st.markdown(
+            '<div style="background:#15233a;border:1px solid #1f6feb;border-radius:6px;'
+            'padding:8px 10px;margin:4px 0;color:#a9c7ff;font-weight:700;font-size:13px;">'
+            '💧 20-MINUTE DIP'
+            '<div style="font-size:10px;font-weight:600;color:#79c0ff;'
+            'margin-top:4px;letter-spacing:0.5px;">'
+            'The only live strategy · tune it in the 💧 20-Minute Dip panel below'
+            '</div></div>',
+            unsafe_allow_html=True,
+        )
+        st.caption("BUY on a 20-minute dip with volume + trend confirmation, sell at "
+                   "target profit, stop-loss to cap the downside. Configure every "
+                   "number in the 💧 20-Minute Dip Strategy panel.")
 
     st.markdown('<hr class="s-div"/>', unsafe_allow_html=True)
 
