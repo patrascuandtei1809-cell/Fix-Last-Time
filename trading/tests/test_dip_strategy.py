@@ -130,10 +130,12 @@ def test_hold_between_thresholds():
 # ── 5. Live engine reaches a LIVE BUY with NONE of the old gates ─────────────
 def test_engine_buys_on_dip_without_legacy_gates():
     ex = _FakeExchange(price=100.0, change_pct=-0.30, free=1000.0)
-    # Task #11 architecture: the live dip engine has NO research validation /
-    # allowlist gate — it trades on its own price signal. This test exercises the
-    # entry mechanics directly.
-    eng = le.DipLiveEngine(exchange=ex, cooldown=ls.CooldownStore())
+    # require_validation=False: this test exercises the dip ENTRY MECHANICS, not
+    # the AUTO-DISABLE allowlist gate (that gate is covered by
+    # test_dip_validation_gate.py). With the default gate ON and an empty
+    # allowlist the engine would correctly refuse to trade.
+    eng = le.DipLiveEngine(exchange=ex, cooldown=ls.CooldownStore(),
+                           require_validation=False)
     rec = eng.evaluate(symbol="BTCUSDT", settings=_settings(),
                        open_trades=[], current_exposure=0.0,
                        global_gate_fn=_pass_gate)
@@ -339,41 +341,3 @@ def test_settings_defaults_and_persistence():
     got = ls.get_settings()
     assert got.size_mode == "FIXED_USDT"
     assert got.fixed_usdt_amount == 33.0
-
-
-# ── Live dip path is NOT research-gated, but safety gates still bite (Task #11) ─
-def test_live_dip_ignores_research_reject_but_safety_still_blocks(monkeypatch):
-    """Regression lock: the live DipLiveEngine must place a real BUY on a dip
-    even when research REJECTS the strategy (empty allowlist), proving research
-    validation is fully disconnected from the live path. The money-safety gates
-    must STILL block (safe mode here)."""
-    import research
-
-    # Point the allowlist at a scratch dir and write an EMPTY (REJECT) allowlist
-    # — the strongest "research says do NOT trade this" signal.
-    import tempfile, os
-    d = tempfile.mkdtemp()
-    monkeypatch.setattr(research, "RESEARCH_DIR", d)
-    monkeypatch.setattr(research, "VALIDATED_PATH",
-                        os.path.join(d, "validated_strategies.json"))
-    research.save_validated([], fee=0.1, slip=0.02)        # empty ⇒ REJECT all
-    assert research.is_strategy_validated(le.DIP_STRATEGY_NAME,
-                                          le.DIP_INTERVAL)[0] is False
-
-    # Clear dip → engine should BUY despite the REJECT verdict.
-    ex = _FakeExchange(price=100.0, change_pct=-0.30, free=1000.0)
-    eng = le.DipLiveEngine(exchange=ex, cooldown=ls.CooldownStore())
-    rec = eng.evaluate(symbol="BTCUSDT", settings=_settings(),
-                       open_trades=[], current_exposure=0.0,
-                       global_gate_fn=_pass_gate)
-    assert rec.decision == "BUY" and rec.traded is True
-    assert ex.buy_calls, "research REJECT must NOT stop a live dip BUY"
-
-    # Safety still bites: safe mode ON ⇒ no new entry, no order placed.
-    ex2 = _FakeExchange(price=100.0, change_pct=-0.30, free=1000.0)
-    eng2 = le.DipLiveEngine(exchange=ex2, cooldown=ls.CooldownStore())
-    rec2 = eng2.evaluate(symbol="BTCUSDT", settings=_settings(safe_mode=True),
-                         open_trades=[], current_exposure=0.0,
-                         global_gate_fn=_pass_gate)
-    assert rec2.traded is False
-    assert ex2.buy_calls == [], "safe mode must still block the live BUY"

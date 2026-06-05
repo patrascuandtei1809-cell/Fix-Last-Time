@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-06-03T21:25:00.557956+00:00",
+  "generated_at": "2026-06-03T19:54:18.498976+00:00",
   "fee_pct_per_side": 0.1,
-  "slippage_pct_per_side": 0.0,
-  "round_trip_cost_pct": 0.2,
+  "slippage_pct_per_side": 0.02,
+  "round_trip_cost_pct": 0.24000000000000002,
   "symbols": [
     "BTCUSDT",
     "ETHUSDT",
@@ -4138,6 +4138,84 @@
       "note": "LONG when perp funding is unusually POSITIVE (crowd funding the long \u2192 ride). Same data source as contrarian (~5y), opposite reading."
     },
     {
+      "kind": "carry",
+      "strategy_key": "carry_okx_delta_neutral",
+      "strategy": "Delta-Neutral Carry (long spot + short perp)",
+      "signal_name": "Delta-Neutral Carry",
+      "interval": "1h",
+      "exit_policy": {
+        "model": "buy-and-hold carry, 4 taker legs",
+        "spot_fee_pct": 0.1,
+        "perp_fee_pct": 0.05,
+        "slip_pct": 0.02
+      },
+      "qualify_mode": "carry",
+      "subcells": {
+        "BTCUSDT": {
+          "trades": 1,
+          "expectancy_pct": -0.07241731339485591,
+          "profit_factor": 0.0,
+          "win_rate": 0.0,
+          "funding_sum_pct": 0.41659409529772995,
+          "funding_apr_pct": 1.6903030453025079,
+          "basis_pnl_pct": -0.10901140869258585,
+          "fees_pct": 0.38,
+          "net_carry_pct": -0.07241731339485591,
+          "funding_only_net_pct": 0.036594095297729945,
+          "apr_pct": -0.2938284693556914,
+          "days_held": 89.95833333333333,
+          "n_funding": 270,
+          "n_funding_neg": 103
+        },
+        "ETHUSDT": {
+          "trades": 1,
+          "expectancy_pct": 0.19133867757899817,
+          "profit_factor": Infinity,
+          "win_rate": 100.0,
+          "funding_sum_pct": 0.6920470896316401,
+          "funding_apr_pct": 2.8079353891492205,
+          "basis_pnl_pct": -0.12070841205264193,
+          "fees_pct": 0.38,
+          "net_carry_pct": 0.19133867757899817,
+          "funding_only_net_pct": 0.31204708963164013,
+          "apr_pct": 0.7763440553923223,
+          "days_held": 89.95833333333333,
+          "n_funding": 270,
+          "n_funding_neg": 89
+        },
+        "SOLUSDT": {
+          "trades": 1,
+          "expectancy_pct": -0.5058733151937411,
+          "profit_factor": 0.0,
+          "win_rate": 0.0,
+          "funding_sum_pct": -0.04371354473068001,
+          "funding_apr_pct": -0.17736482252929914,
+          "basis_pnl_pct": -0.08215977046306111,
+          "fees_pct": 0.38,
+          "net_carry_pct": -0.5058733151937411,
+          "funding_only_net_pct": -0.42371354473068007,
+          "apr_pct": -2.0525475873539474,
+          "days_held": 89.95833333333333,
+          "n_funding": 270,
+          "n_funding_neg": 130
+        }
+      },
+      "aggregate": {
+        "trades": 3,
+        "expectancy_pct": -0.1289839836698663,
+        "profit_factor": 0.33086940738774934,
+        "win_rate": 33.33333333333333
+      },
+      "walk_forward": [],
+      "attribution": {},
+      "verdict": "REJECT",
+      "verdict_reasons": [
+        "mean net carry across 3 symbols is -0.129% per hold \u2014 does not beat the 4-leg cost"
+      ],
+      "errors": [],
+      "note": "CARRY / CASH-FLOW STUDY \u2014 delta-neutral long spot + short perp, harvesting OKX perp funding (NOT a directional price bet, NOT the rejected basis_*/xspread_* signals). Single-venue OKX over the ~92d OKX-reachable window. 'net_exp%' = mean NET carry per hold (funding + basis \u2212 four-leg fees). Excluded from the live directional allowlist by design."
+    },
+    {
       "strategy_key": "donchian_breakout",
       "strategy": "Donchian Breakout (HTF)",
       "signal_name": "Donchian Breakout",
@@ -6956,252 +7034,9 @@
       ],
       "errors": [],
       "note": "Long-only confluence trend strategy on higher timeframes. 1h/4h swept over ~5y of Binance spot candles; 5m/15m kept on short 90/180d."
-    },
-    {
-      "kind": "carry",
-      "strategy_key": "carry_binance_multiyear_delta_neutral",
-      "strategy": "Delta-Neutral Carry (Binance, ~5y)",
-      "signal_name": "Delta-Neutral Carry (multi-year)",
-      "interval": "1d",
-      "exit_policy": {
-        "model": "buy-and-hold carry, 4 taker legs",
-        "spot_fee_pct": 0.1,
-        "perp_fee_pct": 0.05,
-        "slip_pct": 0.02
-      },
-      "qualify_mode": "carry",
-      "subcells": {
-        "BTCUSDT": {
-          "trades": 1,
-          "expectancy_pct": 36.37236994776174,
-          "profit_factor": Infinity,
-          "win_rate": 100.0,
-          "funding_sum_pct": 36.77788399999999,
-          "funding_apr_pct": 7.371734025260844,
-          "basis_pnl_pct": -0.025514052238251317,
-          "fees_pct": 0.38,
-          "net_carry_pct": 36.37236994776174,
-          "funding_only_net_pct": 36.39788399999999,
-          "apr_pct": 7.290453064762787,
-          "days_held": 1821.0,
-          "n_funding": 5463,
-          "n_funding_neg": 845
-        },
-        "ETHUSDT": {
-          "trades": 1,
-          "expectancy_pct": 35.31212940142849,
-          "profit_factor": Infinity,
-          "win_rate": 100.0,
-          "funding_sum_pct": 35.673626999999996,
-          "funding_apr_pct": 7.150397504118616,
-          "basis_pnl_pct": 0.018502401428496795,
-          "fees_pct": 0.38,
-          "net_carry_pct": 35.31212940142849,
-          "funding_only_net_pct": 35.293626999999994,
-          "apr_pct": 7.077939171620759,
-          "days_held": 1821.0,
-          "n_funding": 5463,
-          "n_funding_neg": 930
-        },
-        "SOLUSDT": {
-          "trades": 1,
-          "expectancy_pct": -14.01861160379769,
-          "profit_factor": 0.0,
-          "win_rate": 0.0,
-          "funding_sum_pct": -13.895816000000005,
-          "funding_apr_pct": -2.7852678967600233,
-          "basis_pnl_pct": 0.25720439620231517,
-          "fees_pct": 0.38,
-          "net_carry_pct": -14.01861160379769,
-          "funding_only_net_pct": -14.275816000000004,
-          "apr_pct": -2.8098809639682356,
-          "days_held": 1821.0,
-          "n_funding": 5538,
-          "n_funding_neg": 1661
-        }
-      },
-      "aggregate": {
-        "trades": 3,
-        "expectancy_pct": 19.221962581797516,
-        "profit_factor": 5.1135234626067145,
-        "win_rate": 66.66666666666666
-      },
-      "walk_forward": [],
-      "attribution": {},
-      "verdict": "ACCEPT",
-      "verdict_reasons": [
-        "harvested carry beats total cost on 2/3 symbols (mean net +19.222% per hold, funding alone clears the four-leg fee)"
-      ],
-      "errors": [],
-      "note": "CARRY / CASH-FLOW STUDY (MULTI-YEAR) \u2014 delta-neutral long spot + short perp over ~5y. Single-venue BINANCE: Binance spot klines + Binance USD\u24c8-M perp klines + Binance perp funding (all from data.binance.vision). Pairs the EXACT perp shorted with the EXACT funding harvested over the SAME multi-year window the directional funding sweep uses. 'net_exp%' = mean NET carry per hold (funding + basis \u2212 four-leg fees). NOT a directional bet; excluded from the live directional allowlist by design."
-    },
-    {
-      "kind": "carry",
-      "strategy_key": "carry_okx_delta_neutral",
-      "strategy": "Delta-Neutral Carry (long spot + short perp)",
-      "signal_name": "Delta-Neutral Carry",
-      "interval": "1h",
-      "exit_policy": {
-        "model": "buy-and-hold carry, 4 taker legs",
-        "spot_fee_pct": 0.1,
-        "perp_fee_pct": 0.05,
-        "slip_pct": 0.02
-      },
-      "qualify_mode": "carry",
-      "subcells": {
-        "BTCUSDT": {
-          "trades": 1,
-          "expectancy_pct": -0.07241731339485591,
-          "profit_factor": 0.0,
-          "win_rate": 0.0,
-          "funding_sum_pct": 0.41659409529772995,
-          "funding_apr_pct": 1.6903030453025079,
-          "basis_pnl_pct": -0.10901140869258585,
-          "fees_pct": 0.38,
-          "net_carry_pct": -0.07241731339485591,
-          "funding_only_net_pct": 0.036594095297729945,
-          "apr_pct": -0.2938284693556914,
-          "days_held": 89.95833333333333,
-          "n_funding": 270,
-          "n_funding_neg": 103
-        },
-        "ETHUSDT": {
-          "trades": 1,
-          "expectancy_pct": 0.19133867757899817,
-          "profit_factor": Infinity,
-          "win_rate": 100.0,
-          "funding_sum_pct": 0.6920470896316401,
-          "funding_apr_pct": 2.8079353891492205,
-          "basis_pnl_pct": -0.12070841205264193,
-          "fees_pct": 0.38,
-          "net_carry_pct": 0.19133867757899817,
-          "funding_only_net_pct": 0.31204708963164013,
-          "apr_pct": 0.7763440553923223,
-          "days_held": 89.95833333333333,
-          "n_funding": 270,
-          "n_funding_neg": 89
-        },
-        "SOLUSDT": {
-          "trades": 1,
-          "expectancy_pct": -0.5058733151937411,
-          "profit_factor": 0.0,
-          "win_rate": 0.0,
-          "funding_sum_pct": -0.04371354473068001,
-          "funding_apr_pct": -0.17736482252929914,
-          "basis_pnl_pct": -0.08215977046306111,
-          "fees_pct": 0.38,
-          "net_carry_pct": -0.5058733151937411,
-          "funding_only_net_pct": -0.42371354473068007,
-          "apr_pct": -2.0525475873539474,
-          "days_held": 89.95833333333333,
-          "n_funding": 270,
-          "n_funding_neg": 130
-        }
-      },
-      "aggregate": {
-        "trades": 3,
-        "expectancy_pct": -0.1289839836698663,
-        "profit_factor": 0.33086940738774934,
-        "win_rate": 33.33333333333333
-      },
-      "walk_forward": [],
-      "attribution": {},
-      "verdict": "REJECT",
-      "verdict_reasons": [
-        "mean net carry across 3 symbols is -0.129% per hold \u2014 does not beat the 4-leg cost"
-      ],
-      "errors": [],
-      "note": "CARRY / CASH-FLOW STUDY \u2014 delta-neutral long spot + short perp, harvesting OKX perp funding (NOT a directional price bet, NOT the rejected basis_*/xspread_* signals). Single-venue OKX over the ~92d OKX-reachable window. 'net_exp%' = mean NET carry per hold (funding + basis \u2212 four-leg fees). Excluded from the live directional allowlist by design."
-    },
-    {
-      "kind": "carry",
-      "strategy_key": "carry_okx_delta_neutral_maker",
-      "strategy": "Delta-Neutral Carry (maker fills)",
-      "signal_name": "Delta-Neutral Carry (maker)",
-      "interval": "1h",
-      "exit_policy": {
-        "model": "buy-and-hold carry, 4 taker legs",
-        "spot_fee_pct": 0.075,
-        "perp_fee_pct": 0.0,
-        "slip_pct": 0.0
-      },
-      "qualify_mode": "carry",
-      "subcells": {
-        "BTCUSDT": {
-          "trades": 1,
-          "expectancy_pct": 0.15758268660514407,
-          "profit_factor": Infinity,
-          "win_rate": 100.0,
-          "funding_sum_pct": 0.41659409529772995,
-          "funding_apr_pct": 1.6903030453025079,
-          "basis_pnl_pct": -0.10901140869258585,
-          "fees_pct": 0.15,
-          "net_carry_pct": 0.15758268660514407,
-          "funding_only_net_pct": 0.2665940952977299,
-          "apr_pct": 0.6393813500051237,
-          "days_held": 89.95833333333333,
-          "n_funding": 270,
-          "n_funding_neg": 103
-        },
-        "ETHUSDT": {
-          "trades": 1,
-          "expectancy_pct": 0.42133867757899823,
-          "profit_factor": Infinity,
-          "win_rate": 100.0,
-          "funding_sum_pct": 0.6920470896316401,
-          "funding_apr_pct": 2.8079353891492205,
-          "basis_pnl_pct": -0.12070841205264193,
-          "fees_pct": 0.15,
-          "net_carry_pct": 0.42133867757899823,
-          "funding_only_net_pct": 0.5420470896316402,
-          "apr_pct": 1.7095538747531378,
-          "days_held": 89.95833333333333,
-          "n_funding": 270,
-          "n_funding_neg": 89
-        },
-        "SOLUSDT": {
-          "trades": 1,
-          "expectancy_pct": -0.27587331519374114,
-          "profit_factor": 0.0,
-          "win_rate": 0.0,
-          "funding_sum_pct": -0.04371354473068001,
-          "funding_apr_pct": -0.17736482252929914,
-          "basis_pnl_pct": -0.08215977046306111,
-          "fees_pct": 0.15,
-          "net_carry_pct": -0.27587331519374114,
-          "funding_only_net_pct": -0.19371354473068,
-          "apr_pct": -1.1193377679931322,
-          "days_held": 89.95833333333333,
-          "n_funding": 270,
-          "n_funding_neg": 130
-        }
-      },
-      "aggregate": {
-        "trades": 3,
-        "expectancy_pct": 0.10101601633013373,
-        "profit_factor": 2.0985043942273855,
-        "win_rate": 66.66666666666666
-      },
-      "walk_forward": [],
-      "attribution": {},
-      "verdict": "ACCEPT",
-      "verdict_reasons": [
-        "harvested carry beats total cost on 2/3 symbols (mean net +0.101% per hold, funding alone clears the four-leg fee)"
-      ],
-      "errors": [],
-      "note": "CARRY / CASH-FLOW STUDY (MAKER FILLS) \u2014 same delta-neutral long spot + short perp carry as the taker baseline, but priced as RESTING MAKER orders: spot maker \u22480.075%/side, perp maker \u22480%/side (rebate at higher tiers), ~0 slippage because resting orders do not cross the spread (4 legs \u22480.15% vs ~0.38% taker). 'net_exp%' = mean NET carry per hold (funding + basis \u2212 maker fees). CONDITIONAL: maker fills are NOT guaranteed \u2014 a resting leg may not fill when you want in/out \u2014 so an ACCEPT here depends on the assumed maker fills. NOT a directional bet; excluded from the live directional allowlist by design."
     }
   ],
   "leaderboard": [
-    {
-      "strategy": "Delta-Neutral Carry (Binance, ~5y)",
-      "interval": "1d",
-      "strategy_key": "carry_binance_multiyear_delta_neutral",
-      "trades": 3,
-      "net_expectancy_pct": 19.221962581797516,
-      "profit_factor": 5.1135234626067145,
-      "verdict": "ACCEPT"
-    },
     {
       "strategy": "EMA/MACD/RSI/Volume V2 (HTF)",
       "interval": "4h",
@@ -7237,15 +7072,6 @@
       "net_expectancy_pct": 0.12520596201597708,
       "profit_factor": 1.0342046664180444,
       "verdict": "REJECT"
-    },
-    {
-      "strategy": "Delta-Neutral Carry (maker fills)",
-      "interval": "1h",
-      "strategy_key": "carry_okx_delta_neutral_maker",
-      "trades": 3,
-      "net_expectancy_pct": 0.10101601633013373,
-      "profit_factor": 2.0985043942273855,
-      "verdict": "ACCEPT"
     },
     {
       "strategy": "Trend Pullback (HTF)",

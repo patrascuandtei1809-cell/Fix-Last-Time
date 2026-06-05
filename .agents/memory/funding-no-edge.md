@@ -25,71 +25,37 @@ gross move never beats the ~0.24% round-trip cost). Allowlist stays empty.
   or sub-fee maker arb), not a directional long-only spot entry. Don't re-probe
   this as another spot directional signal.
 
-# Delta-neutral CARRY (long spot + short perp) — HORIZON-DEPENDENT, NOT free money
+# Delta-neutral CARRY (long spot + short perp) — also NO edge
 
-CAPTURE the perp-vs-spot gap delta-neutral instead of betting on its direction:
-long spot + short perp cancels price exposure, so you harvest the perp 8h funding
-stream while you hold. Modeled honestly as ONE buy-and-hold per symbol (the BEST
-case — fees paid once and amortized): four taker legs (spot+perp open, spot+perp
-close) at spot 0.10%/perp 0.05%/side + slip, plus realized funding settlements in
-(t0,tN] and basis convergence.
+The one remaining angle after the directional spread probes all rejected:
+CAPTURE the perp-vs-spot gap delta-neutral instead of betting on its direction.
+Long spot + short perp cancels the price exposure, so you harvest the perp 8h
+funding stream while you hold. Modeled honestly as ONE buy-and-hold per symbol
+(the BEST case — fees paid once and amortized): four taker legs
+(spot+perp open, spot+perp close) at spot 0.10%/perp 0.05%/side + slip, plus the
+realized funding settlements in (t0,tN] and the basis convergence.
 
-**The verdict FLIPS with horizon — the short window hid a real multi-year carry:**
-
-- **Short window (single-venue OKX, ~92d OKX-reachable cap) → 🔴 REJECT.**
-  Per-symbol NET carry: ETH **+0.191%** (APR +0.78%), BTC **−0.072%**,
-  SOL **−0.506%** → mean −0.129%/hold, 1/3 positive → fails breadth. Over 92d the
-  funding harvest is real but thin and gets eaten by 4-leg fees + negative-funding
-  stretches.
-- **Multi-year (single-venue Binance, ~5y / 1825d, 1d granularity) → 🟢 ACCEPT.**
-  Per-symbol NET carry over ~1821d held: BTC **+36.37%** (APR **+7.29%**, funding
-  neg 845/5463), ETH **+35.31%** (APR **+7.08%**, neg 930/5463), SOL **−14.02%**
-  (APR −2.81%, neg 1661/5538) → mean +19.22%/hold, **2/3 winners** (BTC+ETH both
-  net AND funding-only positive) → passes breadth + funding-beats-fees. The 4-leg
-  fee is a one-time 0.38% — trivial when amortized over 5y. Basis term is
-  negligible (≤0.26%), confirming the gain is the FUNDING stream, not price luck.
-
-**Why it flips:** over a full cycle, perp longs pay shorts on net for BTC/ETH
-(persistent positive funding in bull regimes), so a delta-neutral short-perp holder
-collects ~7% APR. The ~92d OKX window simply did not span enough settlements for the
-funding sum to overcome fees. SOL funding is net negative even over 5y — alt-coin
-perps lean short-funded — so SOL carry loses on both horizons.
+**Verdict: 🔴 NO EDGE** (single-venue OKX, ~92d OKX-reachable window). Per-symbol
+NET carry: ETH **+0.191%** (APR +0.78%), BTC **−0.072%**, SOL **−0.506%** → mean
+−0.129%/hold, only 1/3 symbols positive → fails breadth → REJECT. The funding
+harvest is REAL (ETH funding-only-net +0.312%, BTC +0.037%) but thin, and gets
+eaten by the four-leg fees + negative-funding stretches (SOL funding was net
+negative). Consistent with every other AlphaTrade finding.
 
 - **Implementation is a cash-flow study, NOT a StrategySpec.** `backtest.carry_pnl`
-  (pure accumulator, accepts `okx_close` OR `close` column) + `research.run_carry`
-  (OKX) / `run_carry_multiyear` (Binance Vision) / `_carry_verdict` /
-  `build_carry_cell`, injected via `run_research(extra_cells=[…])`, tagged
-  `kind=="carry"`. Run: `python research.py --carry` (OKX 92d) or
-  `python research.py --carry-multiyear` (Binance 5y). Both merge into latest.json.
-- **Multi-year data path:** spot = `fetch_klines` (Binance), perp =
-  `fetch_binance_vision_perp_klines` (monthly UM perp kline zips from
-  data.binance.vision, close=parts[4], 404-skip/header-skip/µs-guard, 12h CSV
-  cache), funding = `fetch_funding_rates(source="auto")` (Vision multi-year). 1d
-  granularity is sufficient for buy-and-hold: only t0/tN prices + the 8h funding
-  settlements between matter. Pre-warm caches per-symbol (each fits the per-command
-  time budget) before the full `--carry-multiyear` run; backgrounded `&` processes
-  get killed when the bash command returns, so don't nohup the full run.
+  (pure accumulator) + `research.run_carry`/`_carry_verdict`/`build_carry_cell`,
+  injected into the report via `run_research(extra_cells=[…])` and tagged
+  `kind=="carry"`. Run with `python research.py --carry --merge`.
 - **Two non-obvious traps:** (1) carry MUST stay out of `CANDIDATES` or it trips
   the 5m-coverage / timeframe lock-in tests — inject it as an extra cell instead.
   (2) `run_research(specs=[])` must run NOTHING; the old `specs or CANDIDATES`
   treated `[]` as falsy and ran the FULL sweep — guard with `specs is None`.
-**Maker-fee carry (does it work if you DON'T cross the spread?):** the taker carry
-pays 4 CROSSING legs (~0.38% one-time). Re-priced as RESTING MAKER orders (spot
-≈0.075%, perp ≈0% rebate, ~0 slippage → ~0.15% over 4 legs), the OKX ~92d carry
-FLIPS from REJECT (mean −0.129%/hold) to a MARGINAL ACCEPT (mean **+0.101%/hold**).
-So the thin funding harvest only clears costs once you stop crossing the spread —
-which validates the standing "capture at sub-fee cost" lesson, but the ACCEPT is
-**CONDITIONAL on maker fills that are NOT guaranteed** (a resting leg may not fill
-when you want in/out). `research.run_carry_maker` (`--carry-maker`) runs maker +
-taker baseline together so both reads sit in latest.json (cell
-`carry_okx_delta_neutral_maker`). Still `kind=="carry"` → never wired live.
-- **An ACCEPT here still NEVER goes live.** Carry cells are excluded from the
-  directional allowlist by `kind` (asserted in test_carry.py), AND the live bot is
-  SPOT-only — it physically cannot short a perp, so a delta-neutral carry is not
-  executable by the current engine regardless of verdict. The leaderboard ACCEPT
-  test (`test_only_v2_4h_is_accepted_in_leaderboard`) filters `kind!="carry"` for
-  the same reason. The finding is real and documented; it is a *different product*
-  (funding farming) than the directional spot bot, not a new live signal.
+- **Funding source for carry = `fetch_funding_rates(source="okx")`** (forced OKX,
+  ~92d, distinct `_okx` cache suffix) so the funding harvested is from the SAME
+  perp being shorted (single-venue consistency), not the Vision archive.
+- **Lesson:** carry/funding is not free money on majors — the 8h funding you
+  collect does not reliably beat a 4-leg round trip. Don't re-probe carry as a
+  live strategy; it never feeds the directional allowlist (excluded by `kind`).
 
 # Alternative-source edge probe: perpetual funding
 

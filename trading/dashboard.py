@@ -1646,11 +1646,61 @@ if _la and isinstance(_la, dict) and _la.get("msg"):
 # can see at a glance WHY each enabled symbol isn't trading. Always rendered
 # (with placeholders) when bot is ON, so an idle bot is never silently idle.
 if bot_running:
-    # Task #11 architecture: the live 20-Minute Dip path is NOT gated by research
-    # validation / allowlists / verdicts, so there is no "auto-disable" status to
-    # surface here. The bot trades on its own price signal; money-safety controls
-    # (emergency stop, safe mode, balance, spending limit, max position size,
-    # cooldown, daily-loss protection) still apply inside the live engine.
+    # ── AUTO-DISABLE GATE STATUS ─────────────────────────────────────────────
+    # Honest surface of whether the bot is allowed to auto-trade the CURRENT
+    # strategy/timeframe. Default-safe: until a research run ACCEPTS a
+    # (strategy, timeframe), the bot will NOT place auto orders. Manual trades
+    # are unaffected. Mirrors the gate in bot.py.
+    # Reflect the LIVE (dip) path identity the orchestrator actually trades
+    # (`DipLiveEngine` → "20-Minute Dip" @ "1m"), NOT the legacy session
+    # strategy/interval. This is the (strategy, timeframe) the auto-disable gate
+    # in live_engine.py checks before every entry, so the banner verdict here
+    # matches the bot's real behaviour.
+    _validation_gated = False
+    try:
+        from research import is_strategy_validated as _is_val, \
+                             validation_status as _val_status
+        _allow_unval = os.environ.get("ALPHATRADE_ALLOW_UNVALIDATED") == "1"
+        _cur_strat = live_engine.DIP_STRATEGY_NAME
+        _cur_intv  = live_engine.DIP_INTERVAL
+        _ok, _entry = _is_val(_cur_strat, _cur_intv)
+        _vs = _val_status()
+        if _allow_unval:
+            st.markdown(
+                f'<div style="padding:8px 20px;background:#2a1a0a;border-bottom:1px solid #e3b34166;'
+                f'font-size:12px;color:#e3b341;font-family:\'JetBrains Mono\',monospace;font-weight:700;">'
+                f'⚠️ VALIDATION OVERRIDE ACTIVE › auto-trading <b>{_cur_strat} @ {_cur_intv}</b> '
+                f'without a proven after-fee edge (ALPHATRADE_ALLOW_UNVALIDATED=1).</div>',
+                unsafe_allow_html=True)
+        elif _ok:
+            _ne = (_entry or {}).get("net_expectancy_pct")
+            _ne_txt = f" · net exp {_ne:+.3f}%/trade" if isinstance(_ne, (int, float)) else ""
+            st.markdown(
+                f'<div style="padding:8px 20px;background:#0d1f12;border-bottom:1px solid #2ea04366;'
+                f'font-size:12px;color:#3fb950;font-family:\'JetBrains Mono\',monospace;font-weight:700;">'
+                f'✅ AUTO-TRADE ENABLED › <b>{_cur_strat} @ {_cur_intv}</b> passed after-fee '
+                f'validation{_ne_txt}.</div>',
+                unsafe_allow_html=True)
+        else:
+            _validation_gated = True
+            st.markdown(
+                f'<div style="padding:10px 20px;background:#2a0d0d;border-bottom:1px solid #f8514966;'
+                f'font-size:12px;color:#f85149;font-family:\'JetBrains Mono\',monospace;font-weight:700;'
+                f'line-height:1.6;">'
+                f'🔒 AUTO-TRADE PAUSED FOR SAFETY › <b>{_cur_strat} @ {_cur_intv}</b> has no '
+                f'validated after-fee edge ({_vs.get("count", 0)} strategy/timeframe pair(s) '
+                f'currently validated).<br>'
+                f'<span style="color:#ffb4b0;font-weight:600;">This is deliberate — not a bug.</span> '
+                f'The bot is running but will NOT place auto orders until the strategy is proven '
+                f'profitable after fees. Manual trades still work.<br>'
+                f'<span style="color:#f0d169;">To proceed:</span> run '
+                f'<code>python research.py</code> to validate the strategy, or set '
+                f'<code>ALPHATRADE_ALLOW_UNVALIDATED=1</code> to override and trade at your own risk.'
+                f'</div>',
+                unsafe_allow_html=True)
+    except Exception:
+        pass
+
     _all_state = get_all_symbol_state() or {}
     _active    = list(st.session_state.active_symbols or [])
     # Ensure every active symbol has a row, even before its first tick
@@ -1674,14 +1724,21 @@ if bot_running:
                 _recent_order = True
         _br  = (_d.get("block_reason") or "").strip()
         _sig = (_stx.get("signal") or "").upper()
+        # The validation gate already has its own dedicated banner above, so
+        # don't repeat the per-symbol "AUTO-DISABLED" reason here — this keeps
+        # the WAITING banner scoped to the OTHER block reasons (safe mode,
+        # cooldown, balance, position open, no-signal).
+        if _br and "AUTO-DISABLED" in _br.upper():
+            continue
         if _br:
             _waiting_reasons.append(f"{_s}: {_br}")
         elif _sig == "HOLD":
             _waiting_reasons.append(f"{_s}: HOLD — {_stx.get('last_reason','no signal yet')}")
 
-    # Surface the WAITING banner whenever the bot is ON but hasn't placed a
-    # recent order, so an idle bot is never silently idle.
-    if not _recent_order:
+    # When auto-trading is paused purely by the validation gate, the dedicated
+    # red banner above already explains it — suppress the (now-redundant)
+    # WAITING banner unless there is some OTHER reason to surface.
+    if not _recent_order and not (_validation_gated and not _waiting_reasons):
         _msg = " · ".join(_waiting_reasons[:3]) if _waiting_reasons \
                else "waiting for first signal across all enabled symbols"
         st.markdown(

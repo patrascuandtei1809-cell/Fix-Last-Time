@@ -34,10 +34,10 @@ import diagnostics
 import live_settings
 from live_engine import DipLiveEngine
 try:
-    # LEGACY AUTO-DISABLE gate (dip_mode=False path ONLY — unreachable in live).
-    # Task #11: the live 20-Minute Dip engine is NOT research-gated. This import
-    # stays available solely for the legacy orchestrator gate further below;
-    # manual trades are never affected by it either way.
+    # AUTO-DISABLE gate — the live bot refuses to auto-trade any
+    # (strategy, timeframe) that a research run has not ACCEPTED as having a
+    # positive after-fee edge. Default-safe: no validated allowlist → no auto
+    # entry. Manual trades are never affected by this gate.
     from research import is_strategy_validated as _is_strategy_validated
 except Exception:                      # pragma: no cover - research optional
     _is_strategy_validated = None
@@ -516,10 +516,9 @@ class TradingBot:
         self.gpt_prob_floor:       int = 50   # GPT advisory only (no hard veto)
         self.global_throttle_sec:   int = 5   # min seconds between any 2 new trades
         self._last_global_trade_at: float = 0.0   # unix seconds
-        # LEGACY AUTO-DISABLE gate flag (dip_mode=False path ONLY). The live
-        # 20-Minute Dip path (dip_mode=True, the default) ignores this entirely
-        # — see Task #11. Kept so the unreachable legacy orchestrator gate below
-        # still behaves; override with ALPHATRADE_ALLOW_UNVALIDATED=1.
+        # AUTO-DISABLE gate: only auto-trade strategy/timeframes a research run
+        # has ACCEPTED (positive after-fee edge). Default-safe ON. Operator can
+        # override with ALPHATRADE_ALLOW_UNVALIDATED=1 (trades at their own risk).
         self.require_validation: bool = (
             os.environ.get("ALPHATRADE_ALLOW_UNVALIDATED", "0") != "1")
         self._validation_block_logged: Optional[str] = None
@@ -560,6 +559,7 @@ class TradingBot:
                 close_fn           = worker._close_position,
                 cooldown           = self._cooldown,
                 manage_manual      = worker.manage_manual_trades,
+                require_validation = self.require_validation,
             )
             self._dip_engines[key] = eng
         return eng
@@ -960,12 +960,11 @@ class TradingBot:
                     for _k, _w in self.workers.items():
                         if _w.symbol == winner["symbol"]:
                             w = _w; break
-                # ── LEGACY AUTO-DISABLE GATE (dip_mode=False path ONLY) ───────
-                # UNREACHABLE in live mode: the default dip_mode=True path runs
-                # _run_dip_cycle() and `continue`s before this block. Task #11
-                # deliberately removed research gating from the live dip engine.
-                # Retained only so the legacy orchestrator path stays regression-
-                # locked (see test_bot_validation_gate.py).
+                # ── AUTO-DISABLE GATE ────────────────────────────────────────
+                # Refuse to auto-trade a (strategy, timeframe) that no research
+                # run has ACCEPTED. Default-safe: unknown/unvalidated → block.
+                # This is the honest enforcement of "no proven after-fee edge →
+                # no auto-trading". Manual trades bypass this entirely.
                 if w is not None and self.require_validation:
                     _allowed, _entry = (False, None)
                     if _is_strategy_validated is not None:

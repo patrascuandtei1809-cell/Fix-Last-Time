@@ -505,18 +505,13 @@ the api-server research engine).
 - **`trading/strategy.py`** — added HTF candidates `donchian_breakout_signal()`
   and `trend_pullback_signal()` (LONG-only, EMA200 trend filter, ≥210 bars),
   registered in `get_signal()`.
-- **LIVE PATH IS NOT RESEARCH-GATED (Task #11 restored).** The live 20-Minute
-  Dip engine (`live_engine.DipLiveEngine`, `dip_mode=True` — the default) places
-  REAL Binance orders on its own price signal and **does NOT consult** research
-  validation / allowlists / verdicts. The gate (`is_strategy_validated`,
-  `data/research/validated_strategies.json`) and its dashboard banner have been
-  removed from the live path. Money-safety controls are unchanged and ALWAYS
-  apply: emergency stop, safe mode, balance check, spending limit, max position
-  size, cooldown (30-min after stop-loss), and daily-loss auto-stop. The legacy
-  `dip_mode=False` orchestrator gate in `bot.py` is kept importable for
-  regression coverage (`test_bot_validation_gate.py`) but is **unreachable** in
-  live mode. `research.is_strategy_validated` stays importable for analysis only.
-- **SYMBOL-SCOPED allowlist (research module, analysis-only).** A canonical ACCEPT is necessary but NOT sufficient
+- **AUTO-DISABLE GATE (live).** `is_strategy_validated(strategy, interval, symbol)`
+  reads the validated allowlist (`data/research/validated_strategies.json`). `bot.py`
+  enforces it BEFORE `execute_entry` — a (strategy, timeframe) with no ACCEPTED
+  research result is **default-safe blocked** (no auto orders). Manual trades
+  bypass it. Override with env `ALPHATRADE_ALLOW_UNVALIDATED=1`. Dashboard shows
+  a colored banner (✅ enabled / 🔒 disabled / ⚠️ override) above the bot overview.
+- **SYMBOL-SCOPED allowlist.** A canonical ACCEPT is necessary but NOT sufficient
   to go LIVE: `save_validated()` authorizes only the symbols that are BOTH
   canonical-ACCEPTed AND deep-validation ROBUST
   (`validate_candidates.approved_symbols_by_strategy`, the MC/WF/sensitivity/maxDD
