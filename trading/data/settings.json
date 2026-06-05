@@ -6,7 +6,7 @@
     "SOLUSDT"
   ],
   "bot_was_running": false,
-  "strategy": "Reversal Scalper",
+  "strategy": "20-Minute Dip",
   "interval": "1m",
   "check_every": 8,
   "threshold": 0.01,

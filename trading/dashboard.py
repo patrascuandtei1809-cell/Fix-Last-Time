@@ -2110,50 +2110,24 @@ with st.sidebar:
                              if st.session_state.interval in INTERVALS else 2)
     st.session_state.interval = intv_sel
 
-    # Strategy selector — default ACTIVE SCALPER (Reversal Scalper) plus the
-    # opt-in EMA_MACD_RSI_VOLUME_V2 trend/momentum strategy (EMA50>EMA200 +
-    # MACD hist + RSI + volume confirmation, ATR-based SL/TP).
-    _STRAT_OPTS = ["Reversal Scalper", "EMA_MACD_RSI_VOLUME_V2"]
-    _cur_strat  = st.session_state.get("strategy", "Reversal Scalper")
-    if _cur_strat not in _STRAT_OPTS:
-        _cur_strat = "Reversal Scalper"
-    strat_pick = st.selectbox(
-        "Strategy", _STRAT_OPTS, index=_STRAT_OPTS.index(_cur_strat),
-        help="Reversal Scalper = fast 2s anti-idle scalper (default). "
-             "EMA_MACD_RSI_VOLUME_V2 = trend/momentum entries confirmed by "
-             "EMA50>EMA200, MACD histogram, RSI and a volume spike, with "
-             "ATR-based stop-loss / take-profit.",
+    # Active strategy — the ONLY live strategy is the 20-Minute Dip. The old
+    # Reversal Scalper / EMA_MACD_RSI_VOLUME_V2 selector has been removed; the
+    # live path (DipLiveEngine) ignores every other strategy. The name is kept
+    # on session_state purely so create_bot() has a label to stamp on trades.
+    st.session_state.strategy = "20-Minute Dip"
+    st.markdown(
+        '<div style="background:#15233a;border:1px solid #1f6feb;border-radius:6px;'
+        'padding:8px 10px;margin:4px 0;color:#a9c7ff;font-weight:700;font-size:13px;">'
+        '💧 20-MINUTE DIP'
+        '<div style="font-size:10px;font-weight:600;color:#79c0ff;'
+        'margin-top:4px;letter-spacing:0.5px;">'
+        'The only live strategy · tune it in the 💧 20-Minute Dip panel below'
+        '</div></div>',
+        unsafe_allow_html=True,
     )
-    st.session_state.strategy = strat_pick
-    strat_sel = "Active Scalper"
-    if strat_pick == "EMA_MACD_RSI_VOLUME_V2":
-        st.markdown(
-            '<div style="background:#15233a;border:1px solid #1f6feb;border-radius:6px;'
-            'padding:8px 10px;margin:4px 0;color:#a9c7ff;font-weight:700;font-size:13px;">'
-            '📈 EMA · MACD · RSI · VOLUME V2'
-            '<div style="font-size:10px;font-weight:600;color:#79c0ff;'
-            'margin-top:4px;letter-spacing:0.5px;">'
-            'Trend + momentum + volume confirmation · ATR SL/TP'
-            '</div></div>',
-            unsafe_allow_html=True,
-        )
-        st.caption("LONG when EMA50>EMA200, MACD hist>0, RSI>50, volume>1.2×20-avg "
-                   "(SHORT mirrors). Stop-loss / take-profit sized from ATR. "
-                   "Needs ≥200 candles — uses a deeper kline fetch.")
-    else:
-        st.markdown(
-            '<div style="background:#1a2e1a;border:1px solid #2ea043;border-radius:6px;'
-            'padding:8px 10px;margin:4px 0;color:#7ce0c2;font-weight:700;font-size:13px;">'
-            '⚡ ACTIVE SCALPER MODE'
-            '<div style="font-size:10px;font-weight:600;color:#7ee787;'
-            'margin-top:4px;letter-spacing:0.5px;">'
-            'AI MODE = HYBRID · Rule-based (primary) + gpt-4o-mini (advisor)'
-            '</div></div>',
-            unsafe_allow_html=True,
-        )
-        st.caption("Single hardcoded strategy. Fires on price ±0.01% OR EMA9 slope "
-                   "OR bounce OR momentum flip. AI confirms but never blocks. "
-                   "Anti-idle lowers threshold after 5–10 min of no trades.")
+    st.caption("BUY on a 20-minute dip with volume + trend confirmation, sell at "
+               "target profit, stop-loss to cap the downside. Configure every "
+               "number in the 💧 20-Minute Dip Strategy panel.")
 
     st.markdown('<hr class="s-div"/>', unsafe_allow_html=True)
 
@@ -2161,66 +2135,12 @@ with st.sidebar:
     st.markdown('<div class="sec-lbl">Bot</div>', unsafe_allow_html=True)
     st.caption("⚡ Bot places **real** Binance Mainnet orders on every signal.")
 
-    # ACTIVE SCALPER MODE: fixed 2s tick + 0.01% threshold. Sliders kept
-    # for emergency override but operator should not need to touch them.
-    ck_val = st.slider("Check interval (s)", 1, 30, st.session_state.check_every, 1,
-                       help="ACTIVE SCALPER spec: 2s tick.")
-    st.session_state.check_every = ck_val
-
-    thr_val = st.slider("Price threshold %", 0.005, 0.5, st.session_state.threshold, 0.005,
-                         help="ACTIVE SCALPER spec: 0.01%. Anti-idle auto-lowers after 5 min.")
-    st.session_state.threshold = thr_val
-
-    # AI is always on (single hardcoded mode) — never blocks trades.
-    st.session_state.ai_assist          = True
-    st.session_state.ai_aggressiveness  = "Active Scalper"
-    st.caption("🧠 Strategy Engine (rule-based) is **always on** in ACTIVE SCALPER MODE — "
-               "confirms strategy signals, never vetoes BUY/SELL. HOLD only "
-               "when the market is truly motionless.")
-
-    # ── Preset buttons removed — ACTIVE SCALPER MODE is the single profile.
-
-
-    if st.button("🔄 Reset to REVERSAL SCALPER defaults",
-                 width="stretch", key="reset_scalp_defaults_btn",
-                 help="Snap check=2s, threshold=0.01%, size=40% of free USDT, "
-                      "SL=0.4%, TP=0.8%, per-symbol cap off, 30 total, cooldown=5s. "
-                      "Keeps API keys."):
-        st.session_state.check_every    = 2
-        st.session_state.threshold      = 0.01
-        st.session_state.manual_amount  = 10.0
-        try:
-            st.session_state.risk.dynamic_size_pct  = 40.0
-            st.session_state.risk.stop_loss_pct     = 0.4
-            st.session_state.risk.take_profit_pct   = 0.8
-            st.session_state.risk.max_per_symbol    = 99
-            st.session_state.risk.max_open_trades   = 30
-            st.session_state.risk.cooldown_seconds  = 5
-        except Exception:
-            pass
-        for _sym, _rs in (st.session_state.get("per_symbol_risk") or {}).items():
-            try:
-                _rs.dynamic_size_pct  = 40.0
-                _rs.stop_loss_pct     = 0.4
-                _rs.take_profit_pct   = 0.8
-                _rs.max_per_symbol    = 99
-                _rs.max_open_trades   = 30
-                _rs.cooldown_seconds  = 5
-            except Exception:
-                pass
-        try:
-            st.session_state.global_risk.max_open_trades_total      = 30
-            st.session_state.global_risk.max_exposure_per_symbol_pct = 100.0
-            st.session_state.global_risk.max_total_exposure_usdt    = 1000.0
-        except Exception:
-            pass
-        log_activity("INFO",
-                     "⚡ REVERSAL SCALPER defaults applied — check=2s · "
-                     "threshold=0.01% · size=40% of free USDT · per-symbol cap off · "
-                     "30 total · SL=0.4% · TP=0.8% · cooldown=5s")
-        st.success("✅ REVERSAL SCALPER defaults applied. Restart the bot for "
-                   "the 2s tick to take effect.")
-        st.rerun()
+    # The live cadence is driven by the 🔥 Aggressive toggle in the dip panel
+    # (2s ON / 6s OFF). check_every / threshold are kept only to satisfy
+    # create_bot(); the dip loop sets its own tick and ignores them.
+    ck_val  = int(st.session_state.check_every)
+    thr_val = float(st.session_state.threshold)
+    st.session_state.ai_aggressiveness = "Active Scalper"
 
     bc1, bc2 = st.columns(2)
     with bc1:
@@ -2379,14 +2299,6 @@ with st.sidebar:
             f"({st.session_state.invest_pct:.1f}% of ${_avail_for_calc:,.2f} available)"
         )
 
-    # Clamp persisted value to current widget bounds — older settings.json
-    # may hold values below the current min (e.g. 5.0 when min was raised
-    # to 10.0), which would crash with StreamlitValueBelowMinError.
-    _ma_default = max(10.0, min(100_000.0, float(st.session_state.manual_amount or 10.0)))
-    ma = st.number_input("Manual order (USDT)", 10.0, 100_000.0,
-                          _ma_default, 10.0)
-    st.session_state.manual_amount = ma
-
     st.markdown('<hr class="s-div"/>', unsafe_allow_html=True)
 
     # Risk
@@ -2473,16 +2385,22 @@ with st.sidebar:
             st.caption("⚠️ Database unavailable — settings use defaults and may "
                        "not persist across restart.")
 
-        _modes = live_settings.SIZE_MODES
+        # Three operator-facing sizing modes. They each affect the LIVE order
+        # size: the dip engine reads these settings every cycle. (Legacy AUTO is
+        # kept in the enum for backward-compat but folded into "All available".)
+        _offer = [live_settings.SIZE_FIXED, live_settings.SIZE_PERCENT,
+                  live_settings.SIZE_ALL]
         _mode_labels = {
-            live_settings.SIZE_AUTO:    "AUTO — bot picks % of free USDT",
-            live_settings.SIZE_FIXED:   "FIXED_USDT — fixed $ per trade",
-            live_settings.SIZE_PERCENT: "PORTFOLIO_PERCENT — % of free USDT",
+            live_settings.SIZE_FIXED:   "Fixed USDT — a fixed $ amount per trade",
+            live_settings.SIZE_PERCENT: "% of available — a % of free USDT per trade",
+            live_settings.SIZE_ALL:     "All available — use all free USDT (safety limits apply)",
         }
         _cur = live_settings.normalize_size_mode(_ls.size_mode)
+        if _cur not in _offer:
+            _cur = live_settings.SIZE_ALL          # legacy AUTO → All available
         _new_mode = st.selectbox(
-            "Position size mode", _modes,
-            index=_modes.index(_cur),
+            "Position size mode", _offer,
+            index=_offer.index(_cur),
             format_func=lambda m: _mode_labels.get(m, m),
             key="dip_size_mode",
         )
@@ -2498,11 +2416,10 @@ with st.sidebar:
                 "Portfolio % per trade", 1.0, 100.0,
                 float(_ls.portfolio_percent), 1.0, key="dip_portfolio_pct",
             ))
-        else:
-            _ls.auto_percent = float(st.slider(
-                "AUTO base % of free USDT", 1.0, 75.0,
-                float(_ls.auto_percent), 1.0, key="dip_auto_pct",
-            ))
+        else:  # SIZE_ALL
+            st.caption("Uses all available USDT each trade — automatically capped "
+                       "by the limits below (max position %, the 25% reserve, and "
+                       "any spending limit).")
 
         st.markdown("**Limits**")
         _ls.bot_spending_limit_usdt = float(st.number_input(
@@ -2557,8 +2474,8 @@ with st.sidebar:
             am.MODES,
             index=am.MODES.index(_cur_mode),
             help="Higher intensity = more trades and larger size. Safety limits "
-                 "(strategy validation, risk caps, spending limits, safe mode) "
-                 "ALWAYS apply and are never bypassed.",
+                 "(risk caps, spending limits, safe mode) ALWAYS apply and are "
+                 "never bypassed.",
         )
         if _sel_mode != _cur_mode:
             if am.set_mode(_sel_mode, actor="dashboard"):
@@ -2588,9 +2505,8 @@ with st.sidebar:
             f"**{int(_p['global_throttle_sec'])}s** between trades, "
             f"re-entry cooldown **{int(_p['cooldown_seconds'])}s**"
         )
-        st.caption("🔒 Never bypasses: strategy validation · allowlist · risk "
-                   "caps · max position size · spending limits · safe mode · "
-                   "exchange safety checks.")
+        st.caption("🔒 Never bypasses: risk caps · max position size · spending "
+                   "limits · safe mode · exchange safety checks.")
         if not am.db_available():
             st.caption("⚠️ Database unavailable — mode falls back to default and "
                        "may not persist across restart.")
@@ -2932,26 +2848,9 @@ with st.container():
                         config={"displayModeBar": False, "staticPlot": False})
 
         # ── Chart toolbar ─────────────────────────────────────────────────────
-        # Amount row (compact, above BUY/SELL)
-        _amt_col1, _amt_col2 = st.columns([5, 2])
-        with _amt_col1:
-            st.markdown(
-                '<div style="height:6px;"></div>',
-                unsafe_allow_html=True,
-            )
-        with _amt_col2:
-            _new_amt = st.number_input(
-                "Amount (USDT)",
-                min_value=1.0, max_value=1_000_000.0,
-                value=float(st.session_state.manual_amount),
-                step=10.0,
-                label_visibility="collapsed",
-                help="Trade size in USDT for manual BUY/SELL",
-                key="toolbar_amount",
-            )
-            st.session_state.manual_amount = _new_amt
-
-        tb1, tb2, tb3, tb4, tb5, tb6 = st.columns([4, 1, 1, 1, 1, 1])
+        # Manual BUY/SELL controls were removed — the 20-Minute Dip bot is the
+        # only trader. Operator controls kept: emergency STOP, bot ON/OFF, refresh.
+        tb1, tb4, tb5, tb6 = st.columns([7, 1, 1, 1])
         with tb1:
             mode_badge = '<span class="cbadge red">⚡ LIVE</span>'
             # Last signal summary for chart bar
@@ -2982,12 +2881,6 @@ with st.container():
   </div>
 </div>
 """, unsafe_allow_html=True)
-        with tb2:
-            buy_btn  = st.button("▲ BUY",  width="stretch",
-                                  help="Manual BUY at current market price")
-        with tb3:
-            sell_btn = st.button("▼ SELL", width="stretch",
-                                  help="Manual SELL at current market price")
         with tb4:
             emg_btn  = st.button("🚨 STOP", width="stretch", type="secondary")
         with tb5:
@@ -3030,453 +2923,6 @@ with st.container():
         with tb6:
             if st.button("↺", width="stretch", help="Refresh"):
                 st.rerun()
-
-        # ── 🧪 FORCE TEST BUY — emergency $10 LIVE market BUY, respects caps ──
-        # Bypasses the confirmation dialog (it IS the test button) but does
-        # NOT bypass risk caps: balance, GlobalRiskManager.check_global, and
-        # per-symbol RiskManager.can_open_trade all run before the order.
-        _ftb_col, _ftb_info = st.columns([0.32, 0.68])
-        with _ftb_col:
-            _force_test_buy = st.button(
-                "🧪 FORCE TEST BUY ($10)", width="stretch", type="secondary",
-                help="Emergency LIVE market BUY of $10 on the selected symbol "
-                     "with SL 0.5% / TP 1.5%. Respects risk caps.",
-            )
-        with _ftb_info:
-            st.markdown(
-                '<div style="font-size:10px;color:#6e7681;'
-                'font-family:\'JetBrains Mono\',monospace;padding-top:10px;">'
-                'sends a real $10 LIVE BUY on '
-                f'<b style="color:#c9d1d9;">{st.session_state.symbol}</b> · '
-                'SL <b style="color:#ef5350;">−0.5%</b> · '
-                'TP <b style="color:#26a69a;">+1.5%</b> · '
-                'risk caps enforced</div>',
-                unsafe_allow_html=True,
-            )
-
-        if _force_test_buy:
-            print(f"[CLICK] FORCE TEST BUY pressed on {st.session_state.symbol}", flush=True)
-            _ftb_sym  = st.session_state.symbol
-            _FTB_USDT = 10.0          # spec: max 10 USDT
-            _FTB_SL   = 0.005         # 0.5%
-            _FTB_TP   = 0.015         # 1.5%
-
-            c = _cl()
-            if c is None:
-                st.error("❌ FORCE TEST BUY refused — not connected to Binance "
-                         "(no API key). Connect first.")
-            else:
-                # 1) Live price
-                try:
-                    _ftb_price = c.get_symbol_price(_ftb_sym)
-                except Exception as _e:
-                    _ftb_price = None
-                    st.error(f"❌ FORCE TEST BUY refused — could not fetch live "
-                             f"price for {_ftb_sym}: {_e}")
-
-                if _ftb_price:
-                    # 2) Balance check — exact reason on shortfall
-                    try:
-                        _bal = c.get_account_balance("USDT")
-                        _free_usdt = float(_bal.get("free", 0.0))
-                    except Exception as _e:
-                        _free_usdt = None
-                        st.error(f"❌ FORCE TEST BUY refused — could not read "
-                                 f"USDT balance: {_e}")
-
-                    if _free_usdt is not None:
-                        if _free_usdt < _FTB_USDT:
-                            st.error(
-                                f"❌ FORCE TEST BUY refused — insufficient USDT. "
-                                f"Need ${_FTB_USDT:.2f} free · have "
-                                f"${_free_usdt:.4f} free "
-                                f"(short ${_FTB_USDT - _free_usdt:.4f}).")
-                            log_activity("WARNING",
-                                f"[FORCE BUY] {_ftb_sym} REFUSED — low USDT "
-                                f"(free=${_free_usdt:.4f} need=${_FTB_USDT:.2f})")
-                        else:
-                            # 3) Global risk gate (exposure / open / daily loss)
-                            _g_rm = GlobalRiskManager(st.session_state.global_risk)
-                            _g_ok, _g_reason = _g_rm.check_global(
-                                all_open_trades=open_trades,
-                                new_invest_usdt=_FTB_USDT,
-                                new_symbol=_ftb_sym,
-                                daily_loss_pct=0.0,
-                            )
-                            if not _g_ok:
-                                st.error(f"❌ FORCE TEST BUY blocked by GLOBAL "
-                                         f"risk cap — {_g_reason}")
-                                log_activity("WARNING",
-                                    f"[FORCE BUY] {_ftb_sym} REFUSED — global "
-                                    f"cap: {_g_reason}")
-                            else:
-                                # 4) Per-symbol gate (max_per_symbol etc.)
-                                _per_rm = (
-                                    RiskManager(st.session_state.per_symbol_risk[_ftb_sym])
-                                    if st.session_state.per_symbol_risk.get(_ftb_sym)
-                                    else st.session_state.risk_manager
-                                )
-                                _open_for_sym = [
-                                    t for t in open_trades
-                                    if t.get("coin") == _ftb_sym
-                                ]
-                                _s_ok, _s_reason = _per_rm.can_open_trade(
-                                    open_trades_for_symbol=_open_for_sym,
-                                    symbol=_ftb_sym,
-                                    new_signal="BUY",
-                                )
-                                if not _s_ok:
-                                    st.error(f"❌ FORCE TEST BUY blocked by "
-                                             f"PER-SYMBOL cap — {_s_reason}")
-                                    log_activity("WARNING",
-                                        f"[FORCE BUY] {_ftb_sym} REFUSED — "
-                                        f"per-symbol: {_s_reason}")
-                                else:
-                                    # 5) Size + place real LIVE market BUY
-                                    _qty_raw = _FTB_USDT / _ftb_price
-                                    try:
-                                        _qty = c.round_quantity(_ftb_sym, _qty_raw)
-                                    except Exception:
-                                        _qty = round(_qty_raw, 6)
-                                    try:
-                                        from binance_client import extract_fill as _extract_fill
-                                        _order = c.place_market_order(
-                                            _ftb_sym, "BUY", _qty)
-                                        _exec_qty, _exec_price = _extract_fill(_order)
-                                        if not _exec_price:
-                                            _exec_price = _ftb_price
-                                        if not _exec_qty:
-                                            _exec_qty = _qty
-                                        _order_id = (_order or {}).get("orderId", "?")
-                                        _entry_fee = _order_fee_usdt(_order, _ftb_sym, _exec_price)
-                                        # 6) Attach SL / TP (overrides per-symbol settings)
-                                        _sl_px = round(_exec_price * (1 - _FTB_SL), 8)
-                                        _tp_px = round(_exec_price * (1 + _FTB_TP), 8)
-                                        _t = {
-                                            "coin":            _ftb_sym,
-                                            "exchange":        "binance",
-                                            "type":            "manual",
-                                            "manual":          True,   # operator-opened — protected by default
-                                            "entry_fee":       _entry_fee,  # P2 real commission (USDT)
-                                            "strategy":        "ForceTestBuy",
-                                            "side":            "BUY",
-                                            "entry_price":     _exec_price,
-                                            "exit_price":      None,
-                                            "quantity":        _exec_qty,
-                                            "invested":        _FTB_USDT,
-                                            "profit_loss":     None,
-                                            "profit_loss_pct": None,
-                                            "open_time":       datetime.now(_TZ).isoformat(),
-                                            "close_time":      None,
-                                            "reason":          (f"🧪 FORCE TEST BUY ${_FTB_USDT:.2f} "
-                                                                f"@ ${_exec_price:.4f} · "
-                                                                f"SL {_FTB_SL*100:.1f}% / "
-                                                                f"TP {_FTB_TP*100:.1f}%"),
-                                            "close_reason":    None,
-                                            "stop_loss":       _sl_px,
-                                            "take_profit":     _tp_px,
-                                            "order_id":        _order_id,
-                                            "status":          "open",
-                                        }
-                                        add_trade(_t)
-                                        # 7) Required log line — exact format
-                                        print(f"[FORCE BUY] {_ftb_sym} "
-                                              f"{_FTB_USDT:.2f} "
-                                              f"{_exec_price:.4f} "
-                                              f"{_order_id}", flush=True)
-                                        log_activity("ORDER",
-                                            f"🧪 [FORCE BUY] {_ftb_sym} "
-                                            f"${_FTB_USDT:.2f} @ ${_exec_price:.4f} "
-                                            f"qty={_exec_qty:.6f} "
-                                            f"SL=${_sl_px:.4f} TP=${_tp_px:.4f} "
-                                            f"order_id={_order_id}")
-                                        try:
-                                            tg.trade_open(
-                                                _ftb_sym, "BUY",
-                                                _exec_price, _FTB_USDT,
-                                                "Force test buy", mode="LIVE")
-                                        except Exception:
-                                            pass
-                                        _msg = (f"🧪 FORCE TEST BUY filled · "
-                                                f"{_ftb_sym} ${_FTB_USDT:.2f} @ "
-                                                f"${_exec_price:.4f} · qty {_exec_qty:.6f} · "
-                                                f"SL ${_sl_px:.4f} · TP ${_tp_px:.4f} · "
-                                                f"order_id {_order_id}")
-                                        st.session_state.last_action = {"kind":"ok","msg":_msg}
-                                        st.toast("🧪 FORCE TEST BUY filled", icon="✅")
-                                        st.rerun()
-                                    except Exception as _e:
-                                        st.error(f"❌ FORCE TEST BUY order failed "
-                                                 f"(NOT recorded — no execution): {_e}")
-                                        log_activity("ERROR",
-                                            f"[FORCE BUY] {_ftb_sym} order "
-                                            f"FAILED: {_e}")
-
-        # ── 💰 BUY NOW 90% USDT — fire a real LIVE BUY using 90% of free USDT ──
-        # Same risk gates as FORCE TEST BUY but uses 90% of free USDT for size
-        # (capped at the symbol's per-symbol exposure cap via global gate).
-        _bnf_col, _bnf_info = st.columns([0.32, 0.68])
-        with _bnf_col:
-            _buy_now_90 = st.button(
-                "💰 BUY NOW 90% USDT", width="stretch", type="primary",
-                help=f"LIVE market BUY on {st.session_state.symbol} using 90% "
-                     f"of your free USDT, SL 0.5% / TP 1.5%. Respects all risk caps.",
-            )
-        with _bnf_info:
-            st.markdown(
-                '<div style="font-size:10px;color:#6e7681;'
-                'font-family:\'JetBrains Mono\',monospace;padding-top:10px;">'
-                'sends a real <b style="color:#f0883e;">90% USDT</b> LIVE BUY on '
-                f'<b style="color:#c9d1d9;">{st.session_state.symbol}</b> · '
-                'SL <b style="color:#ef5350;">−0.5%</b> · '
-                'TP <b style="color:#26a69a;">+1.5%</b> · '
-                'risk caps enforced</div>',
-                unsafe_allow_html=True,
-            )
-
-        if _buy_now_90:
-            print(f"[CLICK] BUY NOW 90% USDT pressed on {st.session_state.symbol}", flush=True)
-            _bn_sym = st.session_state.symbol
-            _BN_SL  = 0.005
-            _BN_TP  = 0.015
-            c = _cl()
-            if c is None:
-                st.error("❌ BUY NOW refused — not connected to Binance "
-                         "(no API key). Connect first.")
-            else:
-                try:
-                    _bn_price = c.get_symbol_price(_bn_sym)
-                except Exception as _e:
-                    _bn_price = None
-                    st.error(f"❌ BUY NOW refused — could not fetch live "
-                             f"price for {_bn_sym}: {_e}")
-                if _bn_price:
-                    try:
-                        _bn_bal  = c.get_account_balance("USDT")
-                        _bn_free = float(_bn_bal.get("free", 0.0))
-                    except Exception as _e:
-                        _bn_free = None
-                        st.error(f"❌ BUY NOW refused — could not read USDT "
-                                 f"balance: {_e}")
-                    if _bn_free is not None:
-                        _BN_USDT = round(_bn_free * 0.90, 2)
-                        if _BN_USDT < 10.0:
-                            st.error(
-                                f"❌ BUY NOW refused — 90% of free USDT is "
-                                f"${_BN_USDT:.2f} (need ≥ $10 for Binance "
-                                f"min notional). Free USDT: ${_bn_free:.4f}.")
-                            log_activity("WARNING",
-                                f"[BUY NOW 90%] {_bn_sym} REFUSED — size too "
-                                f"small (free=${_bn_free:.4f} · 90%="
-                                f"${_BN_USDT:.2f} < $10 min notional)")
-                        else:
-                            _g_rm = GlobalRiskManager(st.session_state.global_risk)
-                            _g_ok, _g_reason = _g_rm.check_global(
-                                all_open_trades=open_trades,
-                                new_invest_usdt=_BN_USDT,
-                                new_symbol=_bn_sym,
-                                daily_loss_pct=0.0,
-                            )
-                            if not _g_ok:
-                                st.error(f"❌ BUY NOW blocked by GLOBAL risk "
-                                         f"cap — {_g_reason}")
-                                log_activity("WARNING",
-                                    f"[BUY NOW 90%] {_bn_sym} REFUSED — "
-                                    f"global cap: {_g_reason}")
-                            else:
-                                _per_rm = (
-                                    RiskManager(st.session_state.per_symbol_risk[_bn_sym])
-                                    if st.session_state.per_symbol_risk.get(_bn_sym)
-                                    else st.session_state.risk_manager
-                                )
-                                _open_for_sym = [t for t in open_trades
-                                                 if t.get("coin") == _bn_sym]
-                                _s_ok, _s_reason = _per_rm.can_open_trade(
-                                    open_trades_for_symbol=_open_for_sym,
-                                    symbol=_bn_sym, new_signal="BUY",
-                                )
-                                if not _s_ok:
-                                    st.error(f"❌ BUY NOW blocked by PER-SYMBOL "
-                                             f"cap — {_s_reason}")
-                                    log_activity("WARNING",
-                                        f"[BUY NOW 90%] {_bn_sym} REFUSED — "
-                                        f"per-symbol: {_s_reason}")
-                                else:
-                                    _qty_raw = _BN_USDT / _bn_price
-                                    try:
-                                        _qty = c.round_quantity(_bn_sym, _qty_raw)
-                                    except Exception:
-                                        _qty = round(_qty_raw, 6)
-                                    try:
-                                        from binance_client import extract_fill as _extract_fill
-                                        _order = c.place_market_order(
-                                            _bn_sym, "BUY", _qty)
-                                        _exec_qty, _exec_price = _extract_fill(_order)
-                                        if not _exec_price: _exec_price = _bn_price
-                                        if not _exec_qty:   _exec_qty   = _qty
-                                        _order_id = (_order or {}).get("orderId", "?")
-                                        _entry_fee = _order_fee_usdt(_order, _bn_sym, _exec_price)
-                                        _sl_px = round(_exec_price * (1 - _BN_SL), 8)
-                                        _tp_px = round(_exec_price * (1 + _BN_TP), 8)
-                                        _t = {
-                                            "coin":            _bn_sym,
-                                            "exchange":        "binance",
-                                            "type":            "manual",
-                                            "manual":          True,   # operator-opened — protected by default
-                                            "entry_fee":       _entry_fee,  # P2 real commission (USDT)
-                                            "strategy":        "BuyNow90",
-                                            "side":            "BUY",
-                                            "entry_price":     _exec_price,
-                                            "exit_price":      None,
-                                            "quantity":        _exec_qty,
-                                            "invested":        _BN_USDT,
-                                            "profit_loss":     None,
-                                            "profit_loss_pct": None,
-                                            "open_time":       datetime.now(_TZ).isoformat(),
-                                            "close_time":      None,
-                                            "reason":          (f"💰 BUY NOW 90% USDT "
-                                                                f"${_BN_USDT:.2f} @ "
-                                                                f"${_exec_price:.4f} · "
-                                                                f"SL {_BN_SL*100:.1f}% / "
-                                                                f"TP {_BN_TP*100:.1f}%"),
-                                            "close_reason":    None,
-                                            "stop_loss":       _sl_px,
-                                            "take_profit":     _tp_px,
-                                            "order_id":        _order_id,
-                                            "status":          "open",
-                                        }
-                                        add_trade(_t)
-                                        print(f"[BUY NOW 90%] {_bn_sym} "
-                                              f"{_BN_USDT:.2f} {_exec_price:.4f} "
-                                              f"{_order_id}", flush=True)
-                                        log_activity("ORDER",
-                                            f"💰 [BUY NOW 90%] {_bn_sym} "
-                                            f"${_BN_USDT:.2f} @ ${_exec_price:.4f} "
-                                            f"qty={_exec_qty:.6f} "
-                                            f"SL=${_sl_px:.4f} TP=${_tp_px:.4f} "
-                                            f"order_id={_order_id}")
-                                        try:
-                                            tg.trade_open(
-                                                _bn_sym, "BUY",
-                                                _exec_price, _BN_USDT,
-                                                "Buy now 90% USDT", mode="LIVE")
-                                        except Exception:
-                                            pass
-                                        _msg = (f"💰 BUY NOW filled · {_bn_sym} "
-                                                f"${_BN_USDT:.2f} (90% of "
-                                                f"${_bn_free:.2f}) @ ${_exec_price:.4f} · "
-                                                f"qty {_exec_qty:.6f} · "
-                                                f"SL ${_sl_px:.4f} · TP ${_tp_px:.4f} · "
-                                                f"order_id {_order_id}")
-                                        st.session_state.last_action = {"kind":"ok","msg":_msg}
-                                        st.toast("💰 BUY NOW filled", icon="✅")
-                                        st.rerun()
-                                    except Exception as _e:
-                                        st.error(f"❌ BUY NOW order failed "
-                                                 f"(NOT recorded — no execution): {_e}")
-                                        log_activity("ERROR",
-                                            f"[BUY NOW 90%] {_bn_sym} order "
-                                            f"FAILED: {_e}")
-
-        # ── Live-trade confirmation dialog ────────────────────────────────────
-        _plt = st.session_state.pending_live_trade
-        if _plt:
-            _plt_side = _plt["side"]
-            _plt_inv  = _plt["invested"]
-            _plt_pr   = _plt["price"]
-            _plt_qty  = _plt["qty"]
-            _side_color = "#26a69a" if _plt_side == "BUY" else "#ef5350"
-            st.markdown(f"""
-<div style="background:#1a0a0a;border:1px solid #ef5350;border-radius:8px;padding:12px 16px;margin:8px 0;">
-  <div style="font-size:11px;color:#ef5350;font-weight:700;margin-bottom:6px;">⚡ LIVE ORDER CONFIRMATION — REAL MONEY</div>
-  <div style="font-size:13px;color:#f0f6fc;font-family:'JetBrains Mono',monospace;">
-    <span style="color:{_side_color};font-weight:700;">{_plt_side}</span>&nbsp;
-    {_plt_qty:.6f} {st.session_state.symbol} &nbsp;·&nbsp;
-    ${_plt_pr:,.4f} &nbsp;·&nbsp; ${_plt_inv:.2f} USDT
-  </div>
-</div>""", unsafe_allow_html=True)
-            _cf1, _cf2 = st.columns(2)
-            with _cf1:
-                if st.button("✅ Confirm LIVE trade", width="stretch", type="primary"):
-                    _do_live = True
-                    c = _cl()
-                    if c is None:
-                        st.error("❌ Disconnected — reconnect before confirming.")
-                        st.session_state.pending_live_trade = None
-                        st.rerun()
-                    _exec_price = 0.0
-                    _exec_qty   = _plt_qty
-                    try:
-                        from binance_client import extract_fill as _extract_fill
-                        order = c.place_market_order(st.session_state.symbol, _plt_side, _plt_qty)
-                        _exec_qty, _exec_price = _extract_fill(order)
-                    except Exception as _e:
-                        st.error(f"Order failed (NOT recorded — no execution): {_e}")
-                        _do_live = False
-                    if _do_live:
-                        rm = st.session_state.risk_manager
-                        _entry_fee = _order_fee_usdt(order, st.session_state.symbol, _exec_price)
-                        _t = {
-                            "coin":            st.session_state.symbol,
-                            "exchange":        "binance",
-                            "type":            "manual",
-                            "manual":          True,   # operator-opened — protected by default
-                            "entry_fee":       _entry_fee,  # P2 real commission (USDT)
-                            "strategy":        "Manual",
-                            "side":            _plt_side,
-                            "entry_price":     _exec_price,
-                            "exit_price":      None,
-                            "quantity":        _exec_qty,
-                            "invested":        _plt_inv,
-                            "profit_loss":     None,
-                            "profit_loss_pct": None,
-                            "open_time":       datetime.now(_TZ).isoformat(),
-                            "close_time":      None,
-                            "reason":          f"Manual {_plt_side} LIVE — ${_plt_inv:.2f} USDT @ ${_exec_price:.4f}",
-                            "close_reason":    None,
-                            "stop_loss":       rm.stop_loss_price(_exec_price, _plt_side),
-                            "take_profit":     rm.take_profit_price(_exec_price, _plt_side),
-                            "status":          "open",
-                        }
-                        add_trade(_t)
-                        log_activity("ORDER",
-                            f"⚡ LIVE {_plt_side} | {_plt_qty:.6f} {st.session_state.symbol} @ ${_exec_price:.4f}")
-                        tg.trade_open(st.session_state.symbol, _plt_side, _exec_price, _plt_inv, "Manual trade", mode="LIVE")
-                    st.session_state.pending_live_trade = None
-                    st.rerun()
-            with _cf2:
-                if st.button("✕ Cancel", width="stretch"):
-                    st.session_state.pending_live_trade = None
-                    st.rerun()
-
-        # Manual trade execution — LIVE only, always staged for confirmation
-        if buy_btn or sell_btn:
-            side = "BUY" if buy_btn else "SELL"
-            price = live_price
-            if price is None:
-                st.error("No price available — chart not loaded yet.")
-            else:
-                c = _cl()
-                if c is None:
-                    st.error("Connect to Binance first — manual LIVE trades require API keys.")
-                else:
-                    invested = st.session_state.manual_amount
-                    # Enforce hard cap
-                    _cap = st.session_state.risk.max_trade_usdt
-                    if _cap > 0 and invested > _cap:
-                        st.warning(f"⚠️ Amount ${invested:.2f} exceeds hard cap ${_cap:.2f} — capped automatically.")
-                        invested = _cap
-                    qty = invested / price
-                    try:
-                        qty = c.round_quantity(st.session_state.symbol, qty)
-                    except Exception:
-                        qty = round(qty, 6)
-                    # Stage LIVE order for explicit confirmation
-                    st.session_state.pending_live_trade = {
-                        "side": side, "invested": invested,
-                        "price": price, "qty": qty,
-                    }
-                    st.rerun()
 
         if emg_btn:
             st.session_state.risk.emergency_stop = True
@@ -3651,12 +3097,13 @@ with st.container():
             else:
                 _view_end   = pd.Timestamp.now(tz=_xtz) if _xtz is not None else pd.Timestamp.now()
                 _view_start = _view_end - pd.Timedelta(hours=_win_hours)
-            # Force Plotly to honor our explicit bounded range on EVERY render.
-            # uirevision keyed on this monotonically-increasing seq defeats
-            # Plotly preserving a stale scroll/box-zoom that would otherwise leave
-            # the chart "stuck" zoomed out across auto-refreshes — the server-set
-            # window (driven by the Zoom in/out/Reset buttons) is now canonical.
-            st.session_state["_chart_render_seq"] = st.session_state.get("_chart_render_seq", 0) + 1
+            # uirevision is kept STABLE across auto-refreshes — keyed on symbol +
+            # interval + a button "view nonce". A manual scroll / box-zoom now
+            # STICKS instead of snapping back every tick (Plotly preserves the UI
+            # view while uirevision is unchanged, ignoring the explicit range
+            # below). The explicit bounded range is only re-applied when the nonce
+            # CHANGES, i.e. when the operator presses Zoom in / out / Reset (each
+            # bumps the nonce) or switches symbol / interval.
 
             # ── Dynamic subplot layout based on enabled indicators ──────────────
             _panels = ["price"]
@@ -3934,7 +3381,7 @@ with st.container():
                 uirevision=f"alphatrade-main-chart-"
                            f"{st.session_state.symbol}-"
                            f"{st.session_state.interval}-"
-                           f"{st.session_state['_chart_render_seq']}",
+                           f"{st.session_state['chart_view_nonce']}",
             )
             # X-axis: shared, sparse grid, scroll/pan unlocked, default 4h window
             for r in range(1, n_rows + 1):
@@ -4196,6 +3643,30 @@ with st.container():
                         _thr_txt = (
                             f'BUY ≤ {_buy_t:.2f}% · TP +{_tp_t:.2f}% · SL {_sl_t:.2f}%'
                             if None not in (_buy_t, _tp_t, _sl_t) else "—")
+                        # Volume multiplier vs the required spike threshold.
+                        _vr = getattr(_rec, "volume_ratio", None)
+                        _vr_need = float(getattr(_rec, "min_volume_multiple", 1.5))
+                        _vr_on = bool(getattr(_rec, "volume_filter_on", True))
+                        if _vr is None:
+                            _vol_txt = "vol —"
+                        elif not _vr_on:
+                            _vol_txt = f"vol {_vr:.2f}× (filter off)"
+                        else:
+                            _v_ok = _vr >= _vr_need
+                            _vol_txt = (f'vol <b class="{"up" if _v_ok else "dn"}">'
+                                        f'{_vr:.2f}×</b> (need ≥{_vr_need:.1f}×) '
+                                        f'{"✓" if _v_ok else "✗"}')
+                        # Trend-filter result.
+                        _tok = getattr(_rec, "trend_ok", None)
+                        _t_on = bool(getattr(_rec, "trend_filter_on", True))
+                        if not _t_on:
+                            _trend_txt = "trend (filter off)"
+                        elif _tok is None:
+                            _trend_txt = "trend —"
+                        else:
+                            _trend_txt = (f'trend <b class="up">✓ upturn</b>'
+                                          if _tok else
+                                          f'trend <b class="dn">✗ no upturn</b>')
                         st.markdown(
                             f'<div class="card">'
                             f'<div class="c-lbl">{_rec.symbol}</div>'
@@ -4203,9 +3674,10 @@ with st.container():
                             f'<div style="font-size:11px;color:#8b949e;">'
                             f'now {_px} · 20m ago {_ago}<br>'
                             f'20m change <b>{_chg_txt}</b> · open PnL {_pnl_txt}<br>'
+                            f'{_vol_txt} · {_trend_txt}<br>'
                             f'{_thr_txt}<br>'
                             f'last action <b>{_rec.decision}</b> · size {_amt}<br>'
-                            f'{(_rec.reason or "")[:80]}'
+                            f'{(_rec.reason or "")}'
                             f'</div></div>',
                             unsafe_allow_html=True,
                         )

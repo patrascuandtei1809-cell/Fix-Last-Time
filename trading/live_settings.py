@@ -39,7 +39,8 @@ except Exception:                                    # pragma: no cover
 SIZE_AUTO = "AUTO"                       # bot picks a % of free USDT
 SIZE_FIXED = "FIXED_USDT"                # fixed dollar amount per trade
 SIZE_PERCENT = "PORTFOLIO_PERCENT"       # % of free USDT per trade
-SIZE_MODES: List[str] = [SIZE_AUTO, SIZE_FIXED, SIZE_PERCENT]
+SIZE_ALL = "ALL_AVAILABLE"               # deploy all free USDT (safety caps still apply)
+SIZE_MODES: List[str] = [SIZE_AUTO, SIZE_FIXED, SIZE_PERCENT, SIZE_ALL]
 
 
 def normalize_size_mode(mode: Optional[str]) -> str:

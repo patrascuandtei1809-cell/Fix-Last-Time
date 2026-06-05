@@ -34,7 +34,7 @@ from typing import Callable, Dict, List, Optional
 import dip_strategy as dip
 from live_settings import (
     LiveSettings, CooldownStore,
-    SIZE_AUTO, SIZE_FIXED, SIZE_PERCENT,
+    SIZE_AUTO, SIZE_FIXED, SIZE_PERCENT, SIZE_ALL,
 )
 
 BINANCE_MIN_NOTIONAL = 10.0
@@ -70,6 +70,13 @@ class ActivityRecord:
     decision: str = "HOLD"          # BUY / SELL / STOP_LOSS / HOLD / SKIP
     reason: str = ""                # no-trade reason or action explanation
     traded: bool = False            # a LIVE order was placed this evaluation
+    # Entry-quality diagnostics — populated on EVERY entry evaluation so the
+    # dashboard activity panel can always show why a BUY did / didn't fire.
+    volume_ratio: Optional[float] = None     # last-candle volume ÷ recent avg
+    volume_filter_on: bool = True            # is the volume gate enabled?
+    min_volume_multiple: float = 1.5         # required multiple when the gate is on
+    trend_ok: Optional[bool] = None          # short-term upturn confirmed?
+    trend_filter_on: bool = True             # is the trend gate enabled?
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -114,6 +121,8 @@ def compute_order_amount(settings: LiveSettings, free_usdt: float,
         amount = float(settings.fixed_usdt_amount)
     elif mode == SIZE_PERCENT:
         amount = free_usdt * float(settings.portfolio_percent) / 100.0
+    elif mode == SIZE_ALL:
+        amount = free_usdt              # all available — safety caps below still apply
     else:  # SIZE_AUTO — aggressive uses a larger default slice
         pct = float(settings.auto_percent)
         if settings.aggressive_on:
@@ -241,6 +250,9 @@ class DipLiveEngine:
             stop_loss=thr.stop_loss_pct,
             aggressive=settings.aggressive_on,
             size_mode=settings.size_mode,
+            volume_filter_on=bool(getattr(settings, "volume_filter_on", True)),
+            min_volume_multiple=float(getattr(settings, "min_volume_multiple", 1.5)),
+            trend_filter_on=bool(getattr(settings, "trend_filter_on", True)),
         )
         try:
             return self._evaluate(rec, symbol, thr, settings, open_trades,
@@ -324,6 +336,22 @@ class DipLiveEngine:
         except ValueError as e:
             return self._skip(rec, f"Not enough candle data — {e}")
 
+        # Entry-quality diagnostics — computed ALWAYS (regardless of whether the
+        # gates are on or pass) so the activity panel can show the live volume
+        # multiplier + trend-filter result on every evaluation.
+        try:
+            vols = dip.volumes_from_klines(df)
+            _v_ok, v_ratio = dip.volume_ok(
+                vols, getattr(settings, "min_volume_multiple", 1.5),
+                thr.lookback_minutes)
+            rec.volume_ratio = v_ratio
+        except Exception:
+            rec.volume_ratio = None
+        try:
+            rec.trend_ok = bool(dip.trend_ok(closes, thr.lookback_minutes))
+        except Exception:
+            rec.trend_ok = None
+
         # 4. Balance
         try:
             bal = self.exchange.get_balance("USDT")
@@ -353,21 +381,18 @@ class DipLiveEngine:
         #     short-term trend upturn. These only restrict NEW entries; an open
         #     position's exit already ran above and is never gated by these.
         if getattr(settings, "volume_filter_on", False):
-            vols = dip.volumes_from_klines(df)
-            v_ok, v_ratio = dip.volume_ok(
-                vols, getattr(settings, "min_volume_multiple", 1.5),
-                thr.lookback_minutes)
-            if not v_ok:
+            _need = float(getattr(settings, "min_volume_multiple", 1.5))
+            if rec.volume_ratio is None or rec.volume_ratio < _need:
                 rec.decision = "HOLD"
-                rec.reason = (f"Volume too low — {v_ratio:.2f}× < "
-                              f"{settings.min_volume_multiple:.2f}× avg")
+                rec.reason = (f"Volume too low — {(rec.volume_ratio or 0.0):.2f}× < "
+                              f"{_need:.2f}× avg")
                 self._state(symbol, signal="HOLD", reason=rec.reason,
                             block_reason="")
                 self._log("SIGNAL", f"[{symbol}] {rec.reason}")
                 return _publish(rec)
 
         if getattr(settings, "trend_filter_on", False):
-            if not dip.trend_ok(closes, thr.lookback_minutes):
+            if not rec.trend_ok:
                 rec.decision = "HOLD"
                 rec.reason = "Trend filter — waiting for upturn (last candle not green)"
                 self._state(symbol, signal="HOLD", reason=rec.reason,
