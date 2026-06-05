@@ -971,17 +971,44 @@ def _carry_verdict(results: List[Dict]) -> Tuple[str, List[str]]:
     return "ACCEPT", reasons
 
 
+_OKX_CARRY_NOTE = (
+    "CARRY / CASH-FLOW STUDY — delta-neutral long spot + short perp, "
+    "harvesting OKX perp funding (NOT a directional price bet, NOT the "
+    "rejected basis_*/xspread_* signals). Single-venue OKX over the "
+    "~92d OKX-reachable window. 'net_exp%' = mean NET carry per hold "
+    "(funding + basis − four-leg fees). Excluded from the live "
+    "directional allowlist by design."
+)
+
+
 def build_carry_cell(results: List[Dict], *, interval: str,
-                     spot_fee: float, perp_fee: float, slip: float) -> Dict:
+                     spot_fee: float, perp_fee: float, slip: float,
+                     strategy_key: str = "carry_okx_delta_neutral",
+                     strategy: str = "Delta-Neutral Carry (long spot + short perp)",
+                     signal_name: str = "Delta-Neutral Carry",
+                     note: Optional[str] = None,
+                     conditional_reason: Optional[str] = None) -> Dict:
     """Assemble the carry results into a report cell (same shape as a spec cell).
 
     Tagged `kind=="carry"` so it sits alongside the directional verdicts in the
     leaderboard but is excluded from the live allowlist. The `aggregate` exposes
     mean net-carry-per-hold as `expectancy_pct` so the leaderboard renders it,
     and the per-symbol economics live in `subcells` + the `carry` detail block.
+
+    `strategy_key`/`strategy`/`signal_name`/`note` let the same builder emit the
+    OKX ~92d cell AND the multi-year Binance taker/maker cells as DISTINCT cells.
+    `conditional_reason`, when set, is prepended to the verdict reasons so an
+    ACCEPT that depends on an assumption (e.g. resting-maker fills) is flagged as
+    CONDITIONAL rather than read as an unconditional green light.
     """
+    note = _OKX_CARRY_NOTE if note is None else note
     held = [r for r in results if r.get("held")]
     verdict, reasons = _carry_verdict(results)
+    if conditional_reason:
+        if verdict == "ACCEPT":
+            reasons = [f"CONDITIONAL ACCEPT — {conditional_reason}"] + reasons
+        else:
+            reasons = reasons + [f"note: {conditional_reason}"]
     n = len(held)
     mean_net = (sum(r["net_carry_pct"] for r in held) / n) if n else 0.0
     wins = sum(1 for r in held if r["net_carry_pct"] > 0)
@@ -1012,11 +1039,11 @@ def build_carry_cell(results: List[Dict], *, interval: str,
 
     return {
         "kind":         "carry",
-        "strategy_key": "carry_okx_delta_neutral",
-        "strategy":     "Delta-Neutral Carry (long spot + short perp)",
-        "signal_name":  "Delta-Neutral Carry",
+        "strategy_key": strategy_key,
+        "strategy":     strategy,
+        "signal_name":  signal_name,
         "interval":     interval,
-        "exit_policy":  {"model": "buy-and-hold carry, 4 taker legs",
+        "exit_policy":  {"model": "buy-and-hold carry, 4 legs",
                          "spot_fee_pct": spot_fee, "perp_fee_pct": perp_fee,
                          "slip_pct": slip},
         "qualify_mode": "carry",
@@ -1033,12 +1060,7 @@ def build_carry_cell(results: List[Dict], *, interval: str,
         "verdict_reasons": reasons,
         "errors":       [f"{r['symbol']}: {r.get('error')}"
                          for r in results if not r.get("held")],
-        "note": "CARRY / CASH-FLOW STUDY — delta-neutral long spot + short perp, "
-                "harvesting OKX perp funding (NOT a directional price bet, NOT the "
-                "rejected basis_*/xspread_* signals). Single-venue OKX over the "
-                "~92d OKX-reachable window. 'net_exp%' = mean NET carry per hold "
-                "(funding + basis − four-leg fees). Excluded from the live "
-                "directional allowlist by design.",
+        "note": note,
     }
 
 
@@ -1102,6 +1124,151 @@ def run_carry(*, symbols=CARRY_SYMBOLS, days: int = CARRY_DAYS,
     return {"cells": [cell], "carry_verdict": cell["verdict"]}
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Multi-year, single-venue Binance carry (taker vs assumed-MAKER fills)
+# ─────────────────────────────────────────────────────────────────────────────
+# The OKX carry above is capped at ~92d. To see whether the funding harvest beats
+# costs over a FULL cycle — and whether SOL (the lone ~92d loser) flips — run the
+# SAME delta-neutral carry over Binance's multi-year history:
+#   • funding  → Binance Vision monthly archive (PRIMARY, ~5y, the SAME venue's
+#                perp that the short leg receives). Reachable from Replit even
+#                though the live fapi is 451 (see funding-no-edge.md).
+#   • spot     → Binance spot candles (data-api.binance.vision).
+# Binance perp CANDLES are geo-blocked (fapi 451), so the perp price leg is
+# modeled with SPOT as a proxy → the basis-convergence term is exactly 0 and we
+# credit ONLY realized funding minus the four one-time legs (the conservative
+# funding-only carry). Over ~5y a one-time entry/exit basis offset is negligible
+# next to years of 8h funding cash-flows, so this understates, never inflates.
+CARRY_MULTIYEAR_DAYS     = 1825      # ~5y (Binance Vision funding coverage)
+CARRY_MULTIYEAR_INTERVAL = "1d"      # spot candle granularity (hold window only)
+# Assumed-MAKER profile: resting limit orders that do NOT cross the spread, so
+# slippage is 0 and you pay the maker rate on both legs. The ACCEPT it produces
+# is CONDITIONAL — only this cheap if every leg actually fills as a maker.
+CARRY_SPOT_FEE_MAKER = 0.02
+CARRY_PERP_FEE_MAKER = 0.02
+CARRY_MAKER_SLIP     = 0.0
+
+_CARRY_PROFILES = {
+    "taker": dict(spot_fee=CARRY_SPOT_FEE, perp_fee=CARRY_PERP_FEE,
+                  slip=DEFAULT_SLIP),
+    "maker": dict(spot_fee=CARRY_SPOT_FEE_MAKER, perp_fee=CARRY_PERP_FEE_MAKER,
+                  slip=CARRY_MAKER_SLIP),
+}
+
+
+def _multiyear_carry_note(profile: str) -> str:
+    fee = _CARRY_PROFILES[profile]
+    legs = 2 * (fee["spot_fee"] + fee["slip"]) + 2 * (fee["perp_fee"] + fee["slip"])
+    base = (
+        f"CARRY / CASH-FLOW STUDY — multi-year (~5y) single-venue Binance "
+        f"delta-neutral carry under {profile.upper()} fees "
+        f"(spot {fee['spot_fee']}% · perp {fee['perp_fee']}% · slip {fee['slip']}% "
+        f"→ 4 legs = {legs:.2f}% one-time). Funding from the Binance Vision "
+        f"archive; spot from Binance candles; the geo-blocked perp price leg is "
+        f"proxied by spot so the basis term is 0 and ONLY realized funding minus "
+        f"fees is credited (conservative funding-only read). 'net_exp%' = mean NET "
+        f"carry per hold. Excluded from the live directional allowlist by design."
+    )
+    if profile == "maker":
+        base += (" MAKER fills are an ASSUMPTION (resting limit orders may not "
+                 "fill); read any ACCEPT as CONDITIONAL.")
+    return base
+
+
+def run_carry_multiyear_symbol(symbol: str, *, profile: str = "taker",
+                               days: int = CARRY_MULTIYEAR_DAYS,
+                               interval: str = CARRY_MULTIYEAR_INTERVAL,
+                               use_cache: bool = True) -> Dict:
+    """Accumulate ONE multi-year Binance carry hold for `symbol` at `profile` fees.
+
+    Spot candles proxy the (geo-blocked) perp price leg, so `carry_pnl`'s basis
+    term is 0 and the result is the conservative funding-minus-fees carry.
+    """
+    if profile not in _CARRY_PROFILES:
+        raise ValueError(f"unknown carry fee profile {profile!r}")
+    fee = _CARRY_PROFILES[profile]
+    funding = backtest.fetch_funding_rates(symbol, days, use_cache=use_cache,
+                                           source="binance-vision")
+    spot = backtest.fetch_klines(symbol, interval, days, use_cache=use_cache)
+    leg = spot.rename(columns={"close": "okx_close"})[["open_time", "okx_close"]]
+    res = backtest.carry_pnl(leg, leg, funding,
+                             spot_fee_pct=fee["spot_fee"],
+                             perp_fee_pct=fee["perp_fee"], slip_pct=fee["slip"])
+    res["symbol"] = symbol
+    res["profile"] = profile
+    return res
+
+
+def run_carry_multiyear(*, profiles: Tuple[str, ...] = ("taker", "maker"),
+                        symbols=CARRY_SYMBOLS, days: int = CARRY_MULTIYEAR_DAYS,
+                        interval: str = CARRY_MULTIYEAR_INTERVAL,
+                        use_cache: bool = True, persist: bool = True,
+                        merge_latest: bool = True) -> Dict:
+    """Run the multi-year Binance carry under each fee profile and MERGE the cells.
+
+    Emits one DISTINCT `kind=="carry"` cell per profile
+    (`carry_binance_multiyear_taker` / `…_maker`) so the taker and assumed-maker
+    reads sit side-by-side in latest.json alongside the existing OKX ~92d carry.
+    The maker cell's ACCEPT is flagged CONDITIONAL on resting-maker fills.
+    """
+    print("=" * 76)
+    print("AlphaTrade MULTI-YEAR BINANCE CARRY — does the funding harvest beat "
+          "costs over ~5y?")
+    print("=" * 76)
+    print(f"delta-neutral long spot + short perp · single-venue Binance · ~{days}d "
+          f"window · funding via Vision archive · profiles={','.join(profiles)}")
+    print("-" * 76)
+
+    cells: List[Dict] = []
+    for profile in profiles:
+        fee = _CARRY_PROFILES[profile]
+        results: List[Dict] = []
+        for sym in symbols:
+            try:
+                r = run_carry_multiyear_symbol(sym, profile=profile, days=days,
+                                               interval=interval,
+                                               use_cache=use_cache)
+            except Exception as e:
+                print(f"  [{profile}] [skip] {sym}: {e}")
+                results.append({"symbol": sym, "held": False, "error": str(e)})
+                continue
+            if r.get("held"):
+                print(f"  [{profile}] {sym}: held {r['days_held']:.0f}d · funding "
+                      f"{r['funding_sum_pct']:+.3f}% ({r['n_funding']} pays, "
+                      f"{r['n_funding_neg']} neg, APR {r['funding_apr_pct']:+.2f}%) "
+                      f"· fees -{r['fees_pct']:.3f}% → NET {r['net_carry_pct']:+.3f}% "
+                      f"(APR {r['apr_pct']:+.2f}%)")
+            else:
+                print(f"  [{profile}] {sym}: no hold ({r.get('error')})")
+            results.append(r)
+
+        cond = ("resting-MAKER fills (0 slippage + maker rate both legs); a taker "
+                "execution pays the higher fees in the taker cell"
+                if profile == "maker" else None)
+        cell = build_carry_cell(
+            results, interval=interval, spot_fee=fee["spot_fee"],
+            perp_fee=fee["perp_fee"], slip=fee["slip"],
+            strategy_key=f"carry_binance_multiyear_{profile}",
+            strategy=f"Multi-Year Binance Carry ({profile} fees)",
+            signal_name=f"Multi-Year Carry ({profile})",
+            note=_multiyear_carry_note(profile),
+            conditional_reason=cond)
+        mark = "🟢 ACCEPT" if cell["verdict"] == "ACCEPT" else "🔴 REJECT"
+        print("-" * 76)
+        print(f"[{profile}] MULTI-YEAR CARRY VERDICT: {mark} — "
+              f"{cell['verdict_reasons'][0]}")
+        cells.append(cell)
+    print("=" * 76)
+
+    if persist:
+        return run_research(specs=[], symbols=symbols,
+                            fee=DEFAULT_FEE, slip=DEFAULT_SLIP,
+                            use_cache=use_cache, persist=True,
+                            merge_latest=merge_latest, extra_cells=cells)
+    return {"cells": cells,
+            "carry_verdicts": {c["strategy_key"]: c["verdict"] for c in cells}}
+
+
 if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser(description="AlphaTrade strategy research sweep")
@@ -1118,9 +1285,16 @@ if __name__ == "__main__":
                     help="run the DELTA-NEUTRAL CARRY study (long spot + short "
                          "perp, harvest funding) and merge it into latest.json — a "
                          "cash-flow test, separate from the directional sweep")
+    ap.add_argument("--carry-multiyear", action="store_true",
+                    help="run the MULTI-YEAR Binance carry under taker AND assumed-"
+                         "maker fees (~5y funding via Vision) and merge both cells "
+                         "into latest.json — a cash-flow test, never wired live")
     args = ap.parse_args()
 
-    if args.carry:
+    if args.carry_multiyear:
+        run_carry_multiyear(use_cache=not args.no_cache,
+                            persist=not args.no_persist, merge_latest=True)
+    elif args.carry:
         # Carry runs standalone and merges into the canonical report by default,
         # so the directional sweep is preserved and not re-run.
         run_carry(slip=args.slippage, use_cache=not args.no_cache,

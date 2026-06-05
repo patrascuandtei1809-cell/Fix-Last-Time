@@ -57,6 +57,28 @@ negative). Consistent with every other AlphaTrade finding.
   collect does not reliably beat a 4-leg round trip. Don't re-probe carry as a
   live strategy; it never feeds the directional allowlist (excluded by `kind`).
 
+## Multi-year carry DOES clear costs — the ~92d "no edge" was a window artifact
+**The 4-leg fee is ONE-TIME; funding is a continuous cash-flow.** Over a
+multi-year buy-and-hold the fee is amortized to nothing, so the carry result is
+dominated by the SIGN/size of the funding stream, not the fees. Single-venue
+Binance (Vision funding + Binance spot, perp price PROXIED by spot so the basis
+term is exactly 0 — conservative funding-only read) over the Vision-reachable
+window: BTC NET **+36.4%**, ETH **+35.3%** (taker), SOL **−14.3%** (its funding
+was net negative the whole window). 2/3 positive → ACCEPT. The maker variant
+(spot+perp 0.02%, 0 slip → 0.08% total vs taker 0.38%) is only marginally better
+per hold — over years the fee gap is noise; **funding sign is everything.**
+**Why CONDITIONAL:** the maker ACCEPT assumes every leg fills as a resting maker
+(it may not), and the funding-only model ignores perp margin/liquidation/rollover
+risk over a multi-year hold. Flag any maker carry ACCEPT as CONDITIONAL.
+**How to apply:** `python research.py --carry-multiyear` (taker + maker, merged
+as `carry_binance_multiyear_{taker,maker}`, `kind=="carry"`). Use
+`fetch_funding_rates(source="binance-vision")` — STRICT, no OKX fallback — so a
+cell labeled Binance can't silently harvest OKX funding. Still NEVER wired live
+(carry excluded from the allowlist by `kind`); it's a cash-flow study, and
+leaderboard/`edge_found` tests must also exclude `kind=="carry"`. Note: `1d`
+spot from Vision caps ~1000 candles (~2.7y), so the hold is multi-year but
+shorter than the ~5y funding coverage — honest, just not the full 5y.
+
 # Alternative-source edge probe: perpetual funding
 
 Probed whether a non-price signal (perp-swap FUNDING rate) clears the after-fee

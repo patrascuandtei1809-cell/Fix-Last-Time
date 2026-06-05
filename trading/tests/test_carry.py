@@ -179,3 +179,155 @@ def test_carry_cell_excluded_from_allowlist():
     promoted = {c["strategy_key"] for c in out.get("cells", [])
                if c["verdict"] == "ACCEPT" and c.get("kind") != "carry"}
     assert "carry_okx_delta_neutral" not in promoted
+
+
+# ── MULTI-YEAR maker-vs-taker carry economics (Task #28) ─────────────────────
+# Fee profiles read straight from research so the tests track the code constants.
+_TAKER = R._CARRY_PROFILES["taker"]
+_MAKER = R._CARRY_PROFILES["maker"]
+
+
+def _carry(spot, perp, fund, prof):
+    return B.carry_pnl(spot, perp, fund, spot_fee_pct=prof["spot_fee"],
+                       perp_fee_pct=prof["perp_fee"], slip_pct=prof["slip"])
+
+
+def test_maker_one_time_fee_is_cheaper_than_taker():
+    """Same hold, zero funding → maker pays a strictly smaller one-time 4-leg fee."""
+    flat = _candles([100, 100, 100])
+    t = _carry(flat, flat, _funding([]), _TAKER)
+    m = _carry(flat, flat, _funding([]), _MAKER)
+    assert m["fees_pct"] < t["fees_pct"]
+    assert m["net_carry_pct"] > t["net_carry_pct"]   # less cost = better net
+
+
+def test_spot_proxies_perp_so_basis_is_zero():
+    """Multi-year model uses spot as the perp leg → basis term cancels exactly."""
+    leg = _candles([100, 130, 95, 140])              # arbitrary price path
+    res = _carry(leg, leg, _funding([]), _MAKER)
+    assert res["basis_pnl_pct"] == approx(0.0)
+
+
+def test_multiyear_funding_dwarfs_the_one_time_fee():
+    """Long +funding stream → both profiles clear costs; the maker/taker gap is
+    just the tiny one-time fee difference, not the multi-year harvest."""
+    n = 200                                          # 200 × 8h settlements
+    px = _candles([100] * (n + 1), step_ms=_8H)
+    fund = _funding([((i + 1) * _8H, 0.0001) for i in range(n)])  # +0.01% each
+    t = _carry(px, px, fund, _TAKER)
+    m = _carry(px, px, fund, _MAKER)
+    assert t["funding_sum_pct"] == approx(2.0)       # 200 × 0.01%
+    assert t["net_carry_pct"] > 0 and m["net_carry_pct"] > 0
+    assert m["net_carry_pct"] > t["net_carry_pct"]
+    # the entire difference is the one-time fee gap, dwarfed by the harvest
+    assert (m["net_carry_pct"] - t["net_carry_pct"]) == approx(
+        t["fees_pct"] - m["fees_pct"])
+
+
+def test_short_window_loser_flips_positive_under_maker():
+    """A thin funding harvest that loses to the taker fee can flip positive under
+    the cheaper maker fee — the SOL-style 'lone loser flips' check."""
+    px = _candles([100, 100, 100, 100], step_ms=_8H)
+    fund = _funding([(_8H, 0.001), (2 * _8H, 0.001)])  # +0.20% total
+    t = _carry(px, px, fund, _TAKER)
+    m = _carry(px, px, fund, _MAKER)
+    assert t["net_carry_pct"] < 0                    # 0.20% < taker 4-leg cost
+    assert m["net_carry_pct"] > 0                    # but clears the maker cost
+
+
+def test_multiyear_maker_cell_is_conditional_and_taker_is_not():
+    res = [_held("BTCUSDT", 0.30, 0.20), _held("ETHUSDT", 0.25, 0.15)]
+    maker = R.build_carry_cell(
+        res, interval="1d", spot_fee=_MAKER["spot_fee"],
+        perp_fee=_MAKER["perp_fee"], slip=_MAKER["slip"],
+        strategy_key="carry_binance_multiyear_maker",
+        conditional_reason="resting-maker fills")
+    taker = R.build_carry_cell(
+        res, interval="1d", spot_fee=_TAKER["spot_fee"],
+        perp_fee=_TAKER["perp_fee"], slip=_TAKER["slip"],
+        strategy_key="carry_binance_multiyear_taker")
+    assert maker["verdict"] == "ACCEPT" and taker["verdict"] == "ACCEPT"
+    assert maker["verdict_reasons"][0].startswith("CONDITIONAL ACCEPT")
+    assert not taker["verdict_reasons"][0].startswith("CONDITIONAL")
+
+
+def test_multiyear_carry_cells_excluded_from_allowlist():
+    """Both distinct multi-year carry cells stay out of the live allowlist."""
+    res = [_held("BTCUSDT", 0.40, 0.30), _held("ETHUSDT", 0.35, 0.25),
+           _held("SOLUSDT", 0.20, 0.10)]
+    cells = [
+        R.build_carry_cell(res, interval="1d", spot_fee=_TAKER["spot_fee"],
+                           perp_fee=_TAKER["perp_fee"], slip=_TAKER["slip"],
+                           strategy_key="carry_binance_multiyear_taker"),
+        R.build_carry_cell(res, interval="1d", spot_fee=_MAKER["spot_fee"],
+                           perp_fee=_MAKER["perp_fee"], slip=_MAKER["slip"],
+                           strategy_key="carry_binance_multiyear_maker",
+                           conditional_reason="resting-maker fills"),
+    ]
+    out = R.run_research(specs=[], persist=False, extra_cells=cells)
+    promoted = {c["strategy_key"] for c in out.get("cells", [])
+                if c["verdict"] == "ACCEPT" and c.get("kind") != "carry"}
+    assert "carry_binance_multiyear_taker" not in promoted
+    assert "carry_binance_multiyear_maker" not in promoted
+
+
+# ── strict single-venue source: no silent OKX fallback (Task #28 honesty) ────
+def test_binance_vision_strict_source_raises_without_okx_fallback(monkeypatch):
+    """source='binance-vision' must NOT fall back to OKX — a cell labeled Binance
+    can never silently harvest OKX funding. If Vision is empty it must raise."""
+    calls = {"okx": 0}
+
+    def _no_vision(symbol, days):
+        return []                                    # Vision returns nothing
+
+    def _spy_okx(symbol, days, cutoff_ms):
+        calls["okx"] += 1
+        return [(0, 0.0001)]
+
+    monkeypatch.setattr(B, "_fetch_funding_binance_vision", _no_vision)
+    monkeypatch.setattr(B, "_fetch_funding_okx", _spy_okx)
+    try:
+        B.fetch_funding_rates("BTCUSDT", 1825, use_cache=False,
+                              source="binance-vision")
+        assert False, "expected RuntimeError on empty strict Vision fetch"
+    except RuntimeError:
+        pass
+    assert calls["okx"] == 0                          # OKX never consulted
+
+
+def test_run_carry_multiyear_uses_strict_vision_and_two_conditional_cells(monkeypatch):
+    """End-to-end (network stubbed): both profiles pull from the STRICT Binance
+    Vision source, emit two distinct carry cells, and only the maker ACCEPT is
+    flagged CONDITIONAL."""
+    seen_sources = []
+    # ~2y of +0.01%/8h funding → harvest easily clears both fee profiles.
+    n = 600
+    fund = _funding([((i + 1) * _8H, 0.0001) for i in range(n)])
+    px_close = pd.DataFrame({
+        "open_time": [i * _8H for i in range(n + 1)],
+        "close": [100.0] * (n + 1),
+    })
+
+    def _fake_funding(symbol, days, use_cache=True, source="auto"):
+        seen_sources.append(source)
+        return fund.copy()
+
+    def _fake_klines(symbol, interval, days, use_cache=True):
+        return px_close.copy()
+
+    monkeypatch.setattr(B, "fetch_funding_rates", _fake_funding)
+    monkeypatch.setattr(B, "fetch_klines", _fake_klines)
+
+    out = R.run_carry_multiyear(symbols=["BTCUSDT", "ETHUSDT"], persist=False)
+    # every fetch went through the strict single-venue source
+    assert seen_sources and all(s == "binance-vision" for s in seen_sources)
+
+    cells = {c["strategy_key"]: c for c in out["cells"]}
+    assert set(cells) == {"carry_binance_multiyear_taker",
+                          "carry_binance_multiyear_maker"}
+    assert all(c["kind"] == "carry" for c in cells.values())
+    assert all(c["verdict"] == "ACCEPT" for c in cells.values())
+    assert cells["carry_binance_multiyear_maker"][
+        "verdict_reasons"][0].startswith("CONDITIONAL ACCEPT")
+    assert not cells["carry_binance_multiyear_taker"][
+        "verdict_reasons"][0].startswith("CONDITIONAL")

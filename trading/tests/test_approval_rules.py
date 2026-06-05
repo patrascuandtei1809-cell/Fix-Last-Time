@@ -164,13 +164,31 @@ def test_no_sub_4h_cell_is_approved():
 
 
 def test_only_v2_4h_is_accepted_in_leaderboard():
-    """Over multi-year history exactly ONE cell clears the canonical after-fee
-    bar: EMA/MACD/RSI/Volume V2 @ 4h. Nothing else may slip through."""
+    """Over multi-year history exactly ONE DIRECTIONAL cell clears the canonical
+    after-fee bar: EMA/MACD/RSI/Volume V2 @ 4h. Nothing else may slip through.
+    Carry cells (kind=="carry") are a cash-flow study, never a directional edge,
+    so they are excluded here exactly as they are from `edge_found`/allowlist."""
     doc = json.load(open(LATEST))
     accepted = [(c["strategy_key"], c["interval"]) for c in doc["cells"]
-                if c["verdict"] == "ACCEPT"]
+                if c["verdict"] == "ACCEPT" and c.get("kind") != "carry"]
     assert accepted == [("ema_macd_rsi_vol_v2", "4h")]
     assert doc["edge_found"] is True
+
+
+def test_multiyear_carry_cells_present_and_quarantined_from_edge():
+    """The multi-year Binance carry merged BOTH a taker and a maker cell; the
+    maker ACCEPT is flagged CONDITIONAL; neither (kind=="carry") is an edge."""
+    doc = json.load(open(LATEST))
+    carry = {c["strategy_key"]: c for c in doc["cells"]
+             if c.get("kind") == "carry"}
+    assert "carry_binance_multiyear_taker" in carry
+    assert "carry_binance_multiyear_maker" in carry
+    maker = carry["carry_binance_multiyear_maker"]
+    if maker["verdict"] == "ACCEPT":
+        assert maker["verdict_reasons"][0].startswith("CONDITIONAL ACCEPT")
+    # carry never counts as a directional edge nor reaches the live allowlist
+    allow = json.load(open(ALLOWLIST))
+    assert all(e.get("kind") != "carry" for e in allow["validated"])
 
 
 # ───────────────── 5: live allowlist = ETH V2 @ 4h only ──────────────────────

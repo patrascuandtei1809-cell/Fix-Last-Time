@@ -313,6 +313,10 @@ def fetch_funding_rates(symbol: str, days: int,
       • "auto" (default) — Binance Vision monthly archive (PRIMARY, multi-year,
         single-venue) → OKX REST (FALLBACK, ~92d). Used by the directional
         funding probes.
+      • "binance-vision" — force Binance Vision ONLY (multi-year, single-venue);
+        NO OKX fallback. Raises if Vision returns nothing. The multi-year carry
+        uses this so a cell labeled "Binance Vision" can never silently harvest
+        OKX funding (honest single-venue labeling).
       • "okx" — force OKX REST only (~92d cap). The delta-neutral CARRY test
         uses this so the funding it harvests comes from the SAME venue as the
         OKX perp it shorts (single-venue consistency: you only receive the
@@ -338,6 +342,14 @@ def fetch_funding_rates(symbol: str, days: int,
     used_source = source
     if source == "okx":
         rows = _fetch_funding_okx(symbol, days, cutoff_ms)
+    elif source == "binance-vision":
+        # Strict single-venue: NO OKX fallback. Honest labeling requires that a
+        # cell claiming Binance Vision never silently harvest OKX funding.
+        rows = _fetch_funding_binance_vision(symbol, days)
+        if not rows:
+            raise RuntimeError(
+                f"No Binance Vision funding for {symbol} (strict source, "
+                f"no OKX fallback)")
     else:
         used_source = "binance-vision"
         try:
