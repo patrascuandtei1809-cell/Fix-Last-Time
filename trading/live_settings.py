@@ -55,9 +55,9 @@ def normalize_size_mode(mode: Optional[str]) -> str:
 class LiveSettings:
     """Every operator-tunable LIVE trading setting. Defaults match the spec."""
     # Strategy thresholds (defaults = the Task #11 spec)
-    buy_threshold_pct: float = -0.10     # BUY when 20m change ≤ this
-    take_profit_pct: float = 0.80        # SELL when profit ≥ this
-    stop_loss_pct: float = -1.50         # STOP-LOSS when loss ≤ this
+    buy_threshold_pct: float = -0.60     # BUY when 20m change ≤ this
+    take_profit_pct: float = 1.20        # SELL when profit ≥ this
+    stop_loss_pct: float = -0.20         # STOP-LOSS when loss ≤ this
     lookback_minutes: int = 20
 
     # Position sizing

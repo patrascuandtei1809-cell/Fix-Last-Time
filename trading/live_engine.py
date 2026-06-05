@@ -302,33 +302,11 @@ class DipLiveEngine:
             return self._skip(rec, "🦺 Safe mode ON — no new entries",
                               level="WARNING")
 
-        # 2b. AUTO-DISABLE gate — refuse to open a NEW position for a (strategy,
-        #     timeframe) that no research run has ACCEPTED as profitable after
-        #     fees. Default-safe: empty/missing allowlist OR an unimportable /
-        #     raising gate → block (fail closed). Operator overrides this with
-        #     ALPHATRADE_ALLOW_UNVALIDATED=1 (wired via require_validation).
-        #     Open positions are unaffected — exits ran above before this gate.
-        if self.require_validation:
-            allowed = False
-            if self._validate_fn is not None:
-                try:
-                    allowed, _entry = self._validate_fn(DIP_STRATEGY_NAME,
-                                                        DIP_INTERVAL)
-                except Exception:
-                    allowed = False        # fail closed on a broken gate
-            if not allowed:
-                if not self._validation_block_logged:
-                    self._validation_block_logged = True
-                    self._log("WARNING",
-                              f"🔒 AUTO-DISABLED: '{DIP_STRATEGY_NAME}' @ "
-                              f"{DIP_INTERVAL} has no validated after-fee edge — "
-                              f"bot will NOT auto-trade it. Run research.py to "
-                              f"validate, or set ALPHATRADE_ALLOW_UNVALIDATED=1 "
-                              f"to override. Manual trades still allowed.")
-                return self._skip(
-                    rec,
-                    f"🔒 AUTO-DISABLED: '{DIP_STRATEGY_NAME}' @ {DIP_INTERVAL} "
-                    f"not validated — no proven after-fee edge")
+        # NOTE: the live dip path is intentionally NOT research-gated (Task #11).
+        # No validation/allowlist/verdict check runs here — the bot trades on its
+        # own price signal. Money-safety gates (emergency stop, safe mode,
+        # balance, spending limit, max position size, cooldown, global risk,
+        # daily-loss breaker) are the only things that can block an entry.
 
         # 9. Compute the 20m change (entry-only — drives the BUY decision).
         try:

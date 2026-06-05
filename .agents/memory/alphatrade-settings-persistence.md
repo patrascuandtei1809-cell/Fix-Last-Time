@@ -51,3 +51,25 @@ untracked + gitignored, the committed file is authoritative on the droplet.
 settings.json (keep it consistent with the "Reset to … defaults" button, which
 represents the operator's intended config). A permanent fix is to untrack it
 (`git rm --cached`) + gitignore so UI changes survive restarts.
+
+## The LIVE dip path uses a SEPARATE Postgres store, not settings.json
+
+The 20-Minute Dip live path (`live_engine.py`) reads its thresholds from
+`live_settings.get_settings()`, which loads a single JSONB row (`id=1`) from the
+Postgres table `trading_live_settings` — a store entirely independent of
+`settings.json`. `get_settings()` deliberately **never overwrites the stored row
+with code defaults** (only returns defaults when the row is missing).
+
+**Why this matters:** editing the `LiveSettings` dataclass defaults
+(`buy_threshold_pct` etc.) does **NOT** change live behavior if a row already
+exists — the stale persisted values keep driving real orders. To actually change
+the effective live thresholds you must ALSO rewrite the stored row
+(`get_settings()` → set fields → `save_settings()`).
+
+**Do NOT add a forced startup normalization** that re-writes the row to defaults
+every boot — that would defeat operator tuning, exactly like the old
+settings.json force-snap. Update the row once (migration-style) instead.
+
+**How to apply:** any change to a live-threshold default must be paired with a
+one-time `save_settings()` of the new value in every environment that has a row
+(this dev DB and the droplet's DB are separate rows).

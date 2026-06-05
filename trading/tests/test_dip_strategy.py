@@ -96,28 +96,28 @@ def _pass_gate(amount, symbol):
 
 # ── 1. Pure rule: BUY on dip ─────────────────────────────────────────────────
 def test_buy_when_change_at_or_below_threshold():
-    d = dip.decide_entry(-0.10)                 # exactly at threshold
+    d = dip.decide_entry(-0.60)                 # exactly at threshold
     assert d.action == dip.BUY
-    d2 = dip.decide_entry(-0.50)               # well below
+    d2 = dip.decide_entry(-1.00)               # well below
     assert d2.action == dip.BUY
-    d3 = dip.decide_entry(-0.09)               # just above ⇒ HOLD
+    d3 = dip.decide_entry(-0.59)               # just above ⇒ HOLD
     assert d3.action == dip.HOLD
 
 
 # ── 2. Pure rule: SELL at take-profit ────────────────────────────────────────
 def test_sell_when_profit_at_or_above_take_profit():
-    # entry 100 → +0.90% at 100.90 (clearly ≥ +0.80% target)
-    d = dip.decide_exit(100.0, 100.90)
+    # entry 100 → +1.30% at 101.30 (clearly ≥ +1.20% target)
+    d = dip.decide_exit(100.0, 101.30)
     assert d.action == dip.SELL
-    d_below = dip.decide_exit(100.0, 100.50)   # +0.50% ⇒ HOLD
+    d_below = dip.decide_exit(100.0, 101.00)   # +1.00% ⇒ HOLD
     assert d_below.action == dip.HOLD
 
 
 # ── 3. Pure rule: STOP-LOSS ──────────────────────────────────────────────────
 def test_stop_loss_when_loss_at_or_below_limit():
-    d = dip.decide_exit(100.0, 98.50)          # −1.50% exactly
+    d = dip.decide_exit(100.0, 99.80)          # −0.20% exactly
     assert d.action == dip.STOP_LOSS
-    d_above = dip.decide_exit(100.0, 99.00)    # −1.00% ⇒ HOLD
+    d_above = dip.decide_exit(100.0, 99.90)    # −0.10% ⇒ HOLD
     assert d_above.action == dip.HOLD
 
 
@@ -129,13 +129,11 @@ def test_hold_between_thresholds():
 
 # ── 5. Live engine reaches a LIVE BUY with NONE of the old gates ─────────────
 def test_engine_buys_on_dip_without_legacy_gates():
-    ex = _FakeExchange(price=100.0, change_pct=-0.30, free=1000.0)
-    # require_validation=False: this test exercises the dip ENTRY MECHANICS, not
-    # the AUTO-DISABLE allowlist gate (that gate is covered by
-    # test_dip_validation_gate.py). With the default gate ON and an empty
-    # allowlist the engine would correctly refuse to trade.
-    eng = le.DipLiveEngine(exchange=ex, cooldown=ls.CooldownStore(),
-                           require_validation=False)
+    ex = _FakeExchange(price=100.0, change_pct=-0.80, free=1000.0)
+    # The live dip path is NOT research-gated (Task #11): no validation /
+    # allowlist / verdict check exists in live_engine.py. A sufficient dip plus
+    # the money-safety gates is all that's required to place a LIVE order.
+    eng = le.DipLiveEngine(exchange=ex, cooldown=ls.CooldownStore())
     rec = eng.evaluate(symbol="BTCUSDT", settings=_settings(),
                        open_trades=[], current_exposure=0.0,
                        global_gate_fn=_pass_gate)
@@ -148,11 +146,21 @@ def test_engine_buys_on_dip_without_legacy_gates():
     for banned in ("import strategy", "import scoring", "gpt_advisor",
                    "ai_engine", "market_regime", "validate_candidates"):
         assert banned not in src
+    # The live engine itself must carry NO research gate (no allowlist, no
+    # require_validation param). This locks the disconnection so a merge can't
+    # silently re-introduce it.
+    le_src = inspect.getsource(le)
+    for banned in ("require_validation", "is_strategy_validated",
+                   "validated_strategies", "AUTO-DISABLE"):
+        assert banned not in le_src, f"research gate leaked back: {banned}"
+    import inspect as _sig_inspect
+    assert "require_validation" not in _sig_inspect.signature(
+        le.DipLiveEngine.__init__).parameters
 
 
 # ── 6a. Safety: emergency stop blocks ────────────────────────────────────────
 def test_emergency_stop_blocks_entry():
-    ex = _FakeExchange(change_pct=-0.50)
+    ex = _FakeExchange(change_pct=-0.80)
     eng = le.DipLiveEngine(exchange=ex, cooldown=ls.CooldownStore())
     rec = eng.evaluate(symbol="BTCUSDT", settings=_settings(),
                        open_trades=[], current_exposure=0.0,
@@ -163,14 +171,14 @@ def test_emergency_stop_blocks_entry():
 
 # ── 6b. Safety: safe mode + not-connected block ──────────────────────────────
 def test_safe_mode_and_disconnected_block_entry():
-    ex = _FakeExchange(change_pct=-0.50)
+    ex = _FakeExchange(change_pct=-0.80)
     eng = le.DipLiveEngine(exchange=ex, cooldown=ls.CooldownStore())
     rec = eng.evaluate(symbol="BTCUSDT", settings=_settings(safe_mode=True),
                        open_trades=[], current_exposure=0.0,
                        global_gate_fn=_pass_gate)
     assert rec.traded is False and not ex.buy_calls
 
-    ex2 = _FakeExchange(change_pct=-0.50, connected=False)
+    ex2 = _FakeExchange(change_pct=-0.80, connected=False)
     eng2 = le.DipLiveEngine(exchange=ex2, cooldown=ls.CooldownStore())
     rec2 = eng2.evaluate(symbol="BTCUSDT", settings=_settings(),
                          open_trades=[], current_exposure=0.0,
@@ -180,7 +188,7 @@ def test_safe_mode_and_disconnected_block_entry():
 
 # ── 7. Safety: spending limit + global risk gate block ───────────────────────
 def test_spending_limit_and_global_gate_block():
-    ex = _FakeExchange(change_pct=-0.50, free=1000.0)
+    ex = _FakeExchange(change_pct=-0.80, free=1000.0)
     eng = le.DipLiveEngine(exchange=ex, cooldown=ls.CooldownStore())
     # exposure already at the spending limit
     rec = eng.evaluate(symbol="BTCUSDT",
@@ -189,7 +197,7 @@ def test_spending_limit_and_global_gate_block():
                        global_gate_fn=_pass_gate)
     assert rec.traded is False and not ex.buy_calls
 
-    ex2 = _FakeExchange(change_pct=-0.50, free=1000.0)
+    ex2 = _FakeExchange(change_pct=-0.80, free=1000.0)
     eng2 = le.DipLiveEngine(exchange=ex2, cooldown=ls.CooldownStore())
     rec2 = eng2.evaluate(symbol="BTCUSDT", settings=_settings(),
                          open_trades=[], current_exposure=0.0,
@@ -206,8 +214,8 @@ def test_engine_takes_profit_and_stops_loss_on_open_trade():
         closed["price"] = price
         closed["reason"] = reason
 
-    # take-profit: entry 100, price 101 ⇒ +1.0% ≥ 0.80%
-    ex = _FakeExchange(price=101.0, change_pct=0.0)
+    # take-profit: entry 100, price 101.30 ⇒ +1.30% ≥ 1.20%
+    ex = _FakeExchange(price=101.30, change_pct=0.0)
     eng = le.DipLiveEngine(exchange=ex, cooldown=ls.CooldownStore(),
                            close_fn=_close)
     open_trade = {"id": "t1", "coin": "BTCUSDT", "type": "bot",
@@ -219,7 +227,7 @@ def test_engine_takes_profit_and_stops_loss_on_open_trade():
     assert rec.decision == "SELL" and rec.traded is True
     assert closed.get("trade") is open_trade
 
-    # stop-loss: entry 100, price 98 ⇒ −2.0% ≤ −1.50%
+    # stop-loss: entry 100, price 98 ⇒ −2.0% ≤ −0.20%
     closed.clear()
     ex2 = _FakeExchange(price=98.0, change_pct=0.0)
     eng2 = le.DipLiveEngine(exchange=ex2, cooldown=ls.CooldownStore(),
@@ -237,7 +245,7 @@ def test_safe_mode_still_allows_exit_of_open_bot_position():
     def _close(t, p, r):
         closed.update(trade=t, price=p, reason=r)
 
-    ex = _FakeExchange(price=101.0, change_pct=0.0)   # +1% vs entry 100 ⇒ TP
+    ex = _FakeExchange(price=101.30, change_pct=0.0)  # +1.3% vs entry 100 ⇒ TP
     eng = le.DipLiveEngine(exchange=ex, cooldown=ls.CooldownStore(),
                            close_fn=_close)
     open_trade = {"id": "t1", "coin": "BTCUSDT", "type": "bot",
@@ -324,9 +332,9 @@ def test_settings_defaults_and_persistence():
     s = ls.LiveSettings()
     assert s.aggressive_on is True                  # aggressive default ON
     assert s.size_mode in ls.SIZE_MODES
-    assert s.buy_threshold_pct == -0.10
-    assert s.take_profit_pct == 0.80
-    assert s.stop_loss_pct == -1.50
+    assert s.buy_threshold_pct == -0.60
+    assert s.take_profit_pct == 1.20
+    assert s.stop_loss_pct == -0.20
     # from_dict ignores unknown keys and preserves known ones
     s2 = ls.LiveSettings.from_dict({"size_mode": "FIXED_USDT",
                                     "aggressive_on": False, "bogus": 1})

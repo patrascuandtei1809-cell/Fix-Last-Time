@@ -20,9 +20,9 @@ from dataclasses import dataclass
 from typing import List, Optional, Sequence
 
 # ── Hard-coded rule constants (defaults; operator may override thresholds) ────
-BUY_THRESHOLD_PCT: float = -0.10     # BUY when 20m change ≤ this
-TAKE_PROFIT_PCT: float = 0.80        # SELL when profit ≥ this
-STOP_LOSS_PCT: float = -1.50         # STOP-LOSS when loss ≤ this (negative)
+BUY_THRESHOLD_PCT: float = -0.60     # BUY when 20m change ≤ this
+TAKE_PROFIT_PCT: float = 1.20        # SELL when profit ≥ this
+STOP_LOSS_PCT: float = -0.20         # STOP-LOSS when loss ≤ this (negative)
 LOOKBACK_MINUTES: int = 20           # window for the % change
 
 # Decision verbs

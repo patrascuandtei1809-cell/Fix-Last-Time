@@ -559,7 +559,6 @@ class TradingBot:
                 close_fn           = worker._close_position,
                 cooldown           = self._cooldown,
                 manage_manual      = worker.manage_manual_trades,
-                require_validation = self.require_validation,
             )
             self._dip_engines[key] = eng
         return eng
