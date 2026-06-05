@@ -54,11 +54,16 @@ def normalize_size_mode(mode: Optional[str]) -> str:
 @dataclass
 class LiveSettings:
     """Every operator-tunable LIVE trading setting. Defaults match the spec."""
-    # Strategy thresholds (defaults = the Task #11 spec)
-    buy_threshold_pct: float = -0.60     # BUY when 20m change ≤ this
-    take_profit_pct: float = 1.20        # SELL when profit ≥ this
-    stop_loss_pct: float = -0.20         # STOP-LOSS when loss ≤ this
+    # Strategy thresholds (defaults = the FINAL TRADING RULE)
+    buy_threshold_pct: float = -2.00     # BUY when 20m change ≤ this
+    take_profit_pct: float = 1.50        # SELL when profit ≥ this
+    stop_loss_pct: float = -0.01         # STOP-LOSS when loss ≤ this
     lookback_minutes: int = 20
+
+    # Entry-quality filters (part of the BUY criteria)
+    volume_filter_on: bool = True          # require a volume spike to BUY
+    min_volume_multiple: float = 1.5       # last-candle vol ≥ this × avg
+    trend_filter_on: bool = True           # require a short-term upturn to BUY
 
     # Position sizing
     size_mode: str = SIZE_AUTO
@@ -68,15 +73,18 @@ class LiveSettings:
 
     # Spending / size limits (0 = disabled / unlimited)
     bot_spending_limit_usdt: float = 0.0   # max total USDT the bot may deploy
-    max_position_size_usdt: float = 0.0    # cap on a single trade
+    max_position_size_usdt: float = 0.0    # hard $ cap on a single trade
+    max_position_pct: float = 50.0         # cap a single trade at this % of free USDT
     min_trade_size_usdt: float = 10.0      # floor (Binance min-notional ~ $10)
 
     # Behavior toggles
     aggressive_on: bool = True             # aggressive default ON (spec)
     safe_mode: bool = False                # operator freeze (no new entries)
 
-    # Cooldowns (seconds). Stop-loss cooldown is the spec-mandated 30 minutes.
-    stop_loss_cooldown_sec: int = 1800     # 30 minutes after a stop-loss
+    # Cooldowns (seconds) — FINAL RULE: 1 minute after a stop-loss AND 1 minute
+    # after a (profitable) sell before re-entering the same symbol.
+    stop_loss_cooldown_sec: int = 60       # 1 minute after a stop-loss
+    reentry_cooldown_sec: int = 60         # 1 minute after any sell
 
     def normalized(self) -> "LiveSettings":
         self.size_mode = normalize_size_mode(self.size_mode)

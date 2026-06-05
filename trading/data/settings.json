@@ -28,7 +28,7 @@
     "max_exposure_per_symbol_pct": 100,
     "max_open_trades_total": 30,
     "max_daily_loss_pct": 5.0,
-    "manage_manual_trades": false
+    "manage_manual_trades": true
   },
   "per_symbol_risk": {},
   "risk": {

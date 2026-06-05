@@ -117,10 +117,15 @@ def compute_order_amount(settings: LiveSettings, free_usdt: float,
     else:  # SIZE_AUTO — aggressive uses a larger default slice
         pct = float(settings.auto_percent)
         if settings.aggressive_on:
-            pct = max(pct, 40.0)
+            pct = max(pct, 50.0)
         amount = free_usdt * pct / 100.0
 
-    # Operator max-position cap (0 = disabled)
+    # Max position size as % of free USDT (FINAL RULE: 50%). 0 = disabled.
+    max_pct = float(getattr(settings, "max_position_pct", 0.0) or 0.0)
+    if max_pct > 0:
+        amount = min(amount, free_usdt * max_pct / 100.0)
+
+    # Operator hard $ max-position cap (0 = disabled)
     if settings.max_position_size_usdt and settings.max_position_size_usdt > 0:
         amount = min(amount, float(settings.max_position_size_usdt))
 
@@ -152,11 +157,12 @@ def compute_order_amount(settings: LiveSettings, free_usdt: float,
 
 
 def cooldown_block(settings: LiveSettings, state: Dict, now: datetime = None):
-    """Return (blocked, reason). Enforces the 30-min stop-loss cooldown and a
-    faster re-entry window after a (profitable) sell when aggressive."""
+    """Return (blocked, reason). FINAL RULE: wait `stop_loss_cooldown_sec`
+    (default 1 min) after a stop-loss AND `reentry_cooldown_sec` (default 1 min)
+    after any sell before re-entering the same symbol."""
     now = now or _utcnow()
 
-    # 1) Hard 30-minute stop-loss cooldown.
+    # 1) Stop-loss cooldown (default 1 minute).
     sl_at = state.get("last_stop_loss_at")
     if sl_at is not None:
         if sl_at.tzinfo is None:
@@ -165,23 +171,18 @@ def cooldown_block(settings: LiveSettings, state: Dict, now: datetime = None):
         if elapsed < settings.stop_loss_cooldown_sec:
             left = int(settings.stop_loss_cooldown_sec - elapsed)
             return True, (f"Stop-loss cooldown — {left // 60}m {left % 60}s left "
-                          f"(30m after a stop-loss)")
+                          f"(after a stop-loss)")
 
-    # 2) Re-entry cadence after a sell. Faster (or instant) when profitable +
-    #    aggressive; a normal flat/loss sell waits a little longer.
+    # 2) Re-entry cooldown after any sell (default 1 minute).
     sell_at = state.get("last_sell_at")
-    if sell_at is not None:
+    reentry = int(getattr(settings, "reentry_cooldown_sec", 60) or 0)
+    if sell_at is not None and reentry > 0:
         if sell_at.tzinfo is None:
             sell_at = sell_at.replace(tzinfo=timezone.utc)
-        profitable = bool(state.get("last_sell_profit"))
-        if settings.aggressive_on:
-            reentry = 0 if profitable else 5
-        else:
-            reentry = 15 if profitable else 60
         elapsed = (now - sell_at).total_seconds()
-        if reentry > 0 and elapsed < reentry:
+        if elapsed < reentry:
             left = int(reentry - elapsed)
-            return True, f"Re-entry cooldown — {left}s left"
+            return True, f"Re-entry cooldown — {left // 60}m {left % 60}s left (after a sell)"
 
     return False, ""
 
@@ -348,6 +349,32 @@ class DipLiveEngine:
             if blocked:
                 return self._skip(rec, why)
 
+        # 8b. Entry-quality filters (part of the BUY criteria): volume spike +
+        #     short-term trend upturn. These only restrict NEW entries; an open
+        #     position's exit already ran above and is never gated by these.
+        if getattr(settings, "volume_filter_on", False):
+            vols = dip.volumes_from_klines(df)
+            v_ok, v_ratio = dip.volume_ok(
+                vols, getattr(settings, "min_volume_multiple", 1.5),
+                thr.lookback_minutes)
+            if not v_ok:
+                rec.decision = "HOLD"
+                rec.reason = (f"Volume too low — {v_ratio:.2f}× < "
+                              f"{settings.min_volume_multiple:.2f}× avg")
+                self._state(symbol, signal="HOLD", reason=rec.reason,
+                            block_reason="")
+                self._log("SIGNAL", f"[{symbol}] {rec.reason}")
+                return _publish(rec)
+
+        if getattr(settings, "trend_filter_on", False):
+            if not dip.trend_ok(closes, thr.lookback_minutes):
+                rec.decision = "HOLD"
+                rec.reason = "Trend filter — waiting for upturn (last candle not green)"
+                self._state(symbol, signal="HOLD", reason=rec.reason,
+                            block_reason="")
+                self._log("SIGNAL", f"[{symbol}] {rec.reason}")
+                return _publish(rec)
+
         # 10. Decision (entry)
         decision = dip.decide_entry(rec.change_pct, thr)
         if decision.action != dip.BUY:
@@ -434,6 +461,7 @@ class DipLiveEngine:
         if decision.action == dip.HOLD:
             rec.decision = "HOLD"
             rec.reason = decision.reason
+            rec.profit_pct = decision.profit_pct   # live open PnL for the panel
             self._state(symbol, signal="HOLD", reason=decision.reason,
                         block_reason="")
             return _publish(rec)
@@ -446,8 +474,8 @@ class DipLiveEngine:
         except Exception as e:
             return self._skip(rec, f"Exit order failed: {e}", level="ERROR")
 
-        # Record cooldown: 30-min hard stop after a stop-loss; faster re-entry
-        # after a (profitable) take-profit sell.
+        # Record cooldown: 1-min stop-loss cooldown after a stop-loss; 1-min
+        # re-entry cooldown after a take-profit sell (FINAL RULE).
         if self.cooldown is not None:
             if is_stop:
                 self.cooldown.record_stop_loss(symbol)

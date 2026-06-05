@@ -2465,7 +2465,9 @@ with st.sidebar:
             f"**The only live strategy.** BUY when the 20-minute change ≤ "
             f"**{_ls.buy_threshold_pct:.2f}%** · SELL at "
             f"**+{_ls.take_profit_pct:.2f}%** profit · STOP-LOSS at "
-            f"**{_ls.stop_loss_pct:.2f}%** · then a **30-min** cooldown."
+            f"**{_ls.stop_loss_pct:.2f}%** · then a **1-min** cooldown after "
+            f"BOTH a stop-loss and a sell. BUY also needs volume ≥ "
+            f"**{_ls.min_volume_multiple:.1f}×** avg + trend filter."
         )
         if not live_settings.db_available():
             st.caption("⚠️ Database unavailable — settings use defaults and may "
@@ -2509,10 +2511,16 @@ with st.sidebar:
             help="Max total USDT the bot may have deployed across all open "
                  "trades at once.", key="dip_spend_limit",
         ))
+        _ls.max_position_pct = float(st.slider(
+            "Max position size (% of free USDT)", 1.0, 100.0,
+            float(getattr(_ls, "max_position_pct", 50.0)), 1.0,
+            help="FINAL RULE: a single trade is capped at this % of free USDT.",
+            key="dip_max_pos_pct",
+        ))
         _ls.max_position_size_usdt = float(st.number_input(
             "Max position size (USDT, 0 = off)",
             min_value=0.0, value=float(_ls.max_position_size_usdt), step=10.0,
-            help="Hard cap on a single trade's notional.", key="dip_max_pos",
+            help="Optional hard $ cap on a single trade's notional.", key="dip_max_pos",
         ))
         _ls.min_trade_size_usdt = float(st.number_input(
             "Min trade size (USDT)",
@@ -4178,13 +4186,25 @@ with st.container():
                         _ago = f"${_rec.price_20m_ago:,.4f}" if _rec.price_20m_ago else "—"
                         _amt = (f"${_rec.amount:,.2f}"
                                 if getattr(_rec, "amount", None) else "—")
+                        _pnl = getattr(_rec, "profit_pct", None)
+                        _pnl_txt = (f'<span class="{"up" if _pnl >= 0 else "dn"}">'
+                                    f'{_pnl:+.3f}%</span>'
+                                    if _pnl is not None else "—")
+                        _buy_t = getattr(_rec, "buy_threshold", None)
+                        _tp_t = getattr(_rec, "take_profit", None)
+                        _sl_t = getattr(_rec, "stop_loss", None)
+                        _thr_txt = (
+                            f'BUY ≤ {_buy_t:.2f}% · TP +{_tp_t:.2f}% · SL {_sl_t:.2f}%'
+                            if None not in (_buy_t, _tp_t, _sl_t) else "—")
                         st.markdown(
                             f'<div class="card">'
                             f'<div class="c-lbl">{_rec.symbol}</div>'
                             f'<div class="c-val {_chg_cls}">{_chg_txt}</div>'
                             f'<div style="font-size:11px;color:#8b949e;">'
                             f'now {_px} · 20m ago {_ago}<br>'
-                            f'decision <b>{_rec.decision}</b> · size {_amt}<br>'
+                            f'20m change <b>{_chg_txt}</b> · open PnL {_pnl_txt}<br>'
+                            f'{_thr_txt}<br>'
+                            f'last action <b>{_rec.decision}</b> · size {_amt}<br>'
                             f'{(_rec.reason or "")[:80]}'
                             f'</div></div>',
                             unsafe_allow_html=True,

@@ -173,7 +173,7 @@ class GlobalRiskSettings:
     max_daily_loss_pct:         float = 5.0     # auto-halt if today P&L ≤ -X% of initial balance
     max_open_trades_total:      int   = 30      # global cap (per-symbol cap removed)
     emergency_stop:             bool  = False   # GLOBAL kill switch
-    manage_manual_trades:       bool  = False   # OFF = bot never closes manual trades (SL/TP/exit)
+    manage_manual_trades:       bool  = True    # ON = bot manages (TP/SL/exit) existing manual trades too
 
 
 class GlobalRiskManager:

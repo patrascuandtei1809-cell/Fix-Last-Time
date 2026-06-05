@@ -3,9 +3,10 @@
 This module is intentionally self-contained: it imports NOTHING from the old
 strategy / scoring / AI / research code. It implements exactly one rule set:
 
-  • BUY        when the 20-minute price change ≤  BUY_THRESHOLD_PCT   (−0.10%)
-  • SELL (TP)  when open-position profit       ≥  TAKE_PROFIT_PCT     (+0.80%)
-  • STOP-LOSS  when open-position loss          ≤  STOP_LOSS_PCT       (−1.50%)
+  • BUY        when the 20-minute price change ≤  BUY_THRESHOLD_PCT   (−2.00%)
+               AND volume ≥ MIN_VOLUME_MULTIPLE × avg  AND trend filter OK
+  • SELL (TP)  when open-position profit       ≥  TAKE_PROFIT_PCT     (+1.50%)
+  • STOP-LOSS  when open-position loss          ≤  STOP_LOSS_PCT       (−0.01%)
   • otherwise HOLD with a human-readable reason.
 
 percent_change = ((current_price − price_20m_ago) / price_20m_ago) * 100
@@ -20,10 +21,11 @@ from dataclasses import dataclass
 from typing import List, Optional, Sequence
 
 # ── Hard-coded rule constants (defaults; operator may override thresholds) ────
-BUY_THRESHOLD_PCT: float = -0.60     # BUY when 20m change ≤ this
-TAKE_PROFIT_PCT: float = 1.20        # SELL when profit ≥ this
-STOP_LOSS_PCT: float = -0.20         # STOP-LOSS when loss ≤ this (negative)
+BUY_THRESHOLD_PCT: float = -2.00     # BUY when 20m change ≤ this
+TAKE_PROFIT_PCT: float = 1.50        # SELL when profit ≥ this
+STOP_LOSS_PCT: float = -0.01         # STOP-LOSS when loss ≤ this (negative)
 LOOKBACK_MINUTES: int = 20           # window for the % change
+MIN_VOLUME_MULTIPLE: float = 1.5     # last-candle volume ≥ this × avg to BUY
 
 # Decision verbs
 BUY = "BUY"
@@ -74,6 +76,48 @@ def closes_from_klines(df) -> List[float]:
         return [float(x) for x in df]
     except (TypeError, ValueError):
         return []
+
+
+def volumes_from_klines(df) -> List[float]:
+    """Extract a list of bar volumes (oldest→newest) from a klines DataFrame.
+
+    Returns [] when no volume column / data exists (callers fail-OPEN on this so
+    a missing-volume feed never blocks trading — the volume rule is a quality
+    filter, not a money-safety gate).
+    """
+    if df is None:
+        return []
+    if hasattr(df, "columns") and "volume" in getattr(df, "columns", []):
+        return [float(x) for x in df["volume"].tolist()]
+    return []
+
+
+def volume_ok(volumes: Sequence[float],
+              multiple: float = MIN_VOLUME_MULTIPLE,
+              lookback: int = LOOKBACK_MINUTES):
+    """Return (ok, ratio). ok=True when the latest bar's volume ≥ `multiple` ×
+    the average of the prior `lookback` bars. Fails OPEN (ok=True, ratio=0.0)
+    when there isn't enough volume data."""
+    if volumes is None or len(volumes) < 2:
+        return True, 0.0
+    recent = float(volumes[-1])
+    prior = list(volumes[-(lookback + 1):-1]) or list(volumes[:-1])
+    if not prior:
+        return True, 0.0
+    avg = sum(float(x) for x in prior) / len(prior)
+    if avg <= 0:
+        return True, 0.0
+    ratio = recent / avg
+    return (ratio >= float(multiple)), ratio
+
+
+def trend_ok(closes: Sequence[float], lookback: int = LOOKBACK_MINUTES) -> bool:
+    """Dip-buy trend filter: confirm a short-term upturn so the bot buys a
+    bouncing dip, not a free-falling knife. True when the latest close ≥ the
+    previous close. Fails OPEN when there isn't enough history."""
+    if closes is None or len(closes) < 2:
+        return True
+    return float(closes[-1]) >= float(closes[-2])
 
 
 def price_lookback(closes: Sequence[float], lookback: int = LOOKBACK_MINUTES) -> Optional[float]:

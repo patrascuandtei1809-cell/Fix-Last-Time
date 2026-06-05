@@ -1,14 +1,17 @@
 """Lock-in tests for the 20-Minute Dip strategy (Task #11).
 
-Guarantees the task cares about most:
-  1. The pure rule fires EXACTLY on spec: BUY at ≤ −0.10% 20m change,
-     SELL at ≥ +0.80% profit, STOP-LOSS at ≤ −1.50%, HOLD otherwise.
+Guarantees the task cares about most (FINAL TRADING RULE):
+  1. The pure rule fires EXACTLY on spec: BUY at ≤ −2.00% 20m change,
+     SELL at ≥ +1.50% profit, STOP-LOSS at ≤ −0.01%, HOLD otherwise.
+  1b. Entry-quality filters: BUY also needs a volume spike (≥1.5× avg) AND a
+     short-term trend upturn; both fail OPEN on missing data and gate ENTRY
+     only (never an open position's exit).
   2. The live engine reaches a LIVE order on a dip with NONE of the old gates
      (research/allowlist, confidence floor, weighted score, ranking, GPT veto,
      anti-idle) in the path.
   3. The safety layer STILL blocks: emergency stop, safe mode, exchange not
-     connected, spending limit, global risk gate, and the 30-min stop-loss
-     cooldown.
+     connected, spending limit, global risk gate, and the 1-min stop-loss /
+     re-entry cooldowns.
   4. Settings persist and aggressive defaults ON.
 """
 import uuid
@@ -85,6 +88,12 @@ class _FakeExchange:
 
 def _settings(**kw):
     s = ls.LiveSettings()
+    # The legacy engine tests below pre-date the volume/trend entry filters and
+    # exercise the gate-removal / safety layer with a synthetic single-drop
+    # candle series. Keep those filters OFF here so their intent is preserved;
+    # the filters have their own dedicated tests. Production defaults stay ON.
+    s.volume_filter_on = False
+    s.trend_filter_on = False
     for k, v in kw.items():
         setattr(s, k, v)
     return s
@@ -96,28 +105,28 @@ def _pass_gate(amount, symbol):
 
 # ── 1. Pure rule: BUY on dip ─────────────────────────────────────────────────
 def test_buy_when_change_at_or_below_threshold():
-    d = dip.decide_entry(-0.60)                 # exactly at threshold
+    d = dip.decide_entry(-2.00)                 # exactly at threshold
     assert d.action == dip.BUY
-    d2 = dip.decide_entry(-1.00)               # well below
+    d2 = dip.decide_entry(-2.50)               # well below
     assert d2.action == dip.BUY
-    d3 = dip.decide_entry(-0.59)               # just above ⇒ HOLD
+    d3 = dip.decide_entry(-1.99)               # just above ⇒ HOLD
     assert d3.action == dip.HOLD
 
 
 # ── 2. Pure rule: SELL at take-profit ────────────────────────────────────────
 def test_sell_when_profit_at_or_above_take_profit():
-    # entry 100 → +1.30% at 101.30 (clearly ≥ +1.20% target)
-    d = dip.decide_exit(100.0, 101.30)
+    # entry 100 → +1.60% at 101.60 (clearly ≥ +1.50% target)
+    d = dip.decide_exit(100.0, 101.60)
     assert d.action == dip.SELL
-    d_below = dip.decide_exit(100.0, 101.00)   # +1.00% ⇒ HOLD
+    d_below = dip.decide_exit(100.0, 101.40)   # +1.40% ⇒ HOLD
     assert d_below.action == dip.HOLD
 
 
 # ── 3. Pure rule: STOP-LOSS ──────────────────────────────────────────────────
 def test_stop_loss_when_loss_at_or_below_limit():
-    d = dip.decide_exit(100.0, 99.80)          # −0.20% exactly
+    d = dip.decide_exit(100.0, 99.99)          # −0.01% exactly
     assert d.action == dip.STOP_LOSS
-    d_above = dip.decide_exit(100.0, 99.90)    # −0.10% ⇒ HOLD
+    d_above = dip.decide_exit(100.0, 99.995)   # −0.005% ⇒ HOLD
     assert d_above.action == dip.HOLD
 
 
@@ -129,7 +138,7 @@ def test_hold_between_thresholds():
 
 # ── 5. Live engine reaches a LIVE BUY with NONE of the old gates ─────────────
 def test_engine_buys_on_dip_without_legacy_gates():
-    ex = _FakeExchange(price=100.0, change_pct=-0.80, free=1000.0)
+    ex = _FakeExchange(price=100.0, change_pct=-2.50, free=1000.0)
     # The live dip path is NOT research-gated (Task #11): no validation /
     # allowlist / verdict check exists in live_engine.py. A sufficient dip plus
     # the money-safety gates is all that's required to place a LIVE order.
@@ -160,7 +169,7 @@ def test_engine_buys_on_dip_without_legacy_gates():
 
 # ── 6a. Safety: emergency stop blocks ────────────────────────────────────────
 def test_emergency_stop_blocks_entry():
-    ex = _FakeExchange(change_pct=-0.80)
+    ex = _FakeExchange(change_pct=-2.50)
     eng = le.DipLiveEngine(exchange=ex, cooldown=ls.CooldownStore())
     rec = eng.evaluate(symbol="BTCUSDT", settings=_settings(),
                        open_trades=[], current_exposure=0.0,
@@ -171,14 +180,14 @@ def test_emergency_stop_blocks_entry():
 
 # ── 6b. Safety: safe mode + not-connected block ──────────────────────────────
 def test_safe_mode_and_disconnected_block_entry():
-    ex = _FakeExchange(change_pct=-0.80)
+    ex = _FakeExchange(change_pct=-2.50)
     eng = le.DipLiveEngine(exchange=ex, cooldown=ls.CooldownStore())
     rec = eng.evaluate(symbol="BTCUSDT", settings=_settings(safe_mode=True),
                        open_trades=[], current_exposure=0.0,
                        global_gate_fn=_pass_gate)
     assert rec.traded is False and not ex.buy_calls
 
-    ex2 = _FakeExchange(change_pct=-0.80, connected=False)
+    ex2 = _FakeExchange(change_pct=-2.50, connected=False)
     eng2 = le.DipLiveEngine(exchange=ex2, cooldown=ls.CooldownStore())
     rec2 = eng2.evaluate(symbol="BTCUSDT", settings=_settings(),
                          open_trades=[], current_exposure=0.0,
@@ -188,7 +197,7 @@ def test_safe_mode_and_disconnected_block_entry():
 
 # ── 7. Safety: spending limit + global risk gate block ───────────────────────
 def test_spending_limit_and_global_gate_block():
-    ex = _FakeExchange(change_pct=-0.80, free=1000.0)
+    ex = _FakeExchange(change_pct=-2.50, free=1000.0)
     eng = le.DipLiveEngine(exchange=ex, cooldown=ls.CooldownStore())
     # exposure already at the spending limit
     rec = eng.evaluate(symbol="BTCUSDT",
@@ -197,7 +206,7 @@ def test_spending_limit_and_global_gate_block():
                        global_gate_fn=_pass_gate)
     assert rec.traded is False and not ex.buy_calls
 
-    ex2 = _FakeExchange(change_pct=-0.80, free=1000.0)
+    ex2 = _FakeExchange(change_pct=-2.50, free=1000.0)
     eng2 = le.DipLiveEngine(exchange=ex2, cooldown=ls.CooldownStore())
     rec2 = eng2.evaluate(symbol="BTCUSDT", settings=_settings(),
                          open_trades=[], current_exposure=0.0,
@@ -215,7 +224,7 @@ def test_engine_takes_profit_and_stops_loss_on_open_trade():
         closed["reason"] = reason
 
     # take-profit: entry 100, price 101.30 ⇒ +1.30% ≥ 1.20%
-    ex = _FakeExchange(price=101.30, change_pct=0.0)
+    ex = _FakeExchange(price=101.60, change_pct=0.0)
     eng = le.DipLiveEngine(exchange=ex, cooldown=ls.CooldownStore(),
                            close_fn=_close)
     open_trade = {"id": "t1", "coin": "BTCUSDT", "type": "bot",
@@ -245,7 +254,7 @@ def test_safe_mode_still_allows_exit_of_open_bot_position():
     def _close(t, p, r):
         closed.update(trade=t, price=p, reason=r)
 
-    ex = _FakeExchange(price=101.30, change_pct=0.0)  # +1.3% vs entry 100 ⇒ TP
+    ex = _FakeExchange(price=101.60, change_pct=0.0)  # +1.3% vs entry 100 ⇒ TP
     eng = le.DipLiveEngine(exchange=ex, cooldown=ls.CooldownStore(),
                            close_fn=_close)
     open_trade = {"id": "t1", "coin": "BTCUSDT", "type": "bot",
@@ -315,16 +324,72 @@ def test_dip_mode_does_not_invoke_legacy_worker_tick():
 
 
 # ── 9. Safety: 30-minute stop-loss cooldown ──────────────────────────────────
-def test_stop_loss_cooldown_blocks_for_thirty_minutes():
+def test_stop_loss_cooldown_blocks_for_one_minute():
     now = datetime.now(timezone.utc)
     state = {"last_stop_loss_at": now}
     s = _settings()
-    assert s.stop_loss_cooldown_sec == 1800
-    blocked, why = le.cooldown_block(s, state, now=now + timedelta(minutes=10))
+    assert s.stop_loss_cooldown_sec == 60        # FINAL RULE: 1 minute
+    blocked, why = le.cooldown_block(s, state, now=now + timedelta(seconds=30))
     assert blocked and "cooldown" in why.lower()
-    # after 30 minutes it clears
-    ok, _ = le.cooldown_block(s, state, now=now + timedelta(minutes=31))
+    # after 1 minute it clears
+    ok, _ = le.cooldown_block(s, state, now=now + timedelta(minutes=2))
     assert ok is False
+
+
+def test_reentry_cooldown_blocks_for_one_minute_after_a_sell():
+    now = datetime.now(timezone.utc)
+    state = {"last_sell_at": now}
+    s = _settings()
+    assert s.reentry_cooldown_sec == 60          # FINAL RULE: 1 minute
+    blocked, why = le.cooldown_block(s, state, now=now + timedelta(seconds=30))
+    assert blocked and "cooldown" in why.lower()
+    ok, _ = le.cooldown_block(s, state, now=now + timedelta(minutes=2))
+    assert ok is False
+
+
+# ── 8d. Filters gate ENTRY only — an open position's exit still fires ─────────
+def test_exit_fires_even_with_entry_filters_on():
+    closed = {}
+
+    def _close(t, p, r):
+        closed.update(trade=t, price=p, reason=r)
+
+    # +1.6% vs entry 100 ⇒ TP. Filters ON; the plain-close fake exposes no
+    # volume column, but the exit branch runs BEFORE any entry filter, so TP
+    # must still close the position.
+    ex = _FakeExchange(price=101.60, change_pct=0.0)
+    eng = le.DipLiveEngine(exchange=ex, cooldown=ls.CooldownStore(),
+                           close_fn=_close)
+    s = _settings()
+    s.volume_filter_on = True
+    s.trend_filter_on = True
+    open_trade = {"id": "t1", "coin": "BTCUSDT", "type": "bot",
+                  "manual": False, "status": "open", "side": "BUY",
+                  "entry_price": 100.0, "invested": 50.0}
+    rec = eng.evaluate(symbol="BTCUSDT", settings=s,
+                       open_trades=[open_trade], current_exposure=50.0,
+                       global_gate_fn=_pass_gate)
+    assert rec.decision == "SELL" and rec.traded is True
+    assert closed.get("trade") is open_trade
+
+
+# ── 9b. Pure entry-quality filters: volume spike + trend upturn ──────────────
+def test_volume_ok_requires_a_spike():
+    # last bar 2.0 vs prior avg 1.0 ⇒ 2.0× ≥ 1.5× ⇒ pass
+    ok, ratio = dip.volume_ok([1.0] * 20 + [2.0], multiple=1.5)
+    assert ok is True and ratio >= 1.5
+    # last bar 1.2 vs prior avg 1.0 ⇒ 1.2× < 1.5× ⇒ block
+    ok2, ratio2 = dip.volume_ok([1.0] * 20 + [1.2], multiple=1.5)
+    assert ok2 is False and ratio2 < 1.5
+    # missing / too-little data ⇒ fail OPEN (never blocks)
+    assert dip.volume_ok([])[0] is True
+    assert dip.volume_ok([5.0])[0] is True
+
+
+def test_trend_ok_requires_an_upturn():
+    assert dip.trend_ok([100.0, 99.0, 99.5]) is True     # last close rising
+    assert dip.trend_ok([100.0, 99.5, 99.0]) is False    # last close falling
+    assert dip.trend_ok([100.0]) is True                 # too little data ⇒ open
 
 
 # ── 10. Settings round-trip + aggressive default ON ──────────────────────────
@@ -332,9 +397,16 @@ def test_settings_defaults_and_persistence():
     s = ls.LiveSettings()
     assert s.aggressive_on is True                  # aggressive default ON
     assert s.size_mode in ls.SIZE_MODES
-    assert s.buy_threshold_pct == -0.60
-    assert s.take_profit_pct == 1.20
-    assert s.stop_loss_pct == -0.20
+    assert s.buy_threshold_pct == -2.00
+    assert s.take_profit_pct == 1.50
+    assert s.stop_loss_pct == -0.01
+    # FINAL RULE knobs
+    assert s.volume_filter_on is True
+    assert s.min_volume_multiple == 1.5
+    assert s.trend_filter_on is True
+    assert s.max_position_pct == 50.0
+    assert s.stop_loss_cooldown_sec == 60
+    assert s.reentry_cooldown_sec == 60
     # from_dict ignores unknown keys and preserves known ones
     s2 = ls.LiveSettings.from_dict({"size_mode": "FIXED_USDT",
                                     "aggressive_on": False, "bogus": 1})
