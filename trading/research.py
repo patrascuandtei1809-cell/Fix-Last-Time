@@ -1269,6 +1269,278 @@ def run_carry_multiyear(*, profiles: Tuple[str, ...] = ("taker", "maker"),
             "carry_verdicts": {c["strategy_key"]: c["verdict"] for c in cells}}
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Rolling-window carry robustness (Task #24 — is the +7% APR an endpoint artifact?)
+# ─────────────────────────────────────────────────────────────────────────────
+# The multi-year carry ACCEPTs over ONE ~5y buy-and-hold (BTC/ETH positive, SOL
+# negative), but a single hold is sensitive to its exact start/end dates — the
+# +7% APR could be partly an artifact of the 2021→2026 endpoints. This is the
+# walk-forward-style robustness check the directional sweep already does but the
+# carry did not: model the carry as MANY overlapping fixed-length holds (90d &
+# 180d, stepped monthly across the full ~5y funding archive) and report the
+# per-symbol distribution of net carry % / APR, the FRACTION of windows positive,
+# and the worst/best window. The verdict is by BREADTH OF POSITIVE WINDOWS, not
+# one endpoint.
+#
+# Price legs are a flat spot-proxy (constant price → basis ≡ 0), identical to the
+# conservative funding-only methodology of the multi-year cell. This is exact for
+# this model (net carry = realized funding − one-time fees, independent of the
+# price path) and lets the entry points span the FULL ~5y funding archive instead
+# of being capped by the ~1000-candle (~2.7y) limit on 1d spot klines.
+CARRY_ROLLING_WINDOWS    = ((90, 30), (180, 30))   # (window_days, step_days)
+CARRY_ROLLING_POS_FRAC   = 70.0    # % of windows that must be net-positive/symbol
+CARRY_ROLLING_MIN_WINDOWS = 6      # need ≥ this many holds to trust a distribution
+
+
+def _carry_rolling_price_frame(funding_df) -> "pd.DataFrame":
+    """Flat daily price grid spanning the funding archive (basis ≡ 0 spot proxy).
+
+    A constant price makes `carry_pnl`'s basis term exactly 0, so each window's
+    net carry is funding − one-time fees (the documented conservative read). The
+    daily grid simply gives `rolling_carry` the timestamps to slice fixed-length
+    holds across the whole funding history.
+    """
+    import pandas as pd
+    ft = pd.to_numeric(funding_df["funding_time"], errors="coerce").dropna()
+    t0, t1 = int(ft.min()), int(ft.max())
+    day = 86400000
+    times = list(range(t0, t1 + day, day))
+    return pd.DataFrame({"open_time": times, "okx_close": [100.0] * len(times)})
+
+
+def run_carry_rolling_symbol(symbol: str, *, window_days: int, step_days: int,
+                             spot_fee: float = CARRY_SPOT_FEE,
+                             perp_fee: float = CARRY_PERP_FEE,
+                             slip: float = DEFAULT_SLIP,
+                             days: int = CARRY_MULTIYEAR_DAYS,
+                             use_cache: bool = True) -> Dict:
+    """Fetch the full ~5y Binance Vision funding for one symbol and run the carry
+    over every overlapping `window_days` hold stepped by `step_days`."""
+    funding = backtest.fetch_funding_rates(symbol, days, use_cache=use_cache,
+                                           source="binance-vision")
+    frame = _carry_rolling_price_frame(funding)
+    res = backtest.rolling_carry(frame, frame, funding,
+                                 window_days=window_days, step_days=step_days,
+                                 spot_fee_pct=spot_fee, perp_fee_pct=perp_fee,
+                                 slip_pct=slip,
+                                 min_windows=CARRY_ROLLING_MIN_WINDOWS)
+    res["symbol"] = symbol
+    return res
+
+
+def _carry_rolling_verdict(results: List[Dict], *,
+                           min_pos_frac: float = CARRY_ROLLING_POS_FRAC
+                           ) -> Tuple[str, List[str]]:
+    """Honest ACCEPT/REJECT for the rolling-window carry — by BREADTH of positive
+    windows, NOT a single endpoint-dependent hold.
+
+    ACCEPT only if, across ≥MIN_SYMBOLS symbols that produced a distribution, the
+    carry is net-positive in ≥`min_pos_frac`% of overlapping windows AND the
+    median window is positive. A persistent carry survives most entry points; an
+    endpoint artifact does not.
+    """
+    held = [r for r in results if r.get("held")]
+    reasons: List[str] = []
+    if len(held) < MIN_SYMBOLS:
+        reasons.append(f"only {len(held)} symbol(s) produced a rolling-window "
+                       f"distribution (need ≥{MIN_SYMBOLS}) — not enough to trust")
+        return "REJECT", reasons
+    robust = [r for r in held
+              if r["pct_windows_positive"] >= min_pos_frac
+              and r["median_net_carry_pct"] > 0]
+    mean_pos = sum(r["pct_windows_positive"] for r in held) / len(held)
+    if len(robust) < MIN_SYMBOLS:
+        weak = ", ".join(
+            f"{r['symbol']}({r['pct_windows_positive']:.0f}% pos, "
+            f"median {r['median_net_carry_pct']:+.3f}%)"
+            for r in held if r not in robust)
+        reasons.append(
+            f"carry is net-positive in ≥{min_pos_frac:.0f}% of rolling windows on "
+            f"only {len(robust)} symbol(s) (need ≥{MIN_SYMBOLS}); endpoint-robust "
+            f"on too few — {weak}")
+        return "REJECT", reasons
+    weak = ", ".join(
+        f"{r['symbol']}({r['pct_windows_positive']:.0f}% pos, "
+        f"median {r['median_net_carry_pct']:+.3f}%, worst "
+        f"{r['worst_window']['net_carry_pct']:+.2f}%)"
+        for r in held if r not in robust)
+    msg = (f"carry is net-positive in ≥{min_pos_frac:.0f}% of overlapping windows "
+           f"on {len(robust)}/{len(held)} symbols (mean {mean_pos:.0f}% of windows "
+           f"positive) — persistent across entry points, not an endpoint artifact")
+    if weak:
+        msg += f"; NOT robust (excluded) on {weak}"
+    reasons.append(msg)
+    return "ACCEPT", reasons
+
+
+def _rolling_carry_note(window_days: int, step_days: int, *, spot_fee: float,
+                        perp_fee: float, slip: float) -> str:
+    legs = 2 * (spot_fee + slip) + 2 * (perp_fee + slip)
+    return (
+        f"CARRY / CASH-FLOW STUDY — ROLLING-WINDOW robustness of the multi-year "
+        f"Binance carry. Enters a {window_days}d delta-neutral hold (long spot + "
+        f"short perp) every {step_days}d across the full ~5y Binance Vision "
+        f"funding archive; reports the DISTRIBUTION of net carry across many "
+        f"overlapping holds so the verdict is by BREADTH OF POSITIVE WINDOWS, not "
+        f"one endpoint-dependent hold. TAKER fees (spot {spot_fee}% · perp "
+        f"{perp_fee}% · slip {slip}% → 4 legs = {legs:.2f}% one-time). Price legs "
+        f"are a flat spot-proxy so basis ≡ 0 and ONLY realized funding minus fees "
+        f"is credited (conservative funding-only read). 'net_exp%' = mean NET "
+        f"carry per hold. Excluded from the live directional allowlist by design.")
+
+
+def build_carry_rolling_cell(results: List[Dict], *, window_days: int,
+                             step_days: int, spot_fee: float, perp_fee: float,
+                             slip: float, strategy_key: str,
+                             strategy: Optional[str] = None,
+                             signal_name: Optional[str] = None,
+                             note: Optional[str] = None) -> Dict:
+    """Assemble the rolling-window carry distribution into a `kind=="carry"` cell.
+
+    Same shape as `build_carry_cell` (so it merges/renders alongside the other
+    carry cells and is excluded from the live allowlist by kind), but the verdict
+    is `_carry_rolling_verdict` (breadth of positive windows) and the subcells
+    carry the per-symbol distribution stats.
+    """
+    strategy = strategy or f"Rolling-Window Binance Carry ({window_days}d holds)"
+    signal_name = signal_name or f"Rolling Carry ({window_days}d)"
+    note = note or _rolling_carry_note(window_days, step_days, spot_fee=spot_fee,
+                                       perp_fee=perp_fee, slip=slip)
+    held = [r for r in results if r.get("held")]
+    verdict, reasons = _carry_rolling_verdict(results)
+
+    total_windows = sum(r["n_windows"] for r in held)
+    total_pos = sum(r["n_windows_positive"] for r in held)
+    sum_pos = sum(r["sum_pos_net_pct"] for r in held)
+    sum_neg = sum(r["sum_neg_net_pct"] for r in held)
+    mean_net = (sum(r["mean_net_carry_pct"] for r in held) / len(held)
+                if held else 0.0)
+
+    subcells = {}
+    for r in results:
+        tag = r["symbol"]
+        if not r.get("held"):
+            subcells[tag] = {"trades": r.get("n_windows", 0),
+                             "error": r.get("error", "no distribution")}
+            continue
+        subcells[tag] = {
+            "trades": r["n_windows"],
+            "expectancy_pct": r["mean_net_carry_pct"],
+            "profit_factor": (r["sum_pos_net_pct"] / r["sum_neg_net_pct"]
+                              if r["sum_neg_net_pct"] > 0
+                              else (float("inf") if r["sum_pos_net_pct"] > 0
+                                    else 0.0)),
+            "win_rate": r["pct_windows_positive"],
+            "n_windows": r["n_windows"],
+            "n_windows_positive": r["n_windows_positive"],
+            "pct_windows_positive": r["pct_windows_positive"],
+            "mean_net_carry_pct": r["mean_net_carry_pct"],
+            "median_net_carry_pct": r["median_net_carry_pct"],
+            "std_net_carry_pct": r["std_net_carry_pct"],
+            "min_net_carry_pct": r["min_net_carry_pct"],
+            "max_net_carry_pct": r["max_net_carry_pct"],
+            "mean_apr_pct": r["mean_apr_pct"],
+            "median_apr_pct": r["median_apr_pct"],
+            "worst_window": r["worst_window"],
+            "best_window": r["best_window"],
+        }
+
+    return {
+        "kind":         "carry",
+        "strategy_key": strategy_key,
+        "strategy":     strategy,
+        "signal_name":  signal_name,
+        "interval":     f"roll{window_days}d",
+        "exit_policy":  {"model": f"rolling {window_days}d carry holds, "
+                                  f"{step_days}d step, 4 legs",
+                         "window_days": window_days, "step_days": step_days,
+                         "spot_fee_pct": spot_fee, "perp_fee_pct": perp_fee,
+                         "slip_pct": slip},
+        "qualify_mode": "carry_rolling",
+        "subcells":     subcells,
+        "aggregate": {
+            "trades": total_windows,
+            "expectancy_pct": mean_net,
+            "profit_factor": (sum_pos / sum_neg) if sum_neg > 0
+                             else (float("inf") if sum_pos > 0 else 0.0),
+            "win_rate": (total_pos / total_windows * 100) if total_windows else 0.0,
+        },
+        "walk_forward": [],
+        "attribution":  {},
+        "verdict":      verdict,
+        "verdict_reasons": reasons,
+        "errors":       [f"{r['symbol']}: {r.get('error')}"
+                         for r in results if not r.get("held")],
+        "note": note,
+    }
+
+
+def run_carry_rolling(*, windows=CARRY_ROLLING_WINDOWS, symbols=CARRY_SYMBOLS,
+                      spot_fee: float = CARRY_SPOT_FEE,
+                      perp_fee: float = CARRY_PERP_FEE, slip: float = DEFAULT_SLIP,
+                      days: int = CARRY_MULTIYEAR_DAYS, use_cache: bool = True,
+                      persist: bool = True, merge_latest: bool = True) -> Dict:
+    """Run the rolling-window carry robustness study and MERGE the cells.
+
+    Emits one DISTINCT `kind=="carry"` cell per window length
+    (`carry_binance_rolling_<window>d`) so the 90d and 180d distributions sit
+    side-by-side in latest.json alongside the single-hold multi-year carry cells.
+    Never wired live (carry is excluded from the allowlist by kind).
+    """
+    print("=" * 76)
+    print("AlphaTrade ROLLING-WINDOW CARRY robustness — is the carry an endpoint "
+          "artifact?")
+    print("=" * 76)
+    print(f"delta-neutral long spot + short perp · single-venue Binance · ~{days}d "
+          f"funding archive · windows={','.join(f'{w}d/{s}d' for w, s in windows)}")
+    print("-" * 76)
+
+    cells: List[Dict] = []
+    for window_days, step_days in windows:
+        results: List[Dict] = []
+        for sym in symbols:
+            try:
+                r = run_carry_rolling_symbol(sym, window_days=window_days,
+                                             step_days=step_days, spot_fee=spot_fee,
+                                             perp_fee=perp_fee, slip=slip,
+                                             days=days, use_cache=use_cache)
+            except Exception as e:
+                print(f"  [{window_days}d] [skip] {sym}: {e}")
+                results.append({"symbol": sym, "held": False, "error": str(e)})
+                continue
+            if r.get("held"):
+                print(f"  [{window_days}d] {sym}: {r['n_windows']} windows · "
+                      f"{r['pct_windows_positive']:.0f}% positive · net median "
+                      f"{r['median_net_carry_pct']:+.3f}% (mean "
+                      f"{r['mean_net_carry_pct']:+.3f}%, APR median "
+                      f"{r['median_apr_pct']:+.2f}%) · worst "
+                      f"{r['worst_window']['net_carry_pct']:+.3f}% · best "
+                      f"{r['best_window']['net_carry_pct']:+.3f}%")
+            else:
+                print(f"  [{window_days}d] {sym}: no distribution "
+                      f"({r.get('error')})")
+            results.append(r)
+
+        cell = build_carry_rolling_cell(
+            results, window_days=window_days, step_days=step_days,
+            spot_fee=spot_fee, perp_fee=perp_fee, slip=slip,
+            strategy_key=f"carry_binance_rolling_{window_days}d")
+        mark = "🟢 ACCEPT" if cell["verdict"] == "ACCEPT" else "🔴 REJECT"
+        print("-" * 76)
+        print(f"[{window_days}d] ROLLING CARRY VERDICT: {mark} — "
+              f"{cell['verdict_reasons'][0]}")
+        cells.append(cell)
+    print("=" * 76)
+
+    if persist:
+        return run_research(specs=[], symbols=symbols,
+                            fee=DEFAULT_FEE, slip=DEFAULT_SLIP,
+                            use_cache=use_cache, persist=True,
+                            merge_latest=merge_latest, extra_cells=cells)
+    return {"cells": cells,
+            "carry_verdicts": {c["strategy_key"]: c["verdict"] for c in cells}}
+
+
 if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser(description="AlphaTrade strategy research sweep")
@@ -1289,9 +1561,17 @@ if __name__ == "__main__":
                     help="run the MULTI-YEAR Binance carry under taker AND assumed-"
                          "maker fees (~5y funding via Vision) and merge both cells "
                          "into latest.json — a cash-flow test, never wired live")
+    ap.add_argument("--carry-rolling", action="store_true",
+                    help="run the ROLLING-WINDOW carry robustness study (90d & 180d "
+                         "holds stepped monthly across ~5y funding) and merge both "
+                         "cells into latest.json — verdict by breadth of positive "
+                         "windows, never wired live")
     args = ap.parse_args()
 
-    if args.carry_multiyear:
+    if args.carry_rolling:
+        run_carry_rolling(use_cache=not args.no_cache,
+                          persist=not args.no_persist, merge_latest=True)
+    elif args.carry_multiyear:
         run_carry_multiyear(use_cache=not args.no_cache,
                             persist=not args.no_persist, merge_latest=True)
     elif args.carry:

@@ -295,6 +295,156 @@ def test_binance_vision_strict_source_raises_without_okx_fallback(monkeypatch):
     assert calls["okx"] == 0                          # OKX never consulted
 
 
+# ── ROLLING-WINDOW carry robustness (Task #24) ───────────────────────────────
+# A single buy-and-hold is endpoint-sensitive; the rolling study enters a fixed-
+# length hold at many stepped starts and judges the carry by the BREADTH of
+# positive windows, not one endpoint. All offline (synthetic frames).
+_DAY = 86400000
+
+
+def _daily_flat(n_days, *, price=100.0, start=0):
+    """Flat daily [open_time, okx_close] frame — basis ≡ 0 spot-proxy."""
+    return pd.DataFrame({
+        "open_time": [start + i * _DAY for i in range(n_days)],
+        "okx_close": [float(price)] * n_days,
+    })
+
+
+def _const_funding(n_days, rate, *, start=0):
+    """Constant `rate` per 8h settlement across `n_days` (3 settlements/day)."""
+    return _funding([(start + (i + 1) * _8H, rate) for i in range(n_days * 3)])
+
+
+def test_rolling_insufficient_candles_not_held():
+    res = B.rolling_carry(_daily_flat(1), _daily_flat(1), _funding([]),
+                          window_days=90, step_days=30,
+                          spot_fee_pct=0.1, perp_fee_pct=0.05, slip_pct=0.02)
+    assert res["held"] is False
+
+
+def test_rolling_too_few_windows_not_held():
+    """100d of data fits only ONE 90d/30d hold → below min_windows → not held."""
+    spot = _daily_flat(100)
+    fund = _const_funding(100, 0.0001)
+    res = B.rolling_carry(spot, spot, fund, window_days=90, step_days=30,
+                          spot_fee_pct=0.1, perp_fee_pct=0.05, slip_pct=0.02,
+                          min_windows=6)
+    assert res["held"] is False
+    assert res["n_windows"] < 6
+
+
+def test_rolling_all_windows_positive_with_strong_funding():
+    """Large constant +funding → every overlapping window clears the 4-leg fee."""
+    spot = _daily_flat(301)
+    fund = _const_funding(301, 0.0005)          # +0.05%/8h
+    res = B.rolling_carry(spot, spot, fund, window_days=90, step_days=30,
+                          spot_fee_pct=0.10, perp_fee_pct=0.05, slip_pct=0.02,
+                          min_windows=4)
+    assert res["held"] and res["n_windows"] >= 4
+    assert res["pct_windows_positive"] == approx(100.0)
+    assert res["n_windows_positive"] == res["n_windows"]
+    assert res["min_net_carry_pct"] > 0 and res["median_net_carry_pct"] > 0
+    # worst/best windows are drawn from the realized net distribution
+    assert res["worst_window"]["net_carry_pct"] == approx(res["min_net_carry_pct"])
+    assert res["best_window"]["net_carry_pct"] == approx(res["max_net_carry_pct"])
+
+
+def test_rolling_worst_window_captures_negative_funding_stretch():
+    """A deep negative-funding blast makes the windows spanning it the losers, and
+    `worst_window` must surface the minimum of the net distribution."""
+    spot = _daily_flat(301)
+    rows = []
+    for i in range(301 * 3):
+        t = (i + 1) * _8H
+        day = t // _DAY
+        rate = -0.01 if 100 <= day <= 110 else 0.00005   # 11-day −1%/8h blast
+        rows.append((t, rate))
+    res = B.rolling_carry(spot, spot, _funding(rows), window_days=90, step_days=30,
+                          spot_fee_pct=0.0, perp_fee_pct=0.0, slip_pct=0.0,
+                          min_windows=4)
+    assert res["held"]
+    assert res["min_net_carry_pct"] < 0                  # the blast drags some <0
+    assert res["pct_windows_positive"] < 100.0
+    assert res["worst_window"]["net_carry_pct"] == approx(res["min_net_carry_pct"])
+
+
+# ── _carry_rolling_verdict: breadth of positive windows ──────────────────────
+def _dist(symbol, pct_pos, median_net):
+    return {"symbol": symbol, "held": True,
+            "n_windows": 50, "n_windows_positive": round(pct_pos / 2),
+            "pct_windows_positive": pct_pos,
+            "mean_net_carry_pct": median_net, "median_net_carry_pct": median_net,
+            "std_net_carry_pct": 1.0, "min_net_carry_pct": -1.0,
+            "max_net_carry_pct": 5.0, "sum_pos_net_pct": 10.0,
+            "sum_neg_net_pct": 2.0, "mean_apr_pct": 5.0, "median_apr_pct": 5.0,
+            "worst_window": {"net_carry_pct": -1.0},
+            "best_window": {"net_carry_pct": 5.0}}
+
+
+def test_rolling_verdict_accepts_broad_positive_windows():
+    res = [_dist("BTCUSDT", 97, 1.1), _dist("ETHUSDT", 86, 1.0)]
+    v, _ = R._carry_rolling_verdict(res)
+    assert v == "ACCEPT"
+
+
+def test_rolling_verdict_rejects_too_few_held():
+    res = [_dist("BTCUSDT", 97, 1.1),
+           {"symbol": "ETHUSDT", "held": False, "error": "x"}]
+    v, _ = R._carry_rolling_verdict(res)
+    assert v == "REJECT"
+
+
+def test_rolling_verdict_rejects_thin_breadth():
+    """Only ONE symbol is positive in ≥70% of windows → not endpoint-robust."""
+    res = [_dist("BTCUSDT", 97, 1.1), _dist("ETHUSDT", 55, 0.5),
+           _dist("SOLUSDT", 59, 0.3)]
+    v, _ = R._carry_rolling_verdict(res)
+    assert v == "REJECT"
+
+
+def test_rolling_verdict_rejects_positive_median_but_low_window_breadth():
+    """A positive median is NOT enough — the carry must clear in ≥70% of windows
+    (the SOL-style 'positive median, fragile breadth' case)."""
+    res = [_dist("BTCUSDT", 97, 1.1), _dist("ETHUSDT", 60, 0.2)]
+    v, _ = R._carry_rolling_verdict(res)
+    assert v == "REJECT"
+
+
+# ── rolling cell shape + allowlist exclusion ─────────────────────────────────
+def test_rolling_cell_excluded_from_allowlist():
+    res = [_dist("BTCUSDT", 97, 1.1), _dist("ETHUSDT", 86, 1.0)]
+    cell = R.build_carry_rolling_cell(
+        res, window_days=180, step_days=30, spot_fee=0.10, perp_fee=0.05,
+        slip=0.02, strategy_key="carry_binance_rolling_180d")
+    assert cell["kind"] == "carry"
+    assert cell["verdict"] == "ACCEPT"
+    assert cell["aggregate"]["win_rate"] > 0
+    assert cell["subcells"]["BTCUSDT"]["pct_windows_positive"] == 97
+    out = R.run_research(specs=[], persist=False, extra_cells=[cell])
+    promoted = {c["strategy_key"] for c in out.get("cells", [])
+                if c["verdict"] == "ACCEPT" and c.get("kind") != "carry"}
+    assert "carry_binance_rolling_180d" not in promoted
+
+
+def test_run_carry_rolling_uses_strict_vision_and_two_window_cells(monkeypatch):
+    """End-to-end (network stubbed): both window lengths pull from the STRICT
+    Binance Vision source and emit two distinct rolling carry cells."""
+    seen_sources = []
+    fund = _const_funding(400, 0.0002)          # +0.02%/8h over ~400d
+
+    def _fake_funding(symbol, days, use_cache=True, source="auto"):
+        seen_sources.append(source)
+        return fund.copy()
+
+    monkeypatch.setattr(B, "fetch_funding_rates", _fake_funding)
+    out = R.run_carry_rolling(symbols=["BTCUSDT", "ETHUSDT"], persist=False)
+    assert seen_sources and all(s == "binance-vision" for s in seen_sources)
+    cells = {c["strategy_key"]: c for c in out["cells"]}
+    assert set(cells) == {"carry_binance_rolling_90d", "carry_binance_rolling_180d"}
+    assert all(c["kind"] == "carry" for c in cells.values())
+    assert all(c["verdict"] == "ACCEPT" for c in cells.values())
+
+
 def test_run_carry_multiyear_uses_strict_vision_and_two_conditional_cells(monkeypatch):
     """End-to-end (network stubbed): both profiles pull from the STRICT Binance
     Vision source, emit two distinct carry cells, and only the maker ACCEPT is

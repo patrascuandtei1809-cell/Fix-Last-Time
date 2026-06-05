@@ -79,6 +79,34 @@ leaderboard/`edge_found` tests must also exclude `kind=="carry"`. Note: `1d`
 spot from Vision caps ~1000 candles (~2.7y), so the hold is multi-year but
 shorter than the ~5y funding coverage — honest, just not the full 5y.
 
+## Rolling-window carry: the multi-year ACCEPT is NOT an endpoint artifact (but SOL is fragile)
+**A single ~5y buy-and-hold is endpoint-sensitive — the +7% APR could be an
+artifact of the 2021→2026 dates.** So model the carry as MANY overlapping
+fixed-length holds and judge by BREADTH OF POSITIVE WINDOWS, not one endpoint.
+`backtest.rolling_carry(spot, perp, funding, window_days, step_days, …)` enters a
+fixed hold at every `step_days` start across the full series and returns the net %
+/ APR distribution + `pct_windows_positive` + worst/best window.
+`research.run_carry_rolling` runs 90d & 180d holds stepped monthly across the full
+~5y Vision funding archive (flat spot-proxy → basis≡0, so net = realized funding −
+one-time fees; intentionally spans the WHOLE 5y instead of the ~2.7y the 1d spot
+candle cap allows).
+**Verdict: 🟢 ACCEPT (both windows), but on 2/3 breadth only.** BTC/ETH are
+robustly positive (90d: BTC 97% / ETH 86% of windows positive; 180d: BTC 100% /
+ETH 91%, median net +2.7%). **SOL is the fragile leg** — positive median but only
+59–64% of windows positive AND a catastrophic **−42% worst window** (its
+2021-era deeply-negative funding stretch wipes out years of carry; the MEAN goes
+negative even though the median is positive). So the multi-year ACCEPT is
+confirmed real for BTC/ETH and NOT a pure endpoint artifact, but SOL must not be
+treated as a carry symbol.
+**Why median > 0 isn't enough:** `_carry_rolling_verdict` requires
+`pct_windows_positive ≥ 70` AND `median > 0` per symbol — a positive median with
+fragile breadth (SOL) is rejected at the symbol level even when the basket
+ACCEPTs on the other two.
+**How to apply:** `python research.py --carry-rolling --merge` → two
+`kind=="carry"` cells `carry_binance_rolling_{90,180}d`, STILL never wired live
+(carry excluded from the allowlist by `kind`). Use `--merge` so latest.json stays
+COMPLETE.
+
 # Alternative-source edge probe: perpetual funding
 
 Probed whether a non-price signal (perp-swap FUNDING rate) clears the after-fee

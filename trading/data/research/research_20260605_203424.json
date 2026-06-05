@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-05T20:38:54.655731+00:00",
+  "generated_at": "2026-06-05T20:34:24.324651+00:00",
   "fee_pct_per_side": 0.1,
   "slippage_pct_per_side": 0.02,
   "round_trip_cost_pct": 0.24000000000000002,
@@ -7315,7 +7315,7 @@
       "attribution": {},
       "verdict": "ACCEPT",
       "verdict_reasons": [
-        "carry is net-positive in \u226570% of overlapping windows on 2/3 symbols (mean 80% of windows positive) \u2014 persistent across entry points, not an endpoint artifact; NOT robust (excluded) on SOLUSDT(59% pos, median +0.553%, worst -42.39%)"
+        "carry is net-positive in \u226570% of overlapping windows on 2/3 symbols (mean 80% of windows positive) \u2014 persistent across entry points, not an endpoint artifact"
       ],
       "errors": [],
       "note": "CARRY / CASH-FLOW STUDY \u2014 ROLLING-WINDOW robustness of the multi-year Binance carry. Enters a 90d delta-neutral hold (long spot + short perp) every 30d across the full ~5y Binance Vision funding archive; reports the DISTRIBUTION of net carry across many overlapping holds so the verdict is by BREADTH OF POSITIVE WINDOWS, not one endpoint-dependent hold. TAKER fees (spot 0.1% \u00b7 perp 0.05% \u00b7 slip 0.02% \u2192 4 legs = 0.38% one-time). Price legs are a flat spot-proxy so basis \u2261 0 and ONLY realized funding minus fees is credited (conservative funding-only read). 'net_exp%' = mean NET carry per hold. Excluded from the live directional allowlist by design."
@@ -7443,7 +7443,7 @@
       "attribution": {},
       "verdict": "ACCEPT",
       "verdict_reasons": [
-        "carry is net-positive in \u226570% of overlapping windows on 2/3 symbols (mean 85% of windows positive) \u2014 persistent across entry points, not an endpoint artifact; NOT robust (excluded) on SOLUSDT(64% pos, median +0.820%, worst -42.08%)"
+        "carry is net-positive in \u226570% of overlapping windows on 2/3 symbols (mean 85% of windows positive) \u2014 persistent across entry points, not an endpoint artifact"
       ],
       "errors": [],
       "note": "CARRY / CASH-FLOW STUDY \u2014 ROLLING-WINDOW robustness of the multi-year Binance carry. Enters a 180d delta-neutral hold (long spot + short perp) every 30d across the full ~5y Binance Vision funding archive; reports the DISTRIBUTION of net carry across many overlapping holds so the verdict is by BREADTH OF POSITIVE WINDOWS, not one endpoint-dependent hold. TAKER fees (spot 0.1% \u00b7 perp 0.05% \u00b7 slip 0.02% \u2192 4 legs = 0.38% one-time). Price legs are a flat spot-proxy so basis \u2261 0 and ONLY realized funding minus fees is credited (conservative funding-only read). 'net_exp%' = mean NET carry per hold. Excluded from the live directional allowlist by design."

@@ -627,6 +627,89 @@ def carry_pnl(spot_df: pd.DataFrame, perp_df: pd.DataFrame,
     }
 
 
+def rolling_carry(spot_df: pd.DataFrame, perp_df: pd.DataFrame,
+                  funding_df: pd.DataFrame, *,
+                  window_days: float, step_days: float,
+                  spot_fee_pct: float, perp_fee_pct: float, slip_pct: float,
+                  min_windows: int = 4) -> Dict:
+    """Run `carry_pnl` over MANY overlapping fixed-length holds and summarize the
+    distribution of outcomes (Task #24 — endpoint-robustness of the carry).
+
+    Pure math on pre-fetched frames (no network — testable offline). A single
+    buy-and-hold is sensitive to its exact start/end dates; this instead enters a
+    `window_days`-long delta-neutral hold at every `step_days` start across the
+    full series and reports how the net carry / APR are DISTRIBUTED and what
+    FRACTION of entry points were profitable. A genuinely persistent carry should
+    be positive across the large majority of windows, not just one endpoint.
+
+    Returns a dict with `held` (False if fewer than `min_windows` holds fit),
+    `n_windows`, `pct_windows_positive`, mean/median/std/min/max of net carry %,
+    mean/median APR %, the funding-only equivalents, and the worst/best window.
+    """
+    if spot_df is None or perp_df is None or len(spot_df) < 2:
+        return {"held": False, "error": "insufficient candles", "n_windows": 0}
+    if window_days <= 0 or step_days <= 0:
+        return {"held": False, "error": "bad window/step", "n_windows": 0}
+
+    t_first = int(spot_df.open_time.iloc[0])
+    t_last = int(spot_df.open_time.iloc[-1])
+    window_ms = int(window_days * 86400000)
+    step_ms = int(step_days * 86400000)
+
+    windows: List[Dict] = []
+    start = t_first
+    while start + window_ms <= t_last:
+        end = start + window_ms
+        s = spot_df[(spot_df.open_time >= start) & (spot_df.open_time <= end)]
+        p = perp_df[(perp_df.open_time >= start) & (perp_df.open_time <= end)]
+        res = carry_pnl(s, p, funding_df, spot_fee_pct=spot_fee_pct,
+                        perp_fee_pct=perp_fee_pct, slip_pct=slip_pct)
+        if res.get("held"):
+            windows.append(res)
+        start += step_ms
+
+    n = len(windows)
+    if n < min_windows:
+        return {"held": False, "n_windows": n,
+                "error": f"only {n} window(s) fit (need ≥{min_windows})"}
+
+    nets = np.array([w["net_carry_pct"] for w in windows], dtype=float)
+    aprs = np.array([w["apr_pct"] for w in windows], dtype=float)
+    fonly = np.array([w["funding_only_net_pct"] for w in windows], dtype=float)
+    fund = np.array([w["funding_sum_pct"] for w in windows], dtype=float)
+    n_pos = int((nets > 0).sum())
+    worst_i, best_i = int(nets.argmin()), int(nets.argmax())
+
+    def _window_ref(i: int) -> Dict:
+        w = windows[i]
+        return {"start_ts": w["start_ts"], "end_ts": w["end_ts"],
+                "days_held": w["days_held"], "net_carry_pct": float(nets[i]),
+                "funding_sum_pct": w["funding_sum_pct"], "apr_pct": w["apr_pct"]}
+
+    return {
+        "held": True,
+        "n_windows": n,
+        "window_days": float(window_days),
+        "step_days": float(step_days),
+        "n_windows_positive": n_pos,
+        "pct_windows_positive": n_pos / n * 100.0,
+        "mean_net_carry_pct": float(nets.mean()),
+        "median_net_carry_pct": float(np.median(nets)),
+        "std_net_carry_pct": float(nets.std(ddof=0)),
+        "min_net_carry_pct": float(nets.min()),
+        "max_net_carry_pct": float(nets.max()),
+        "sum_pos_net_pct": float(nets[nets > 0].sum()),
+        "sum_neg_net_pct": float(-nets[nets < 0].sum()),
+        "mean_apr_pct": float(aprs.mean()),
+        "median_apr_pct": float(np.median(aprs)),
+        "mean_funding_only_net_pct": float(fonly.mean()),
+        "median_funding_only_net_pct": float(np.median(fonly)),
+        "mean_funding_sum_pct": float(fund.mean()),
+        "worst_window": _window_ref(worst_i),
+        "best_window": _window_ref(best_i),
+    }
+
+
 def _interval_minutes(interval: str) -> int:
     unit = interval[-1]
     n = int(interval[:-1])
