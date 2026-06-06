@@ -31,3 +31,23 @@ unit-tested on geo-blocked Replit with synthetic OHLCV** — only order placemen
 and balance fetch need Binance. Use a synthetic harness to prove signals are
 directional with score>0 before suspecting the engine; the usual culprit for
 "never trades" on a connected account is this sizing gate, not the edge engine.
+
+## Dip engine `compute_order_amount`: cap-before-floor + "use all" bypass
+
+The dip engine (`live_engine.compute_order_amount`) has the same min-notional
+shape, with two extra rules learned the hard way:
+
+1. **"Use 100% of free USDT" (`SIZE_ALL`) must bypass the 25% reserve AND the
+   max-position-% cap.** Otherwise the reserve caps every mode at 75% and a
+   small account (e.g. $10.95 × 0.75 = $8.21 < $10) can NEVER trade even when
+   the operator explicitly asked to deploy all funds. The operator's *explicit
+   opt-in* caps (hard-$ `max_position_size_usdt`, `bot_spending_limit` remaining)
+   still bind in every mode.
+
+2. **Fold ALL binding limits into ONE deployable `cap` BEFORE the min-notional
+   floor-up.** The floor-up may only raise the amount when `cap >= floor`; if
+   `cap < floor`, return CANNOT TRADE. **Why:** if the floor-up runs *after* an
+   explicit cap, a hard-$ cap or spending-remaining below $10 gets silently
+   bumped back up to $10 — overrunning the operator's limit (and possibly
+   exceeding free balance). Order: desired-from-mode → min with every cap →
+   `amount=min(amount,cap)` → floor-up gated on `cap`.

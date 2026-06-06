@@ -131,50 +131,66 @@ def compute_order_amount(settings: LiveSettings, free_usdt: float,
     free_usdt = max(0.0, float(free_usdt or 0.0))
     mode = settings.size_mode
 
+    # "Use 100% of free USDT" — deploy the entire free balance. This mode
+    # bypasses the 25% reserve AND the max-position-% cap so a small account
+    # (e.g. $10.95) can still meet the Binance $10 min-notional. The operator's
+    # explicit opt-in hard caps (spending limit, max-position $) are still
+    # honoured because they are deliberate budgets, not auto-applied buffers.
+    use_all = (mode == SIZE_ALL)
+
+    # 1) Desired amount from the selected mode.
     if mode == SIZE_FIXED:
         amount = float(settings.fixed_usdt_amount)
     elif mode == SIZE_PERCENT:
         amount = free_usdt * float(settings.portfolio_percent) / 100.0
     elif mode == SIZE_ALL:
-        amount = free_usdt              # all available — safety caps below still apply
+        amount = free_usdt              # 100% of free USDT
     else:  # SIZE_AUTO — aggressive uses a larger default slice
         pct = float(settings.auto_percent)
         if settings.aggressive_on:
             pct = max(pct, 50.0)
         amount = free_usdt * pct / 100.0
 
-    # Max position size as % of free USDT (FINAL RULE: 50%). 0 = disabled.
-    max_pct = float(getattr(settings, "max_position_pct", 0.0) or 0.0)
-    if max_pct > 0:
-        amount = min(amount, free_usdt * max_pct / 100.0)
+    # 2) Build the single DEPLOYABLE CEILING from every binding limit. The
+    #    min-notional floor-up (step 3) is never allowed to exceed this, so an
+    #    explicit cap can never be silently overrun. "Use all" bypasses the 25%
+    #    reserve AND the max-position-% cap; the operator's explicit opt-in caps
+    #    (hard-$ max position, spending limit) ALWAYS bind.
+    cap = free_usdt if use_all else free_usdt * RESERVE_FRACTION
 
-    # Operator hard $ max-position cap (0 = disabled)
+    if not use_all:
+        max_pct = float(getattr(settings, "max_position_pct", 0.0) or 0.0)
+        if max_pct > 0:
+            cap = min(cap, free_usdt * max_pct / 100.0)
+
     if settings.max_position_size_usdt and settings.max_position_size_usdt > 0:
-        amount = min(amount, float(settings.max_position_size_usdt))
+        cap = min(cap, float(settings.max_position_size_usdt))
 
-    # Bot spending limit — remaining budget (0 = unlimited)
     if settings.bot_spending_limit_usdt and settings.bot_spending_limit_usdt > 0:
         remaining = float(settings.bot_spending_limit_usdt) - float(current_exposure or 0.0)
         if remaining <= 0:
             return 0.0, False, (
                 f"Spending limit reached — ${current_exposure:.2f} / "
                 f"${settings.bot_spending_limit_usdt:.2f} deployed")
-        amount = min(amount, remaining)
+        cap = min(cap, remaining)
 
-    # Never deploy more than 75% of free balance (always leave a buffer).
-    ceiling = free_usdt * RESERVE_FRACTION
-    amount = min(amount, ceiling)
+    amount = min(amount, cap)
 
-    # Floor UP to the larger of the operator min-trade size and Binance min-notional.
+    # 3) Floor UP to the min-notional, but NEVER above the deployable ceiling —
+    #    if the ceiling can't fund a valid min order, we cannot trade (rather
+    #    than overrun a limit or send an order Binance will reject).
     floor = max(float(settings.min_trade_size_usdt or 0.0), BINANCE_MIN_NOTIONAL)
     if amount < floor:
-        # Only float up if the reserve ceiling can actually fund the floor.
-        if ceiling >= floor:
+        if cap >= floor:
             amount = floor
+        elif use_all:
+            return 0.0, False, (
+                f"Insufficient balance — need ≥ ${floor:.2f}, only "
+                f"${free_usdt:.2f} free USDT available")
         else:
             return 0.0, False, (
-                f"Insufficient balance — need ≥ ${floor:.2f} (75% of "
-                f"${free_usdt:.2f} free = ${ceiling:.2f})")
+                f"Insufficient balance — need ≥ ${floor:.2f}, max deployable "
+                f"${cap:.2f} of ${free_usdt:.2f} free (after reserve / limits)")
 
     return round(amount, 2), True, ""
 

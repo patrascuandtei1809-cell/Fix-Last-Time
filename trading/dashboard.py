@@ -2464,7 +2464,7 @@ with st.sidebar:
         _mode_labels = {
             live_settings.SIZE_FIXED:   "Fixed USDT — a fixed $ amount per trade",
             live_settings.SIZE_PERCENT: "% of available — a % of free USDT per trade",
-            live_settings.SIZE_ALL:     "All available — use all free USDT (safety limits apply)",
+            live_settings.SIZE_ALL:     "Use 100% of free USDT — deploy the entire free balance",
         }
         _cur = live_settings.normalize_size_mode(_ls.size_mode)
         if _cur not in _offer:
@@ -2488,9 +2488,11 @@ with st.sidebar:
                 float(_ls.portfolio_percent), 1.0, key="dip_portfolio_pct",
             ))
         else:  # SIZE_ALL
-            st.caption("Uses all available USDT each trade — automatically capped "
-                       "by the limits below (max position %, the 25% reserve, and "
-                       "any spending limit).")
+            st.caption("Deploys **100% of free USDT** on each trade — the 25% "
+                       "reserve and the max-position-% cap are bypassed so a small "
+                       "balance can still meet the Binance $10 minimum. Only the "
+                       "Binance minimum and any explicit spending / hard-$ limit "
+                       "below still apply.")
 
         st.markdown("**Limits**")
         _ls.bot_spending_limit_usdt = float(st.number_input(
@@ -2527,18 +2529,32 @@ with st.sidebar:
         except Exception as _ce:
             _amt, _ok, _why = 0.0, False, f"preview error: {_ce}"
         _mode_short = _mode_labels.get(_new_mode, _new_mode).split(" — ")[0]
+        _binance_min = max(float(_ls.min_trade_size_usdt or 0.0),
+                           live_engine.BINANCE_MIN_NOTIONAL)
         if not _binance_connected:
-            st.info("📐 **Next order size:** connect to Binance LIVE to preview the "
-                    "calculated amount.")
-        elif _ok:
-            st.success(
-                f"📐 **Next order size ≈ ${_amt:,.2f}** · mode *{_mode_short}* · "
-                f"from ${_prev_free:,.2f} free USDT "
-                f"(${_prev_exposure:,.2f} already in open trades). "
-                f"Computed with the **settings shown here** — click 💾 Save below "
-                f"so the live bot uses them on its next BUY.")
+            st.info("📐 **Order sizing preview:** connect to Binance LIVE to see "
+                    "free USDT and the calculated order size.")
         else:
-            st.warning(f"📐 **No order can be placed right now** — {_why}")
+            st.markdown("**📐 Order sizing preview**")
+            _pc1, _pc2 = st.columns(2)
+            _pc1.metric("Free USDT", f"${_prev_free:,.2f}")
+            _pc2.metric("Binance minimum", f"${_binance_min:,.2f}")
+            _pc3, _pc4 = st.columns(2)
+            _pc3.metric("Selected sizing mode", _mode_short)
+            _pc4.metric("Calculated order size",
+                        f"${_amt:,.2f}" if _ok else "—")
+            if _ok:
+                st.success(
+                    f"✅ **CAN TRADE** — next order ≈ **${_amt:,.2f}** from "
+                    f"${_prev_free:,.2f} free USDT "
+                    f"(${_prev_exposure:,.2f} already in open trades). "
+                    f"Click 💾 Save below so the live bot uses these settings on "
+                    f"its next BUY.")
+            else:
+                st.error(f"⛔ **CANNOT TRADE** — {_why}")
+            st.caption("This reflects sizing only. A live BUY is also gated by "
+                       "Emergency Stop, Safe Mode, the daily-loss limit, "
+                       "cooldowns and Binance exchange checks.")
 
         _c1, _c2 = st.columns(2)
         with _c1:
