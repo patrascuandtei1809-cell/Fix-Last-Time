@@ -58,6 +58,7 @@ from bot import (
     get_bot_diagnostics, save_settings, get_all_symbol_state,
 )
 from strategy import get_indicators
+from chart_markers import build_trade_markers
 from risk import RiskManager, RiskSettings, GlobalRiskSettings, GlobalRiskManager
 import telegram_notifier as tg
 from binance_client import public_klines, public_price, public_24h
@@ -3132,7 +3133,7 @@ with st.container():
             for _k,_v in _ind_defaults.items():
                 if _k not in st.session_state: st.session_state[_k] = _v
 
-            DEFAULT_WINDOW_HOURS = 1
+            DEFAULT_WINDOW_HOURS = 24
             _win_key   = "chart_window_hours"
             _nonce_key = "chart_view_nonce"
             if _win_key   not in st.session_state: st.session_state[_win_key]   = DEFAULT_WINDOW_HOURS
@@ -3201,12 +3202,10 @@ with st.container():
             # _view_end = latest candle; _view_start = `window` hours back but
             # never earlier than the oldest candle we hold.
             _win_hours = float(st.session_state[_win_key])
-            # Chart timezone — MUST be defined here unconditionally. The trade-
-            # marker loop below calls _to_xtz() for EVERY marker, and _to_xtz reads
-            # `_xtz`. The bounded-window branch used to skip setting it (only the
-            # no-data else-branch did), so on a normal chart every marker raised
-            # NameError and was silently dropped by the per-trade try/except —
-            # which is exactly why BUY/SELL markers stopped showing on the chart.
+            # Chart timezone of the candle axis (naive Europe/London wall-clock,
+            # so `_xtz` is normally None). Used only for the view-window fallback
+            # below; trade-marker placement is handled by chart_markers, which
+            # does its own axis-tz coercion.
             try:
                 _xtz = df_chart["open_time"].dt.tz
             except Exception:
@@ -3343,62 +3342,62 @@ with st.container():
             # on the xaxis below — Plotly clips to that range on first paint
             # but the markers stay in the dataset, so panning/scrolling back
             # reveals every past BUY/SELL exit.
-            buckets = {
-                "mb": ([], [], "triangle-up",   "#58a6ff", 17, "Manual BUY"),
-                "ms": ([], [], "triangle-down", "#bc8cff", 17, "Manual SELL"),
-                "bb": ([], [], "triangle-up",   "#26a69a", 14, "Bot BUY"),
-                "bs": ([], [], "triangle-down", "#ef5350", 14, "Bot SELL"),
-                "mx": ([], [], "x-thin",        "#58a6ff", 12, "Manual Exit"),
-                "bx": ([], [], "x-thin",        "#e3b341", 12, "Bot Exit"),
+            # CRITICAL: filter to ONLY the currently-viewed symbol (handled inside
+            # build_trade_markers via the `coin` field). Mixing ETH trades onto the
+            # BTC chart blows out the Y-axis. Markers are resolved to the candle
+            # nearest each trade timestamp by `chart_markers.build_trade_markers`,
+            # which coerces UTC `open_time` and naive-local `close_time` to the
+            # chart's naive Europe/London axis (the old inline coercion mis-placed
+            # markers and a try/except:continue silently dropped them).
+            _chart_sym = st.session_state.symbol
+            _markers = build_trade_markers(
+                all_trades, _chart_sym, df_chart["open_time"])
+            # Stash for the debug panel + warning rendered just below the chart.
+            st.session_state["_chart_marker_stats"] = {
+                "symbol":        _chart_sym,
+                "trades_found":  _markers.trades_found,
+                "buy_drawn":     _markers.buy_drawn,
+                "sell_drawn":    _markers.sell_drawn,
+                "unmatched":     [(u.trade_id, u.kind, u.reason)
+                                  for u in _markers.unmatched],
             }
 
-            def _to_xtz(ts):
-                """Coerce a trade timestamp to the chart's tz."""
-                ts = pd.to_datetime(ts)
-                if _xtz is None:
-                    return ts.tz_localize(None) if ts.tzinfo else ts
-                if ts.tzinfo is None:
-                    return ts.tz_localize("UTC").tz_convert(_xtz)
-                return ts.tz_convert(_xtz)
-
-            # CRITICAL: filter to ONLY trades for the currently-viewed symbol.
-            # Mixing ETH trades onto the BTC chart blows out the Y-axis (e.g.
-            # ETH $2k SL drawn on a BTC $76k chart drags the scale to $0).
-            _chart_sym = st.session_state.symbol
-            _sym_trades = [t for t in all_trades
-                           if (t.get("coin") or "").upper() == _chart_sym.upper()]
-            for t in _sym_trades:
-                try:
-                    ts    = _to_xtz(t.get("open_time"))
-                    ep    = t.get("entry_price")
-                    ttype = t.get("type", "manual")
-                    side  = t.get("side", "BUY")
-                    # Defensive: skip trades with missing OR zero entry price
-                    # (corrupt rows would otherwise pin the Y-axis to $0).
-                    if ep is None or float(ep or 0) <= 0:
-                        continue
-                    k = ("mb" if side == "BUY" else "ms") if ttype == "manual" else ("bb" if side == "BUY" else "bs")
-                    buckets[k][0].append(ts)
-                    buckets[k][1].append(ep)
-                    if t.get("exit_price") and t.get("close_time") \
-                            and float(t.get("exit_price") or 0) > 0:
-                        cts = _to_xtz(t["close_time"])
-                        xk = "mx" if ttype == "manual" else "bx"
-                        buckets[xk][0].append(cts)
-                        buckets[xk][1].append(t["exit_price"])
-                except Exception:
-                    continue
-
-            # Trade markers are gated behind `show_old_trades` so the default
-            # view is clean candles only — toggle on to see history.
-            for bk, (bx, by, bsym, bcol, bsz, blbl) in buckets.items():
-                if bx and st.session_state.show_old_trades:
+            # GREEN BUY markers (up-arrow + "BUY" label) on the OPEN candle, and
+            # RED SELL markers (down-arrow + "SELL" label) on the CLOSE candle.
+            # Rendered when the "Trades" toggle is on (default ON) so they are
+            # visible at every zoom level inside the current view.
+            if st.session_state.show_old_trades:
+                if _markers.buy:
                     fig.add_trace(go.Scatter(
-                        x=bx, y=by, mode="markers",
-                        marker=dict(symbol=bsym, size=bsz, color=bcol,
-                                    line=dict(color="rgba(255,255,255,0.5)", width=1)),
-                        name=blbl,
-                        hovertemplate=f"{blbl}<br>%{{x}}<br>%{{y:.4f}}<extra></extra>",
+                        x=[m.x for m in _markers.buy],
+                        y=[m.y for m in _markers.buy],
+                        mode="markers+text",
+                        marker=dict(symbol="triangle-up", size=16, color="#26a69a",
+                                    line=dict(color="rgba(255,255,255,0.85)", width=1.4)),
+                        text=["BUY"] * len(_markers.buy),
+                        textposition="bottom center",
+                        textfont=dict(color="#26a69a", size=10,
+                                      family="'JetBrains Mono',monospace"),
+                        name="BUY",
+                        customdata=[m.trade_id for m in _markers.buy],
+                        hovertemplate=("BUY %{customdata}<br>%{x}<br>"
+                                       "entry $%{y:.4f}<extra></extra>"),
+                    ), row=_pr, col=1)
+                if _markers.sell:
+                    fig.add_trace(go.Scatter(
+                        x=[m.x for m in _markers.sell],
+                        y=[m.y for m in _markers.sell],
+                        mode="markers+text",
+                        marker=dict(symbol="triangle-down", size=16, color="#ef5350",
+                                    line=dict(color="rgba(255,255,255,0.85)", width=1.4)),
+                        text=["SELL"] * len(_markers.sell),
+                        textposition="top center",
+                        textfont=dict(color="#ef5350", size=10,
+                                      family="'JetBrains Mono',monospace"),
+                        name="SELL",
+                        customdata=[m.trade_id for m in _markers.sell],
+                        hovertemplate=("SELL %{customdata}<br>%{x}<br>"
+                                       "exit $%{y:.4f}<extra></extra>"),
                     ), row=_pr, col=1)
 
             # ── SL / TP lines for every open position (toggle) ────────────────
@@ -3596,6 +3595,38 @@ with st.container():
                     "modeBarButtonsToRemove": ["select2d", "lasso2d", "toImage"],
                 },
             )
+
+            # ── Chart markers debug panel + unmatched warning ──────────────────
+            # Truthful accounting of how recorded trades map onto the chart so a
+            # "markers missing" report is diagnosable at a glance instead of a
+            # silent drop.
+            _ms = st.session_state.get("_chart_marker_stats", {})
+            if _ms.get("unmatched"):
+                st.warning(
+                    f"⚠️ Trade found but chart timestamp not matched — "
+                    f"{len(_ms['unmatched'])} marker(s) could not be placed for "
+                    f"{_ms.get('symbol','?')}. Zoom out or widen the window; see "
+                    f"the Chart markers panel for details.")
+            with st.expander(
+                    f"🔍 Chart markers — {_ms.get('buy_drawn',0)} BUY · "
+                    f"{_ms.get('sell_drawn',0)} SELL"
+                    + (f" · {len(_ms.get('unmatched',[]))} unmatched"
+                       if _ms.get('unmatched') else ""),
+                    expanded=False):
+                _dm1, _dm2, _dm3, _dm4 = st.columns(4)
+                _dm1.metric("Trades found", _ms.get("trades_found", 0))
+                _dm2.metric("BUY markers drawn", _ms.get("buy_drawn", 0))
+                _dm3.metric("SELL markers drawn", _ms.get("sell_drawn", 0))
+                _dm4.metric("Unmatched trades", len(_ms.get("unmatched", [])))
+                st.caption(
+                    f"Symbol {_ms.get('symbol','?')} · BUY anchored on `open_time`/"
+                    f"`entry_price`, SELL on `close_time`/`exit_price`, each snapped "
+                    f"to the nearest candle. Source: data/trades/*.json.")
+                if _ms.get("unmatched"):
+                    st.dataframe(
+                        pd.DataFrame(_ms["unmatched"],
+                                     columns=["trade id", "marker", "reason"]),
+                        width="stretch", hide_index=True)
         else:
             with st.spinner("Loading chart data from Binance…"):
                 st.info("Chart will appear here once data loads. No API key required.")
