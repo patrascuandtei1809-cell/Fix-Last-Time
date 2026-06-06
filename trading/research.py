@@ -1399,35 +1399,66 @@ _ACHIEVABLE_TAKER_FOUR_LEG = _four_leg_pct(CARRY_SPOT_FEE, CARRY_PERP_FEE,
 
 
 def _breakeven_reason(breakeven: Dict) -> Tuple[Optional[float], str]:
-    """Document the BREAK-EVEN fee point: net>0 ⟺ four-leg fee < a symbol's gross
-    carry, and the breadth verdict needs ≥MIN_SYMBOLS symbols clearing — so the
-    verdict break-even four-leg fee is the MIN_SYMBOLS-th highest symbol gross.
+    """Document the BREAK-EVEN fee point. A symbol clears only if the four-leg fee
+    is below BOTH its GROSS carry (net>0) AND its FUNDING-only carry
+    (funding_only_net>0 — we never credit the path-dependent basis move). So a
+    symbol's BINDING break-even is the LOWER of (gross, funding-only), and the
+    breadth verdict break-even is the MIN_SYMBOLS-th highest binding break-even.
 
     Returns (verdict_breakeven_four_leg_pct, reason_string). The reason names every
-    symbol's break-even and compares the breadth break-even to the achievable maker
-    (~{maker}%) and taker (~{taker}%) four-leg tiers.
+    symbol's gross AND funding-only break-even, calls out which one binds, and
+    compares the breadth break-even to the achievable maker (~{maker}%) and taker
+    (~{taker}%) four-leg tiers. When funding-only is the tighter limit the message
+    warns that a healthy-looking gross break-even is propped up by a one-off basis
+    move that funding income alone does NOT cover.
     """
-    grosses = sorted(((s, be["gross_pct"]) for s, be in breakeven.items()
-                      if be.get("gross_pct") is not None),
-                     key=lambda kv: kv[1], reverse=True)
-    parts = " · ".join(f"{s} {g:+.3f}%" for s, g in grosses) or "no symbol held"
-    be_fee = grosses[MIN_SYMBOLS - 1][1] if len(grosses) >= MIN_SYMBOLS else None
+    rows = []  # (symbol, gross, funding_only, binding=min(gross, funding_only))
+    for s, be in breakeven.items():
+        g = be.get("gross_pct")
+        if g is None:
+            continue
+        fund = be.get("funding_sum_pct")
+        if fund is None:
+            fund = g
+        rows.append((s, g, fund, min(g, fund)))
+    rows.sort(key=lambda r: r[3], reverse=True)
+    parts = " · ".join(
+        f"{s} {b:+.3f}% (gross {g:+.3f}% · funding-only {f:+.3f}%)"
+        for s, g, f, b in rows) or "no symbol held"
+    be_fee = rows[MIN_SYMBOLS - 1][3] if len(rows) >= MIN_SYMBOLS else None
+    gross_sorted = sorted((g for _, g, _, _ in rows), reverse=True)
+    gross_be_fee = (gross_sorted[MIN_SYMBOLS - 1]
+                    if len(gross_sorted) >= MIN_SYMBOLS else None)
     if be_fee is None or be_fee <= 0:
-        tail = (f"fewer than {MIN_SYMBOLS} symbols have positive gross carry — no "
-                f"four-leg fee clears the breadth rule")
-        return be_fee, (f"break-even four-leg fee per symbol (= gross carry): "
-                        f"{parts}; {tail}")
+        tail = (f"fewer than {MIN_SYMBOLS} symbols have a positive binding carry "
+                f"(lower of gross / funding-only) — no four-leg fee clears the "
+                f"breadth rule")
+        return be_fee, (f"break-even four-leg fee per symbol (binding = lower of "
+                        f"gross / funding-only): {parts}; {tail}")
     maker, taker = _ACHIEVABLE_MAKER_FOUR_LEG, _ACHIEVABLE_TAKER_FOUR_LEG
     clears = ("both clear it" if taker < be_fee else
               "maker clears it, taker does NOT" if maker < be_fee else
               "neither clears it")
     ord_suffix = {1: "st", 2: "nd", 3: "rd"}.get(MIN_SYMBOLS, "th")
+    funding_binds = gross_be_fee is not None and gross_be_fee > be_fee + 1e-9
+    if funding_binds:
+        warn = (f" WARNING: the gross break-even is {gross_be_fee:.3f}% but FUNDING "
+                f"income alone only breaks even at {be_fee:.3f}% — funding-only is "
+                f"the BINDING limit. The healthier gross figure is propped up by a "
+                f"one-off price/basis move that funding does NOT cover, so the "
+                f"verdict actually flips ACCEPT→REJECT at {be_fee:.3f}%, not "
+                f"{gross_be_fee:.3f}%.")
+    else:
+        warn = (f" (gross and funding-only break-even agree at {be_fee:.3f}% — "
+                f"funding income covers the carry on its own, no one-off basis "
+                f"move is needed.)")
     return be_fee, (
-        f"break-even four-leg fee per symbol (= gross carry): {parts}; the breadth "
-        f"verdict needs ≥{MIN_SYMBOLS} symbols clearing, so it flips ACCEPT→REJECT "
-        f"once the four-leg fee exceeds {be_fee:.3f}% (the {MIN_SYMBOLS}{ord_suffix}-"
-        f"highest gross). Achievable maker ≈{maker:.2f}% / taker ≈{taker:.2f}% "
-        f"four-leg → {clears}")
+        f"break-even four-leg fee per symbol (binding = lower of gross / "
+        f"funding-only): {parts}; the breadth verdict needs ≥{MIN_SYMBOLS} symbols "
+        f"clearing BOTH gross AND funding-only, so it flips ACCEPT→REJECT once the "
+        f"four-leg fee exceeds {be_fee:.3f}% (the {MIN_SYMBOLS}{ord_suffix}-highest "
+        f"binding break-even). Achievable maker ≈{maker:.2f}% / taker ≈{taker:.2f}% "
+        f"four-leg → {clears}.{warn}")
 
 
 def _fee_sweep_note(label: str) -> str:

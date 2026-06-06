@@ -579,7 +579,8 @@ def test_dead_reject_when_no_combo_clears():
 
 
 def test_breakeven_reason_reports_min_symbols_th_highest_gross():
-    """The verdict break-even = the MIN_SYMBOLS-th highest symbol gross."""
+    """The verdict break-even = the MIN_SYMBOLS-th highest symbol gross (when
+    funding-only and gross agree, the binding break-even equals the gross)."""
     be = {"BTCUSDT": {"gross_pct": 0.40, "funding_sum_pct": 0.40},
           "ETHUSDT": {"gross_pct": 0.70, "funding_sum_pct": 0.70},
           "SOLUSDT": {"gross_pct": -0.02, "funding_sum_pct": -0.02}}
@@ -587,6 +588,9 @@ def test_breakeven_reason_reports_min_symbols_th_highest_gross():
     assert be_fee == approx(0.40)                     # 2nd-highest (MIN_SYMBOLS=2)
     assert "break-even four-leg fee" in reason
     assert "ETHUSDT" in reason and "BTCUSDT" in reason
+    # both break-evens are surfaced, and when they agree there's no false warning
+    assert "gross" in reason and "funding-only" in reason
+    assert "WARNING" not in reason
 
 
 def test_breakeven_reason_when_breadth_unreachable():
@@ -597,6 +601,34 @@ def test_breakeven_reason_when_breadth_unreachable():
     be_fee, reason = R._breakeven_reason(be)
     assert be_fee is not None and be_fee <= 0
     assert "no four-leg fee clears" in reason
+
+
+def test_breakeven_reason_warns_when_funding_only_is_binding():
+    """A carry with a healthy GROSS break-even that clears the grid, but whose
+    FUNDING income alone breaks even much lower, must be flagged: funding-only is
+    the binding limit and the gross figure is propped up by a one-off basis move."""
+    # Gross break-even (2nd-highest gross) = 0.60% would look like it clears the
+    # whole grid, but funding alone only breaks even at 0.10% (2nd-highest funding).
+    be = {"BTCUSDT": {"gross_pct": 0.80, "funding_sum_pct": 0.10},
+          "ETHUSDT": {"gross_pct": 0.60, "funding_sum_pct": 0.10},
+          "SOLUSDT": {"gross_pct": 0.05, "funding_sum_pct": 0.02}}
+    be_fee, reason = R._breakeven_reason(be)
+    # binding break-even = 2nd-highest of min(gross, funding) = 0.10, NOT 0.60
+    assert be_fee == approx(0.10)
+    assert "WARNING" in reason
+    assert "funding-only is" in reason and "BINDING" in reason
+    # both the misleading gross figure and the true funding-only figure are named
+    assert "0.600%" in reason and "0.100%" in reason
+
+
+def test_breakeven_reason_surfaces_funding_only_per_symbol():
+    """Every symbol's funding-only break-even is named alongside its gross."""
+    be = {"BTCUSDT": {"gross_pct": 0.40, "funding_sum_pct": 0.15},
+          "ETHUSDT": {"gross_pct": 0.70, "funding_sum_pct": 0.30}}
+    _, reason = R._breakeven_reason(be)
+    assert "funding-only +0.150%" in reason
+    assert "funding-only +0.300%" in reason
+    assert "gross +0.400%" in reason and "gross +0.700%" in reason
 
 
 def test_fee_sweep_cell_shape_and_excluded_from_allowlist():
