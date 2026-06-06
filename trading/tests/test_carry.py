@@ -630,3 +630,112 @@ def test_run_carry_maker_sensitivity_emits_two_excluded_cells(monkeypatch):
     assert all(c["kind"] == "carry" for c in out["cells"])
     assert all(c["verdict"] == "ACCEPT" for c in out["cells"])   # gross >> fees
     assert all(c["fee_sweep"]["n_total"] == _GRID_COMBOS for c in out["cells"])
+
+
+# ── funding-only-net is the BINDING constraint (Task #35) ─────────────────────
+# The verdict requires BOTH net carry AND funding-only-net positive, so an ACCEPT
+# can't be propped up by a one-off basis move. The Task #29 fragility sweep only
+# uses FLAT frames (basis ≡ 0), where funding_only_net == net_carry and the two
+# constraints are indistinguishable — there is no regression test for the case
+# where funding-only-net is the TIGHTER constraint. These frames add a positive
+# basis move so net carry stays positive while the funding harvest ALONE fails to
+# clear fees, proving the verdict / break-even logic binds on funding_only_net.
+def _basis_frames(specs):
+    """{symbol: (spot, perp, funding)} where each symbol harvests `funding_pct`
+    of funding AND realizes `basis_pct` of (fee-independent) basis P&L.
+
+    The perp leg is flat; the spot leg rises by `basis_pct` over the hold, so
+    basis_pnl == basis_pct and gross == funding_pct + basis_pct. With basis_pct>0,
+    funding_only_net (= funding − fees) sits strictly BELOW net carry, so it
+    crosses zero at a LOWER fee — making funding-only the tighter constraint.
+    """
+    out = {}
+    for sym, (funding_pct, basis_pct) in specs.items():
+        n = 10
+        perp = _flat_8h(n)                                   # short leg flat
+        spot = _candles([100.0] + [100.0 * (1 + basis_pct / 100.0)] * n,
+                        step_ms=_8H)                         # long leg rises
+        out[sym] = (spot, perp, _const_fund_8h(n, (funding_pct / 100.0) / n))
+    return out
+
+
+# The dearest grid corner — used to price the "net positive, funding negative" case.
+_DEAR = (R.CARRY_FEE_SWEEP_SPOT[-1], R.CARRY_FEE_SWEEP_PERP[-1],
+         R.CARRY_FEE_SWEEP_SLIP[-1])
+
+
+def test_basis_frames_make_funding_only_the_binding_constraint():
+    """Precondition: at the dearest grid fee net carry is still POSITIVE (propped
+    up by the basis move) yet the funding harvest ALONE is negative — exactly the
+    case the FLAT-frame sweep can never produce (there basis ≡ 0)."""
+    spot, perp, fund = _basis_frames({"BTCUSDT": (0.20, 0.50)})["BTCUSDT"]
+    r = B.carry_pnl(spot, perp, fund, spot_fee_pct=_DEAR[0],
+                    perp_fee_pct=_DEAR[1], slip_pct=_DEAR[2])
+    assert r["basis_pnl_pct"] == approx(0.50)               # fee-independent prop
+    assert r["funding_sum_pct"] == approx(0.20)
+    assert r["net_carry_pct"] > 0                           # net survives on basis
+    assert r["funding_only_net_pct"] < 0                    # funding alone loses
+    # funding_only_net is below net by exactly the basis term, so it binds first.
+    assert r["funding_only_net_pct"] == approx(
+        r["net_carry_pct"] - r["basis_pnl_pct"])
+
+
+def test_verdict_binds_on_funding_only_not_net_carry():
+    """At a dear four-leg fee the frame-priced carry has POSITIVE mean net but
+    NEGATIVE funding-only-net on every symbol → `_carry_verdict` must REJECT on
+    the funding-only rule, even though a net-carry-only gate would ACCEPT."""
+    frames = _basis_frames({"BTCUSDT": (0.20, 0.50), "ETHUSDT": (0.20, 0.50)})
+    results = []
+    for sym, (s, p, f) in frames.items():
+        r = B.carry_pnl(s, p, f, spot_fee_pct=0.10, perp_fee_pct=0.02,
+                        slip_pct=0.02)
+        r["symbol"] = sym
+        results.append(r)
+    # A net-carry-only gate would PASS (mean net positive, every symbol net>0)…
+    assert sum(r["net_carry_pct"] for r in results) / len(results) > 0
+    assert all(r["net_carry_pct"] > 0 for r in results)
+    # …but the funding harvest alone is negative on every symbol → REJECT.
+    assert all(r["funding_only_net_pct"] < 0 for r in results)
+    v, reasons = R._carry_verdict(results)
+    assert v == "REJECT"
+    assert "beats costs on only 0 symbol" in reasons[0]
+
+
+def test_fee_sweep_flips_on_funding_only_while_net_stays_positive():
+    """The fragility sweep flips ACCEPT→REJECT inside the grid driven SOLELY by
+    the funding-only constraint: net carry stays positive at EVERY grid fee (the
+    basis prop never erodes), but once the funding harvest stops beating the fee
+    the winners collapse and the verdict becomes LOAD-BEARING-fragile."""
+    frames = _basis_frames({"BTCUSDT": (0.20, 0.50), "ETHUSDT": (0.20, 0.50),
+                            "SOLUSDT": (-0.10, 0.50)})
+    grid = R.carry_fee_sensitivity(frames)
+    assert grid[0]["verdict"] == "ACCEPT"        # cheap corner: funding beats fee
+    assert grid[-1]["verdict"] == "REJECT"       # dear corner: funding-only fails
+    # net carry on a harvest winner is positive even at the dearest, rejecting fee.
+    sB, pB, fB = frames["BTCUSDT"]
+    dear_net = B.carry_pnl(sB, pB, fB, spot_fee_pct=_DEAR[0],
+                           perp_fee_pct=_DEAR[1], slip_pct=_DEAR[2])
+    assert dear_net["net_carry_pct"] > 0 and dear_net["funding_only_net_pct"] < 0
+    v, reasons, stats = R._fee_sweep_verdict(grid)
+    assert v == "REJECT"
+    assert 0 < stats["n_accept"] < stats["n_total"]
+    assert "LOAD-BEARING" in reasons[0]
+
+
+def test_breakeven_distinguishes_funding_only_from_gross():
+    """Break-even data exposes BOTH the gross break-even (net=0 ⟺ fee<gross) AND
+    the funding-only break-even (funding=fees). With a positive basis the gross
+    break-even (0.70%) clears the WHOLE grid — a gross/net-only read would call it
+    robust — but the funding-only break-even (0.20%) sits INSIDE the grid, and
+    that is the fee where the verdict actually flips."""
+    frames = _basis_frames({"BTCUSDT": (0.20, 0.50), "ETHUSDT": (0.20, 0.50)})
+    be = R._carry_breakeven(frames)
+    assert be["BTCUSDT"]["gross_pct"] == approx(0.70)
+    assert be["BTCUSDT"]["funding_sum_pct"] == approx(0.20)
+    cheapest = R._four_leg_pct(R.CARRY_FEE_SWEEP_SPOT[0],
+                               R.CARRY_FEE_SWEEP_PERP[0], R.CARRY_FEE_SWEEP_SLIP[0])
+    dearest = R._four_leg_pct(*_DEAR)
+    # gross break-even clears the entire grid (would look "robust")…
+    assert be["BTCUSDT"]["gross_pct"] > dearest
+    # …but the funding-only break-even is the binding one, INSIDE the grid.
+    assert cheapest < be["BTCUSDT"]["funding_sum_pct"] < dearest
