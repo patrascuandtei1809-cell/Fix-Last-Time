@@ -757,6 +757,8 @@ if not st.session_state.get("_settings_loaded"):
         # Chart indicator toggles
         "show_ema", "show_volume", "show_rsi", "show_macd",
         "show_stoch", "show_old_trades", "show_sl_tp",
+        # Chart view preferences
+        "chart_autofollow", "chart_marker_offset_pct",
     )
     for _k in _PERSIST_KEYS:
         if _k in _persisted:
@@ -3133,11 +3135,15 @@ with st.container():
             for _k,_v in _ind_defaults.items():
                 if _k not in st.session_state: st.session_state[_k] = _v
 
-            DEFAULT_WINDOW_HOURS = 24
+            DEFAULT_WINDOW_HOURS = 2            # Binance-like default: last 2h
             _win_key   = "chart_window_hours"
             _nonce_key = "chart_view_nonce"
+            _follow_key = "chart_autofollow"
+            _moff_key   = "chart_marker_offset_pct"
             if _win_key   not in st.session_state: st.session_state[_win_key]   = DEFAULT_WINDOW_HOURS
             if _nonce_key not in st.session_state: st.session_state[_nonce_key] = 0
+            if _follow_key not in st.session_state: st.session_state[_follow_key] = True
+            if _moff_key   not in st.session_state: st.session_state[_moff_key]   = 0.03
             # The visible window is ALWAYS applied as an explicit, bounded x-range
             # (driven by the Zoom in/out/Reset buttons below). We never leave the
             # axis on autorange, otherwise Plotly expands to fit old off-screen
@@ -3145,8 +3151,9 @@ with st.container():
             # refresh. Buttons change `chart_window_hours`; that window persists
             # across auto-refreshes because it's re-applied each tick.
 
-            _c1,_c2,_c3,_c4,_c5,_c6,_c7,_csp,_zi,_zo,_zr = st.columns(
-                [0.07,0.07,0.07,0.07,0.07,0.09,0.09, 0.05, 0.12,0.12,0.18]
+            # Row 1 — indicator toggles + Auto-follow.
+            _c1,_c2,_c3,_c4,_c5,_c6,_c7,_csp,_cf = st.columns(
+                [0.07,0.07,0.07,0.07,0.07,0.09,0.09, 0.04, 0.20]
             )
             with _c1:
                 st.session_state.show_ema = st.checkbox(
@@ -3176,6 +3183,18 @@ with st.container():
                 st.session_state.show_sl_tp = st.checkbox(
                     "SL/TP", value=st.session_state.show_sl_tp, key="cb_sltp",
                     help="Show stop-loss / take-profit dashed lines for OPEN positions")
+            with _cf:
+                st.session_state[_follow_key] = st.checkbox(
+                    "🛰 Auto-follow latest", value=st.session_state[_follow_key],
+                    key="cb_autofollow",
+                    help="ON: chart tracks the newest candle. OFF: chart is frozen "
+                         "where you left it — it never moves on refresh, bot scan, "
+                         "or price update (zoom/pan stays exactly put, like Binance).")
+
+            # Row 2 — zoom / reset buttons + marker offset.
+            _zi,_zo,_zr2,_zr24,_msp,_mo = st.columns(
+                [0.12,0.12,0.14,0.15, 0.04, 0.30]
+            )
             with _zi:
                 if st.button("➕ Zoom in", key="chart_zoom_in_btn", width="stretch",
                              help="Halve the visible window"):
@@ -3188,13 +3207,26 @@ with st.container():
                     st.session_state[_win_key] = min(720, st.session_state[_win_key] * 2)
                     st.session_state[_nonce_key] += 1
                     st.rerun()
-            with _zr:
-                if st.button(f"⟲ Reset {DEFAULT_WINDOW_HOURS}h",
-                             key="chart_reset_view_btn", width="stretch",
-                             help=f"Reset view to last {DEFAULT_WINDOW_HOURS} hour(s)"):
-                    st.session_state[_win_key]   = DEFAULT_WINDOW_HOURS
+            with _zr2:
+                if st.button("⟲ Reset 2h", key="chart_reset_2h_btn", width="stretch",
+                             help="Reset view to the last 2 hours"):
+                    st.session_state[_win_key]   = 2
                     st.session_state[_nonce_key] += 1
                     st.rerun()
+            with _zr24:
+                if st.button("⟲ Reset 24h", key="chart_reset_24h_btn", width="stretch",
+                             help="Reset view to the last 24 hours"):
+                    st.session_state[_win_key]   = 24
+                    st.session_state[_nonce_key] += 1
+                    st.rerun()
+            with _mo:
+                _moff_val = min(0.20, max(0.01, float(st.session_state[_moff_key])))
+                st.session_state[_moff_key] = st.slider(
+                    "Marker offset %", min_value=0.01, max_value=0.20,
+                    value=_moff_val, step=0.01,
+                    key="sl_marker_offset", format="%.2f",
+                    help="How far the BUY/SELL arrows sit from the candle "
+                         "(% of price). BUY below, SELL above.")
 
             # Bound the visible window to the candle data we actually have, so
             # zooming out reveals REAL price history (max ~the fetched range)
@@ -3215,23 +3247,48 @@ with st.container():
                 _data_end   = df_chart["open_time"].max()
             except Exception:
                 _data_start = _data_end = None
-            if _data_start is not None and _data_end is not None:
-                # Pad the right edge slightly past the last candle so a trade placed
-                # RIGHT NOW (timestamped a few seconds-to-a-minute after the last
-                # candle's open_time) is not clipped off the right edge.
-                _view_end   = _data_end + max(
-                    pd.Timedelta(hours=_win_hours) * 0.05, pd.Timedelta(minutes=1))
-                _view_start = max(_data_start, _data_end - pd.Timedelta(hours=_win_hours))
+            # ── Visible window: Auto-follow vs frozen ──────────────────────────
+            # The x-range we hand Plotly is stored in session_state and reused on
+            # rerun. Two modes:
+            #   • Auto-follow ON  → recompute every tick so _view_end tracks the
+            #     newest candle (chart follows live price).
+            #   • Auto-follow OFF → reuse the saved range; _view_end does NOT
+            #     advance, so the chart never moves on refresh / scan / price tick.
+            # In BOTH modes uirevision is stable across reruns, so once the user
+            # scroll-zooms or pans, Plotly preserves that exact view and ignores
+            # the range we pass — the view only snaps to a fresh range when the
+            # nonce changes (Zoom in/out / Reset 2h / Reset 24h) or symbol/
+            # interval changes. We force a recompute on those events too.
+            _autofollow = bool(st.session_state[_follow_key])
+            _nonce      = st.session_state[_nonce_key]
+            _saved_x    = st.session_state.get("chart_saved_xrange")
+            _saved_sig  = st.session_state.get("chart_saved_sig")
+            _cur_sig    = (st.session_state.symbol, st.session_state.interval, _nonce)
+            _need_fresh = (
+                _autofollow                       # following: always re-center
+                or _saved_x is None               # nothing saved yet
+                or _saved_sig != _cur_sig         # reset / zoom-btn / symbol / interval
+            )
+
+            def _compute_window():
+                if _data_start is not None and _data_end is not None:
+                    # Pad the right edge slightly past the last candle so a trade
+                    # placed RIGHT NOW (a few seconds-to-a-minute after the last
+                    # candle's open_time) is not clipped off the right edge.
+                    _ve = _data_end + max(
+                        pd.Timedelta(hours=_win_hours) * 0.05, pd.Timedelta(minutes=1))
+                    _vs = max(_data_start, _data_end - pd.Timedelta(hours=_win_hours))
+                else:
+                    _ve = pd.Timestamp.now(tz=_xtz) if _xtz is not None else pd.Timestamp.now()
+                    _vs = _ve - pd.Timedelta(hours=_win_hours)
+                return _vs, _ve
+
+            if _need_fresh:
+                _view_start, _view_end = _compute_window()
+                st.session_state["chart_saved_xrange"] = [_view_start, _view_end]
+                st.session_state["chart_saved_sig"]    = _cur_sig
             else:
-                _view_end   = pd.Timestamp.now(tz=_xtz) if _xtz is not None else pd.Timestamp.now()
-                _view_start = _view_end - pd.Timedelta(hours=_win_hours)
-            # uirevision is kept STABLE across auto-refreshes — keyed on symbol +
-            # interval + a button "view nonce". A manual scroll / box-zoom now
-            # STICKS instead of snapping back every tick (Plotly preserves the UI
-            # view while uirevision is unchanged, ignoring the explicit range
-            # below). The explicit bounded range is only re-applied when the nonce
-            # CHANGES, i.e. when the operator presses Zoom in / out / Reset (each
-            # bumps the nonce) or switches symbol / interval.
+                _view_start, _view_end = _saved_x
 
             # ── Dynamic subplot layout based on enabled indicators ──────────────
             _panels = ["price"]
@@ -3366,11 +3423,16 @@ with st.container():
             # RED SELL markers (down-arrow + "SELL" label) on the CLOSE candle.
             # Rendered when the "Trades" toggle is on (default ON) so they are
             # visible at every zoom level inside the current view.
+            # Marker offset: nudge the arrow off the exact price so it doesn't
+            # overlap the candle — BUY sits BELOW, SELL sits ABOVE, by
+            # `marker_offset_pct` % of price. The REAL entry/exit price is carried
+            # in customdata so the hover stays accurate.
+            _moff = float(st.session_state[_moff_key]) / 100.0
             if st.session_state.show_old_trades:
                 if _markers.buy:
                     fig.add_trace(go.Scatter(
                         x=[m.x for m in _markers.buy],
-                        y=[m.y for m in _markers.buy],
+                        y=[m.y * (1.0 - _moff) for m in _markers.buy],
                         mode="markers+text",
                         marker=dict(symbol="triangle-up", size=16, color="#26a69a",
                                     line=dict(color="rgba(255,255,255,0.85)", width=1.4)),
@@ -3379,14 +3441,14 @@ with st.container():
                         textfont=dict(color="#26a69a", size=10,
                                       family="'JetBrains Mono',monospace"),
                         name="BUY",
-                        customdata=[m.trade_id for m in _markers.buy],
-                        hovertemplate=("BUY %{customdata}<br>%{x}<br>"
-                                       "entry $%{y:.4f}<extra></extra>"),
+                        customdata=[[m.trade_id, m.y] for m in _markers.buy],
+                        hovertemplate=("BUY %{customdata[0]}<br>%{x}<br>"
+                                       "entry $%{customdata[1]:.4f}<extra></extra>"),
                     ), row=_pr, col=1)
                 if _markers.sell:
                     fig.add_trace(go.Scatter(
                         x=[m.x for m in _markers.sell],
-                        y=[m.y for m in _markers.sell],
+                        y=[m.y * (1.0 + _moff) for m in _markers.sell],
                         mode="markers+text",
                         marker=dict(symbol="triangle-down", size=16, color="#ef5350",
                                     line=dict(color="rgba(255,255,255,0.85)", width=1.4)),
@@ -3395,9 +3457,9 @@ with st.container():
                         textfont=dict(color="#ef5350", size=10,
                                       family="'JetBrains Mono',monospace"),
                         name="SELL",
-                        customdata=[m.trade_id for m in _markers.sell],
-                        hovertemplate=("SELL %{customdata}<br>%{x}<br>"
-                                       "exit $%{y:.4f}<extra></extra>"),
+                        customdata=[[m.trade_id, m.y] for m in _markers.sell],
+                        hovertemplate=("SELL %{customdata[0]}<br>%{x}<br>"
+                                       "exit $%{customdata[1]:.4f}<extra></extra>"),
                     ), row=_pr, col=1)
 
             # ── SL / TP lines for every open position (toggle) ────────────────
@@ -3506,7 +3568,7 @@ with st.container():
                 hoverlabel=dict(bgcolor="#161b22", bordercolor="#30363d",
                                 font_color="#c9d1d9", font_size=11),
                 dragmode="pan",
-                uirevision=f"alphatrade-main-chart-"
+                uirevision=f"trade_chart_fixed-"
                            f"{st.session_state.symbol}-"
                            f"{st.session_state.interval}-"
                            f"{st.session_state['chart_view_nonce']}",
@@ -4171,6 +4233,9 @@ def _collect_settings_snapshot() -> dict:
         "show_stoch":      bool(st.session_state.get("show_stoch", True)),
         "show_old_trades": bool(st.session_state.get("show_old_trades", True)),
         "show_sl_tp":      bool(st.session_state.get("show_sl_tp", True)),
+        # Chart view preferences — persisted so they survive refresh/restart.
+        "chart_autofollow":        bool(st.session_state.get("chart_autofollow", True)),
+        "chart_marker_offset_pct": float(st.session_state.get("chart_marker_offset_pct", 0.03)),
         "global_risk": {
             "max_total_exposure_usdt":     _gr.max_total_exposure_usdt,
             "max_exposure_per_symbol_pct": _gr.max_exposure_per_symbol_pct,
