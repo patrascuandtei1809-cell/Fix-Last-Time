@@ -1,0 +1,85 @@
+TRUTHMODE. FIX ALL DASHBOARD + LIVE TRADING CONTRADICTIONS IN ONE TASK.
+
+Do not redesign. Do not add new strategy logic. Do not add research. Do not add validation gates.
+
+Fix these exact issues:
+
+1. Remove misleading UI text:
+- Remove “ACTIVE SCALPER”
+- Remove “Reversal Scalper”
+- Remove “AI MODE HYBRID”
+- Dashboard must show only: “20-Minute Dip Live Strategy”
+
+2. Active strategy must be only:
+BUY when:
+- 20-minute price change <= -2.0%
+- volume >= 1.5x average
+- trend confirmation passes
+- no open position for that symbol unless managing existing manual position
+
+SELL when:
+- profit from entry >= +1.5%
+
+STOP LOSS:
+- sell when loss <= -0.01%
+
+Cooldown:
+- 1 minute after any sell or stop-loss.
+
+3. Fix Trading Intensity contradiction:
+Currently UI says “Very Aggressive” but description says “Balanced”.
+Make one source of truth.
+If selected mode cannot save to database, show clear error and keep UI consistent.
+No mixed Very Aggressive/Balanced state.
+
+4. Fix database persistence:
+“Could not save mode to database” must be fixed or safely fall back to settings.json.
+Settings must persist after restart.
+
+5. Fix WHY NO TRADE panel:
+If top status says:
+- waiting for dip
+- volume too low
+- trend blocked
+then WHY NO TRADE must show the same reason per symbol.
+No more “No decisions recorded yet” while the bot is clearly blocking trades.
+
+6. Fix position sizing:
+Dashboard must allow:
+- Fixed USDT
+- % of available USDT
+- use all available USDT
+These settings must actually affect live Binance orders.
+Show calculated order size before trade.
+
+7. Keep safety, but show blockers clearly:
+Emergency Stop, Safe Mode, Spending Limit, Max Position, Daily Loss must remain.
+But if one blocks trading, dashboard must show exactly which one.
+
+8. Chart:
+Show BUY markers, SELL markers, TP line, SL line, entry price, exit price.
+Chart zoom must not reset on refresh.
+
+9. Manual positions:
+Bot must manage existing manual positions if manage_manual_trades=True.
+Do not display “manual position will not be managed” if setting is true.
+
+10. Verify:
+Run full tests.
+Boot dashboard.
+Confirm screenshots/logs show:
+- no ACTIVE SCALPER
+- no Reversal Scalper
+- no AI MODE HYBRID
+- only 20-Minute Dip
+- WHY NO TRADE records real reasons
+- selected intensity persists
+- sizing controls persist
+- live engine uses only this rule
+
+Report only:
+- files changed
+- tests passed
+- exact UI texts removed
+- exact blocker reasons now shown
+- restart command for droplet
