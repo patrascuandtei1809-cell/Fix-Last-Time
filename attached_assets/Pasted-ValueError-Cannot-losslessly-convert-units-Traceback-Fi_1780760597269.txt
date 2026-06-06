@@ -1,0 +1,29 @@
+ValueError: Cannot losslessly convert units
+Traceback:
+File "/root/trading-bot-clean/trading/dashboard.py", line 3353, in <module>
+    _markers = build_trade_markers(
+               ^^^^^^^^^^^^^^^^^^^^
+File "/root/trading-bot-clean/trading/chart_markers.py", line 207, in build_trade_markers
+    snap = _match_candle(raw, idx, tol)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "/root/trading-bot-clean/trading/chart_markers.py", line 125, in _match_candle
+    pos = int(idx.searchsorted(ts))
+              ^^^^^^^^^^^^^^^^^^^^
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/pandas/core/base.py", line 1612, in searchsorted
+    return values.searchsorted(value, side=side, sorter=sorter)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/pandas/core/arrays/_mixins.py", line 255, in searchsorted
+    npvalue = self._validate_setitem_value(value)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/pandas/core/arrays/datetimelike.py", line 741, in _validate_setitem_value
+    return self._validate_scalar(value, allow_listlike=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/pandas/core/arrays/datetimelike.py", line 638, in _validate_scalar
+    return self._unbox_scalar(value)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+File "/root/trading-bot-clean/venv/lib/python3.12/site-packages/pandas/core/arrays/datetimes.py", line 549, in _unbox_scalar
+    return value.as_unit(self.unit, round_ok=False).asm8
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "pandas/_libs/tslibs/timestamps.pyx", line 1542, in pandas._libs.tslibs.timestamps._Timestamp.as_unit
+File "pandas/_libs/tslibs/timestamps.pyx", line 1495, in pandas._libs.tslibs.timestamps._Timestamp._as_creso
+File "pandas/_libs/tslibs/np_datetime.pyx", line 676, in pandas._libs.tslibs.np_datetime.convert_reso

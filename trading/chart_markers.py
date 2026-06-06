@@ -76,6 +76,22 @@ def _tid(t: dict) -> str:
     return str(t.get("id") or "?")[:8]
 
 
+def _as_ns(obj):
+    """Normalize a Timestamp/DatetimeIndex to nanosecond resolution.
+
+    pandas >= 2.0 supports multiple datetime resolutions (s/ms/us/ns). When a
+    candle index and a trade timestamp end up at *different* units,
+    ``DatetimeIndex.searchsorted`` raises ``ValueError: Cannot losslessly
+    convert units`` (it refuses to round a finer scalar down to a coarser
+    index). Coercing both sides to ``ns`` — always a lossless widening — makes
+    the comparison safe. No-op on older pandas (everything is ns there).
+    """
+    try:
+        return obj.as_unit("ns")
+    except (AttributeError, ValueError):
+        return obj
+
+
 def _to_axis_time(ts: Any, axis_tz, tzname: str):
     """Coerce any trade timestamp to the candle axis's time reference.
 
@@ -106,9 +122,9 @@ def _to_axis_time(ts: Any, axis_tz, tzname: str):
 
     if axis_tz is None:
         # Candle axis is naive wall-clock -> drop tz so comparison works.
-        return out.tz_localize(None)
+        return _as_ns(out.tz_localize(None))
     # Defensive: tz-aware axis -> express in that tz.
-    return out.tz_convert(axis_tz)
+    return _as_ns(out.tz_convert(axis_tz))
 
 
 def _match_candle(ts, idx: pd.DatetimeIndex, tol: pd.Timedelta):
@@ -162,7 +178,7 @@ def build_trade_markers(
     except Exception:
         idx = pd.DatetimeIndex([])
     if len(idx):
-        idx = idx.sort_values()
+        idx = _as_ns(idx.sort_values())
     axis_tz = idx.tz if len(idx) else None
 
     if len(idx) == 0:

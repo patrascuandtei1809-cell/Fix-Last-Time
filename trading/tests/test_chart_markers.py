@@ -45,6 +45,20 @@ def test_open_trade_draws_buy_marker_only():
     assert res.buy[0].y == 60720.0
 
 
+def test_coarse_candle_index_unit_does_not_raise():
+    """Regression: real droplet candle axis can be seconds-resolution while a
+    trade timestamp carries microseconds. pandas refuses the lossy unit
+    conversion in searchsorted ('Cannot losslessly convert units'); the builder
+    must normalize both sides to ns and still place the marker."""
+    candles = _candles().as_unit("s")          # coarse (seconds) axis
+    assert candles.dtype == "datetime64[s]"
+    t = _trade(open_time="2026-06-06T11:30:00.500000+00:00", status="open")
+    res = build_trade_markers([t], "BTCUSDT", candles)
+    assert res.buy_drawn == 1
+    assert res.unmatched_count == 0
+    assert res.buy[0].x == pd.Timestamp("2026-06-06 12:30:00")
+
+
 def test_closed_trade_draws_buy_and_sell():
     candles = _candles()
     t = _trade(

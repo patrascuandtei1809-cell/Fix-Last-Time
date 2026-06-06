@@ -41,6 +41,19 @@ unmatched markers. The dashboard renders a "🔍 Chart markers" panel
 (trades found / BUY drawn / SELL drawn / unmatched) + a "Trade found but chart
 timestamp not matched" warning straight from this result.
 
+## pandas datetime RESOLUTION mismatch breaks searchsorted
+
+pandas >= 2.0 (droplet runs 3.x) supports multiple datetime units (s/ms/us/ns).
+The real candle axis can come back **seconds-resolution** while a trade
+timestamp carries **microseconds**. `DatetimeIndex.searchsorted(ts)` then raises
+`ValueError: Cannot losslessly convert units` — it refuses to round a finer
+scalar DOWN to a coarser index. Tests with matching units never hit it.
+**Rule:** normalize BOTH the candle index and every coerced trade timestamp to
+`ns` (`_as_ns` → `obj.as_unit("ns")`, guarded for old pandas) before any
+comparison/searchsorted. Widening to ns is always lossless; older pandas is
+ns-only so it's a no-op. Regression test uses `_candles().as_unit("s")` + a
+`.500000` microsecond open_time.
+
 **How to apply:** the module is pure and unit-tested offline (no Streamlit,
 network, or Binance) — exercise tz coercion and snapping with synthetic naive
 candle ranges + UTC/naive trade strings. Verify markers stay placeable across
