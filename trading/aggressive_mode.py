@@ -21,11 +21,16 @@ safe mode, or any exchange safety check. Aggressive sizing is only a *request*:
 `GlobalRiskManager.check_global()` still enforces every spending/exposure cap.
 
 Persistence is in PostgreSQL (survives restart / redeploy / refresh) via
-`DATABASE_URL`. Every change is appended to an audit table. If the database is
-unavailable, reads fall back to the safe default (Balanced) and never raise.
+`DATABASE_URL`, with a JSON-file fallback (`data/aggressive_mode.json`) so the
+mode still persists when no database is configured (e.g. on the droplet). Every
+DB change is also appended to an audit table. set_mode() succeeds (returns True)
+as long as EITHER store persisted the value, so the UI never shows a mixed
+selector/description state. If both stores are unavailable, reads fall back to
+the safe default (Balanced) and never raise.
 """
 from __future__ import annotations
 
+import json
 import os
 from typing import Dict, List, Optional
 
@@ -145,6 +150,36 @@ def db_available() -> bool:
     return bool(_PG_OK and _dsn())
 
 
+# ── JSON-file fallback (used when no DATABASE_URL is configured) ──────────────
+_JSON_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "data", "aggressive_mode.json")
+
+
+def _json_read_mode() -> Optional[str]:
+    """Read the persisted mode from the JSON fallback file (None if missing)."""
+    try:
+        with open(_JSON_PATH, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        mode = data.get("mode") if isinstance(data, dict) else None
+        return normalize_mode(mode) if mode else None
+    except Exception:
+        return None
+
+
+def _json_write_mode(mode: str) -> bool:
+    """Atomically persist the mode to the JSON fallback file."""
+    try:
+        os.makedirs(os.path.dirname(_JSON_PATH), exist_ok=True)
+        tmp = _JSON_PATH + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump({"mode": normalize_mode(mode)}, fh)
+        os.replace(tmp, _JSON_PATH)
+        return True
+    except Exception as e:
+        print(f"[AGGRO] json write failed: {e}", flush=True)
+        return False
+
+
 def _conn():
     if not db_available():
         return None
@@ -193,23 +228,27 @@ def ensure_tables() -> bool:
 
 
 def get_mode() -> str:
-    """Read the persisted mode. Safe default (Balanced) if DB/row missing."""
+    """Read the persisted mode: DB first, then JSON fallback, then the safe
+    default (Balanced). Never raises."""
     conn = _conn()
-    if conn is None:
-        return DEFAULT_MODE
-    try:
-        ensure_tables()
-        with conn, conn.cursor() as cur:
-            cur.execute(f"SELECT mode FROM {TABLE_MODE} WHERE id = 1")
-            row = cur.fetchone()
-        if row and row[0]:
-            return normalize_mode(row[0])
-        return DEFAULT_MODE
-    except Exception as e:
-        print(f"[AGGRO] get_mode failed: {e}", flush=True)
-        return DEFAULT_MODE
-    finally:
-        conn.close()
+    if conn is not None:
+        # DB is reachable ⇒ it is authoritative. An empty row means DEFAULT —
+        # we do NOT consult the JSON fallback (that's only for the no-DB case).
+        try:
+            ensure_tables()
+            with conn, conn.cursor() as cur:
+                cur.execute(f"SELECT mode FROM {TABLE_MODE} WHERE id = 1")
+                row = cur.fetchone()
+            if row and row[0]:
+                return normalize_mode(row[0])
+            return DEFAULT_MODE
+        except Exception as e:
+            print(f"[AGGRO] get_mode DB failed: {e}", flush=True)
+            # DB error ⇒ fall through to JSON fallback below.
+        finally:
+            conn.close()
+    # DB unavailable (or errored) → JSON fallback.
+    return _json_read_mode() or DEFAULT_MODE
 
 
 def set_mode(mode: str, actor: str = "dashboard", note: str = "") -> bool:
@@ -221,38 +260,48 @@ def set_mode(mode: str, actor: str = "dashboard", note: str = "") -> bool:
     if isinstance(mode, str) and mode.strip().lower() not in (m.lower() for m in MODES):
         print(f"[AGGRO] set_mode rejected unknown mode={mode!r}", flush=True)
         return False
+
+    db_ok = False
     conn = _conn()
-    if conn is None:
-        return False
-    try:
-        ensure_tables()
-        with conn, conn.cursor() as cur:
-            cur.execute(f"SELECT mode FROM {TABLE_MODE} WHERE id = 1")
-            row = cur.fetchone()
-            old = normalize_mode(row[0]) if row and row[0] else None
-            cur.execute(
-                f"""
-                INSERT INTO {TABLE_MODE} (id, mode, updated_at)
-                VALUES (1, %s, now())
-                ON CONFLICT (id) DO UPDATE
-                    SET mode = EXCLUDED.mode, updated_at = now()
-                """,
-                (norm,),
-            )
-            cur.execute(
-                f"""
-                INSERT INTO {TABLE_AUDIT} (old_mode, new_mode, actor, note)
-                VALUES (%s, %s, %s, %s)
-                """,
-                (old, norm, actor, note or None),
-            )
-        print(f"[AGGRO] mode set {old} → {norm} by {actor}", flush=True)
-        return True
-    except Exception as e:
-        print(f"[AGGRO] set_mode failed: {e}", flush=True)
-        return False
-    finally:
-        conn.close()
+    if conn is not None:
+        try:
+            ensure_tables()
+            with conn, conn.cursor() as cur:
+                cur.execute(f"SELECT mode FROM {TABLE_MODE} WHERE id = 1")
+                row = cur.fetchone()
+                old = normalize_mode(row[0]) if row and row[0] else None
+                cur.execute(
+                    f"""
+                    INSERT INTO {TABLE_MODE} (id, mode, updated_at)
+                    VALUES (1, %s, now())
+                    ON CONFLICT (id) DO UPDATE
+                        SET mode = EXCLUDED.mode, updated_at = now()
+                    """,
+                    (norm,),
+                )
+                cur.execute(
+                    f"""
+                    INSERT INTO {TABLE_AUDIT} (old_mode, new_mode, actor, note)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (old, norm, actor, note or None),
+                )
+            print(f"[AGGRO] mode set {old} → {norm} by {actor}", flush=True)
+            db_ok = True
+        except Exception as e:
+            print(f"[AGGRO] set_mode DB failed: {e}", flush=True)
+        finally:
+            conn.close()
+
+    # JSON is a FALLBACK, not a mirror: only write it when the DB did NOT
+    # persist the value. This keeps DB-backed environments (incl. tests) from
+    # touching the on-disk file, and gives no-DB droplets durable persistence.
+    json_ok = False
+    if not db_ok:
+        json_ok = _json_write_mode(norm)
+    # Succeed if EITHER store persisted the value — the UI then never shows a
+    # mixed selector/description state.
+    return db_ok or json_ok
 
 
 def get_audit_log(limit: int = 50) -> List[Dict]:

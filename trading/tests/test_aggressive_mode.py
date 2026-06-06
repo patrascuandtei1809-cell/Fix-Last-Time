@@ -218,3 +218,45 @@ def test_db_roundtrip_and_audit(_scratch_tables):
 def test_db_rejects_unknown_mode(_scratch_tables):
     assert am.set_mode("Reckless") is False
     assert am.get_mode() == am.DEFAULT_MODE
+
+
+# ── JSON fallback (no-DB) persistence ────────────────────────────────────────
+def test_json_fallback_persists_when_no_db(tmp_path, monkeypatch):
+    """With no DB reachable, set_mode writes the JSON fallback and get_mode
+    reads it back — the mode persists without a database."""
+    monkeypatch.setattr(am, "_conn", lambda: None)
+    monkeypatch.setattr(am, "_JSON_PATH", str(tmp_path / "aggressive_mode.json"))
+    # No file yet → safe default.
+    assert am.get_mode() == am.DEFAULT_MODE
+    # set_mode succeeds via JSON and round-trips.
+    assert am.set_mode(am.VERY_AGGRESSIVE, actor="pytest") is True
+    assert am.get_mode() == am.VERY_AGGRESSIVE
+    # Unknown modes are still rejected and never written.
+    assert am.set_mode("Reckless") is False
+    assert am.get_mode() == am.VERY_AGGRESSIVE
+
+
+def test_json_not_written_when_db_succeeds(tmp_path, monkeypatch):
+    """JSON is a FALLBACK, not a mirror: a successful DB write must NOT create
+    the JSON file (keeps DB-backed environments hermetic)."""
+    if not am.db_available():
+        pytest.skip("DATABASE_URL / psycopg2 not available")
+    import uuid as _uuid
+    sfx = _uuid.uuid4().hex[:8]
+    monkeypatch.setattr(am, "TABLE_MODE", f"test_aggro_mode_{sfx}")
+    monkeypatch.setattr(am, "TABLE_AUDIT", f"test_aggro_audit_{sfx}")
+    jpath = tmp_path / "aggressive_mode.json"
+    monkeypatch.setattr(am, "_JSON_PATH", str(jpath))
+    try:
+        assert am.set_mode(am.AGGRESSIVE, actor="pytest") is True
+        assert not jpath.exists(), "JSON fallback should not be written when DB succeeds"
+        assert am.get_mode() == am.AGGRESSIVE
+    finally:
+        conn = am._conn()
+        if conn is not None:
+            try:
+                with conn, conn.cursor() as cur:
+                    cur.execute(f"DROP TABLE IF EXISTS {am.TABLE_AUDIT}")
+                    cur.execute(f"DROP TABLE IF EXISTS {am.TABLE_MODE}")
+            finally:
+                conn.close()

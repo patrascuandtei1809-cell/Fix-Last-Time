@@ -74,6 +74,29 @@ def _categorize(raw: str) -> str:
         return "Balance fetch failed"
     if "order failed" in r or "order rejected" in r or "-2010" in r:
         return "Order rejected by Binance"
+    # ── 20-Minute Dip engine reasons ─────────────────────────────────────────
+    if "not connected" in r or "no api key" in r:
+        return "Not connected (no API keys)"
+    if "safe mode" in r:
+        return "Safe mode ON (no new entries)"
+    if "position already open (manual)" in r or "will not manage" in r:
+        return "Manual position (not managed)"
+    if "waiting for dip" in r or "dip not deep enough" in r or "20m change" in r:
+        return "Waiting for dip (target not reached)"
+    if "volume too low" in r:
+        return "Volume too low (below multiple)"
+    if "trend filter" in r or "waiting for upturn" in r:
+        return "Trend filter (no upturn yet)"
+    if "insufficient balance" in r:
+        return "Insufficient balance"
+    if "not enough candle data" in r or "insufficient data" in r:
+        return "Insufficient candle data"
+    if "risk gate" in r:
+        return "Global risk gate"
+    if "exchange error" in r or "fetch failed" in r:
+        return "Exchange error"
+    if "engine error" in r:
+        return "Engine error"
     if "no weighted edge" in r or "score=0" in r:
         return "No weighted edge (score 0 / risk veto)"
     if "below threshold" in r or "neither entry path" in r:
@@ -176,6 +199,53 @@ def record_cycle(*, snaps: List[Dict], score_threshold: int,
                     _block_counter[cat] += 1
     except Exception as e:
         print(f"[DIAG] record_cycle error: {e}", flush=True)
+
+
+def record_dip_decision(*, symbol: str, signal: str, reason: str,
+                        traded: bool, blocked: bool,
+                        change_pct: Optional[float] = None,
+                        volume_ratio: Optional[float] = None) -> None:
+    """Record ONE per-symbol decision from the 20-Minute Dip live engine.
+
+    The dip path does NOT use the legacy score/threshold model, so it feeds its
+    own ActivityRecord-derived snapshot straight into the same journal that
+    powers the 'WHY NO TRADE?' panel. Pure observation — never raises out."""
+    try:
+        now = datetime.now()
+        cat = None if traded else _categorize(reason)
+        rec = {
+            "ts":           now,
+            "symbol":       symbol,
+            "signal":       (signal or "—").upper(),
+            "score":        0,
+            "confidence":   0,
+            "regime":       "",
+            "reason":       reason or "",
+            "category":     cat or "TRADED",
+            "blocked":      bool(blocked),
+            "change_pct":   change_pct,
+            "volume_ratio": volume_ratio,
+        }
+        with _LOCK:
+            _decisions.append(rec)
+            _latest_by_symbol[symbol] = rec
+            if blocked and cat:
+                _block_counter[cat] += 1
+    except Exception as e:
+        print(f"[DIAG] record_dip_decision error: {e}", flush=True)
+
+
+def record_dip_cycle(traded: bool) -> None:
+    """Bump the cycle counters once per orchestrator cycle (dip path)."""
+    global _cycle_count, _traded_count, _last_cycle_at
+    try:
+        with _LOCK:
+            _cycle_count += 1
+            _last_cycle_at = datetime.now()
+            if traded:
+                _traded_count += 1
+    except Exception as e:
+        print(f"[DIAG] record_dip_cycle error: {e}", flush=True)
 
 
 # ── Journal getters (for the dashboard + report) ────────────────────────────

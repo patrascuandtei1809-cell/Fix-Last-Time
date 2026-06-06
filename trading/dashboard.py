@@ -1495,16 +1495,14 @@ _strat_html = (f'<span style="font-size:10px;color:#484f58;">STRATEGY</span> '
                f'<span style="font-size:11px;font-weight:700;color:#79b0ff;font-family:\'JetBrains Mono\',monospace;">'
                f'{st.session_state.strategy}</span>')
 
-# ── ACTIVE SCALPER pill — single hardcoded mode, AI always on ───────────
+# ── Strategy pill — the only live strategy is the 20-Minute Dip ──────────
 _ai_on   = True
-_ai_prof = "Active Scalper"
+_ai_prof = "20-Minute Dip"
 _ai_col  = "#2ea043"
 _ai_pill = (f'<span class="pill" style="background:{_ai_col}22;'
             f'border:1px solid {_ai_col}66;color:{_ai_col};'
             f'font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">'
-            f'⚡ ACTIVE SCALPER · Strategy Engine ON · '
-            f'<span style="color:#7ee787;">AI MODE = HYBRID '
-            f'(Rule-based + gpt-4o-mini)</span></span>')
+            f'💧 20-Minute Dip Live Strategy</span>')
 
 # Last AI decision for the current symbol (from shared state set in tick())
 _ai_last  = (_sig_meta.get("ai_decision") or "").upper() if _sig_meta else ""
@@ -1840,10 +1838,18 @@ try:
 
         st.markdown("**Current reason per symbol** (refreshes every cycle)")
         if _latest:
+            def _fmt_chg(d):
+                c = d.get("change_pct")
+                return f"{c:+.2f}%" if isinstance(c, (int, float)) else "—"
+
+            def _fmt_vol(d):
+                v = d.get("volume_ratio")
+                return f"{v:.2f}×" if isinstance(v, (int, float)) else "—"
+
             st.dataframe(
                 [{"Symbol": d["symbol"], "Signal": d["signal"],
-                  "Score": d["score"], "Conf": d["confidence"],
-                  "Regime": d["regime"] or "—", "Why no trade": d["reason"]}
+                  "20m Δ": _fmt_chg(d), "Vol": _fmt_vol(d),
+                  "Why no trade": d["reason"]}
                  for d in _latest.values()],
                 use_container_width=True, hide_index=True,
             )
@@ -2419,9 +2425,9 @@ with st.sidebar:
     r.dynamic_size_pct = st.slider(
         "% of free USDT per trade",
         5.0, 75.0, float(r.dynamic_size_pct), 5.0,
-        help="ACTIVE SCALPER: each trade uses this % of your free Binance USDT. "
-             "Capped at 75% of free USDT (always leaves a buffer). Floored at $10 "
-             "(Binance minimum). Set to 40% for ~2 concurrent trades, 25% for ~3.",
+        help="Legacy sizing knob (does NOT drive the live 20-Minute Dip orders — "
+             "use the 💧 20-Minute Dip Strategy panel below for live sizing). "
+             "Capped at 75% of free USDT (always leaves a buffer). Floored at $10.",
     )
     r.max_trades_per_session = st.number_input(
         "Max bot trades / session",
@@ -2540,6 +2546,30 @@ with st.sidebar:
             help="Binance min-notional is ~$10.", key="dip_min_pos",
         ))
 
+        # ── Calculated next-order-size preview (the REAL number the dip engine
+        #    will use this cycle: mode → max-position cap → spending limit →
+        #    25% reserve → $10 min-notional floor). ────────────────────────────
+        _prev_free     = float(binance_free_usdt) if _binance_connected else 0.0
+        _prev_exposure = sum((t.get("invested") or 0) for t in open_trades)
+        try:
+            _amt, _ok, _why = live_engine.compute_order_amount(
+                _ls, _prev_free, _prev_exposure)
+        except Exception as _ce:
+            _amt, _ok, _why = 0.0, False, f"preview error: {_ce}"
+        _mode_short = _mode_labels.get(_new_mode, _new_mode).split(" — ")[0]
+        if not _binance_connected:
+            st.info("📐 **Next order size:** connect to Binance LIVE to preview the "
+                    "calculated amount.")
+        elif _ok:
+            st.success(
+                f"📐 **Next order size ≈ ${_amt:,.2f}** · mode *{_mode_short}* · "
+                f"from ${_prev_free:,.2f} free USDT "
+                f"(${_prev_exposure:,.2f} already in open trades). "
+                f"Computed with the **settings shown here** — click 💾 Save below "
+                f"so the live bot uses them on its next BUY.")
+        else:
+            st.warning(f"📐 **No order can be placed right now** — {_why}")
+
         _c1, _c2 = st.columns(2)
         with _c1:
             _ls.aggressive_on = st.checkbox(
@@ -2562,17 +2592,30 @@ with st.sidebar:
                 st.warning("Saved in session only — database unavailable.")
         st.session_state.live_settings = _ls
 
-    with st.expander("🔥 Aggressive Mode", expanded=False):
-        _cur_mode = am.normalize_mode(st.session_state.get("aggressive_mode"))
+    with st.expander("🔥 Trading intensity", expanded=False):
+        # SINGLE SOURCE OF TRUTH: the persisted mode (DB → JSON fallback).
+        # The selectbox widget and the description below ALWAYS reflect the same
+        # persisted value, so they can never disagree (the old "Very Aggressive
+        # vs Balanced" contradiction). The widget key holds the live selection;
+        # a successful save reruns with the new persisted value, a failed save
+        # snaps the widget back — either way both stay consistent.
+        _persisted = am.normalize_mode(st.session_state.get("aggressive_mode"))
+        if "aggro_intensity_sel" not in st.session_state:
+            st.session_state.aggro_intensity_sel = _persisted
+
+        if st.session_state.pop("_aggro_save_error", False):
+            st.error("Could not persist trading intensity (no database AND no "
+                     "writable file) — kept the previous mode.")
+
         _sel_mode = st.selectbox(
             "Trading intensity",
             am.MODES,
-            index=am.MODES.index(_cur_mode),
+            key="aggro_intensity_sel",
             help="Higher intensity = more trades and larger size. Safety limits "
                  "(risk caps, spending limits, safe mode) ALWAYS apply and are "
                  "never bypassed.",
         )
-        if _sel_mode != _cur_mode:
+        if _sel_mode != _persisted:
             if am.set_mode(_sel_mode, actor="dashboard"):
                 st.session_state.aggressive_mode = _sel_mode
                 _pp = am.get_profile(_sel_mode)
@@ -2584,10 +2627,14 @@ with st.sidebar:
                 _rb = bot_module.get_bot()
                 if _rb and _rb.is_running():
                     am.apply_profile_to_bot(_rb, _sel_mode)
-                st.rerun()
             else:
-                st.error("Could not save mode to database — keeping current mode.")
+                # Snap the widget back to the persisted mode → no mixed state.
+                st.session_state.aggro_intensity_sel = _persisted
+                st.session_state["_aggro_save_error"] = True
+            st.rerun()
 
+        # Description is driven by the SAME persisted value the selectbox shows.
+        _cur_mode = am.normalize_mode(st.session_state.get("aggressive_mode"))
         _p = am.get_profile(_cur_mode)
         st.caption(f"**{_cur_mode}** — {am.MODE_DESCRIPTIONS[_cur_mode]}")
         st.markdown(
@@ -2603,8 +2650,9 @@ with st.sidebar:
         st.caption("🔒 Never bypasses: risk caps · max position size · spending "
                    "limits · safe mode · exchange safety checks.")
         if not am.db_available():
-            st.caption("⚠️ Database unavailable — mode falls back to default and "
-                       "may not persist across restart.")
+            st.caption("ℹ️ No database — the selected mode is saved to a local "
+                       "file (data/aggressive_mode.json) and DOES persist across "
+                       "restart.")
         _audit = am.get_audit_log(limit=5)
         if _audit:
             st.markdown("**Recent mode changes**")

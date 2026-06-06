@@ -611,8 +611,37 @@ class TradingBot:
                 if rec.traded:
                     traded = True
                     worker._session_trades += 1
+                # Feed the WHY-NO-TRADE journal so the dashboard shows the real
+                # per-symbol dip reason (the dip path skips the legacy
+                # record_cycle below).
+                try:
+                    diagnostics.record_dip_decision(
+                        symbol       = worker.symbol,
+                        signal       = getattr(rec, "decision", "HOLD"),
+                        reason       = getattr(rec, "reason", ""),
+                        traded       = bool(rec.traded),
+                        blocked      = not bool(rec.traded),
+                        change_pct   = getattr(rec, "change_pct", None),
+                        volume_ratio = getattr(rec, "volume_ratio", None),
+                    )
+                except Exception:
+                    pass
             except Exception as exc:
                 log_activity("ERROR", f"Dip engine {key} crashed: {exc}")
+                try:
+                    diagnostics.record_dip_decision(
+                        symbol  = worker.symbol,
+                        signal  = "HOLD",
+                        reason  = f"Dip engine error: {exc}",
+                        traded  = False,
+                        blocked = True,
+                    )
+                except Exception:
+                    pass
+        try:
+            diagnostics.record_dip_cycle(traded)
+        except Exception:
+            pass
         return traded
 
     # ── Research-validated strategy live path (Task #19) ─────────────────────

@@ -5,3 +5,4 @@ data/trades/
 
 # LIVE API credentials — never commit secrets.
 data/.binance_creds.json
+data/aggressive_mode.json
