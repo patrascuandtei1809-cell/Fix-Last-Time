@@ -792,9 +792,9 @@ if not st.session_state.get("_settings_loaded"):
     # operator has no UI to change these in the new build, so override.
     # EXCEPTION: the operator MAY now opt into EMA_MACD_RSI_VOLUME_V2 from the
     # sidebar — if that was persisted, keep it. Anything else snaps back to
-    # the default 20-Minute Dip live strategy.
+    # the default Market Low live strategy.
     if st.session_state.get("strategy") != "EMA_MACD_RSI_VOLUME_V2":
-        st.session_state.strategy       = "20-Minute Dip"
+        st.session_state.strategy       = "Market Low"
     # Interval: V2 is research-validated at 4h ONLY — keep 4h when it's selected;
     # every other (scalping) strategy snaps back to 1m.
     if st.session_state.get("strategy") == "EMA_MACD_RSI_VOLUME_V2":
@@ -853,7 +853,7 @@ if not st.session_state.get("_settings_loaded"):
         print(f"[AGGRO] mode load failed, using default: {_e}", flush=True)
         st.session_state.aggressive_mode = am.DEFAULT_MODE
 
-    # ── 20-Minute Dip strategy (Task #11): load PG-persisted live settings ──
+    # ── Market Low strategy (Task #11): load PG-persisted live settings ──
     # PostgreSQL is the source of truth for the dip strategy controls (size
     # mode, limits, aggressive/safe toggles, thresholds). Falls back to the
     # dataclass defaults if the DB is unavailable.
@@ -1498,14 +1498,14 @@ _strat_html = (f'<span style="font-size:10px;color:#484f58;">STRATEGY</span> '
                f'<span style="font-size:11px;font-weight:700;color:#79b0ff;font-family:\'JetBrains Mono\',monospace;">'
                f'{st.session_state.strategy}</span>')
 
-# ── Strategy pill — the only live strategy is the 20-Minute Dip ──────────
+# ── Strategy pill — the only live strategy is the Market Low ──────────
 _ai_on   = True
-_ai_prof = "20-Minute Dip"
+_ai_prof = "Market Low"
 _ai_col  = "#2ea043"
 _ai_pill = (f'<span class="pill" style="background:{_ai_col}22;'
             f'border:1px solid {_ai_col}66;color:{_ai_col};'
             f'font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">'
-            f'💧 20-Minute Dip Live Strategy</span>')
+            f'💧 Market Low Live Strategy</span>')
 
 # Last AI decision for the current symbol (from shared state set in tick())
 _ai_last  = (_sig_meta.get("ai_decision") or "").upper() if _sig_meta else ""
@@ -1531,7 +1531,7 @@ if _ai_on and _ai_last:
         f'</div>'
     )
 # NOTE: the legacy GPT "HYBRID" advisor badge has been removed — the only live
-# strategy is the 20-Minute Dip and its deterministic AI advisory is already
+# strategy is the Market Low and its deterministic AI advisory is already
 # surfaced via the AI pill + AI→ decision above. No GPT/hybrid mode runs.
 
 if _ai_on and _ai_trend:
@@ -1652,7 +1652,7 @@ if _la and isinstance(_la, dict) and _la.get("msg"):
 # (with placeholders) when bot is ON, so an idle bot is never silently idle.
 if bot_running:
     # ── AUTO-DISABLE GATE STATUS ─────────────────────────────────────────────
-    # NOTE: the LIVE 20-Minute Dip path is intentionally NOT research-gated
+    # NOTE: the LIVE Market Low path is intentionally NOT research-gated
     # (Task #11). There is no validation/allowlist/AUTO-DISABLE banner here —
     # the bot auto-trades on its own price signal, bounded only by the
     # money-safety gates (emergency stop, safe mode, balance, spending limit,
@@ -2123,19 +2123,19 @@ with st.sidebar:
                              if st.session_state.interval in INTERVALS else 2)
     st.session_state.interval = intv_sel
 
-    # Active strategy. The default live strategy is the 20-Minute Dip
+    # Active strategy. The default live strategy is the Market Low
     # (DipLiveEngine). Task #19 adds the research-validated EMA_MACD_RSI_VOLUME_V2
     # @ 4h (ETH only) as a SECOND, gated live path (StrategyLiveEngine). The
     # operator picks which one runs; create_bot() routes V2 → strategy_mode and
     # everything else → the dip live path.
-    _strat_opts = ["20-Minute Dip", "EMA_MACD_RSI_VOLUME_V2"]
-    _strat_cur  = st.session_state.get("strategy", "20-Minute Dip")
+    _strat_opts = ["Market Low", "EMA_MACD_RSI_VOLUME_V2"]
+    _strat_cur  = st.session_state.get("strategy", "Market Low")
     if _strat_cur not in _strat_opts:
-        _strat_cur = "20-Minute Dip"
+        _strat_cur = "Market Low"
     strat_pick = st.selectbox(
         "Live strategy", _strat_opts,
         index=_strat_opts.index(_strat_cur),
-        help="20-Minute Dip is the default live path. EMA_MACD_RSI_VOLUME_V2 is "
+        help="Market Low is the default live path. EMA_MACD_RSI_VOLUME_V2 is "
              "research-validated at 4h (ETH only).",
     )
     st.session_state.strategy = strat_pick
@@ -2188,20 +2188,20 @@ with st.sidebar:
                    "Stop-loss / take-profit sized from ATR. Needs ≥200 candles — "
                    "uses a deeper kline fetch. Validated at 4h only.")
     else:
-        st.session_state.strategy = "20-Minute Dip"
+        st.session_state.strategy = "Market Low"
         st.markdown(
             '<div style="background:#15233a;border:1px solid #1f6feb;border-radius:6px;'
             'padding:8px 10px;margin:4px 0;color:#a9c7ff;font-weight:700;font-size:13px;">'
-            '💧 20-MINUTE DIP'
+            '💧 MARKET LOW'
             '<div style="font-size:10px;font-weight:600;color:#79c0ff;'
             'margin-top:4px;letter-spacing:0.5px;">'
-            'The only live strategy · tune it in the 💧 20-Minute Dip panel below'
+            'The only live strategy · tune it in the 💧 Market Low panel below'
             '</div></div>',
             unsafe_allow_html=True,
         )
-        st.caption("BUY on a 20-minute dip with volume + trend confirmation, sell at "
+        st.caption("BUY on a market-low setup with volume + trend confirmation, sell at "
                    "target profit, stop-loss to cap the downside. Configure every "
-                   "number in the 💧 20-Minute Dip Strategy panel.")
+                   "number in the 💧 Market Low Strategy panel.")
 
     st.markdown('<hr class="s-div"/>', unsafe_allow_html=True)
 
@@ -2398,8 +2398,8 @@ with st.sidebar:
     r.dynamic_size_pct = st.slider(
         "% of free USDT per trade",
         5.0, 75.0, float(r.dynamic_size_pct), 5.0,
-        help="Legacy sizing knob (does NOT drive the live 20-Minute Dip orders — "
-             "use the 💧 20-Minute Dip Strategy panel below for live sizing). "
+        help="Legacy sizing knob (does NOT drive the live Market Low orders — "
+             "use the 💧 Market Low Strategy panel below for live sizing). "
              "Capped at 75% of free USDT (always leaves a buffer). Floored at $10.",
     )
     r.max_trades_per_session = st.number_input(
@@ -2445,10 +2445,10 @@ with st.sidebar:
 
     # ── Global (account-wide) risk caps — applies across all symbols ──────────
     # ── 🔥 Aggressive Mode ────────────────────────────────────────────────────
-    with st.expander("💧 20-Minute Dip Strategy (LIVE)", expanded=True):
+    with st.expander("💧 Market Low Strategy (LIVE)", expanded=True):
         _ls = st.session_state.get("live_settings") or live_settings.LiveSettings()
         st.caption(
-            f"**The only live strategy.** BUY when the 20-minute change ≤ "
+            f"**The only live strategy.** BUY when the market-low change ≤ "
             f"**{_ls.buy_threshold_pct:.2f}%** · SELL at "
             f"**+{_ls.take_profit_pct:.2f}%** profit · STOP-LOSS at "
             f"**{_ls.stop_loss_pct:.2f}%** · then a **1-min** cooldown after "
@@ -2980,7 +2980,7 @@ with st.container():
                         config={"displayModeBar": False, "staticPlot": False})
 
         # ── Chart toolbar ─────────────────────────────────────────────────────
-        # Manual BUY/SELL controls were removed — the 20-Minute Dip bot is the
+        # Manual BUY/SELL controls were removed — the Market Low bot is the
         # only trader. Operator controls kept: emergency STOP, bot ON/OFF, refresh.
         tb1, tb4, tb5, tb6 = st.columns([7, 1, 1, 1])
         with tb1:
@@ -3844,7 +3844,7 @@ with st.container():
             except Exception:
                 _dip_acts = []
             if _dip_acts:
-                st.markdown("**💧 20-Minute Dip — live decisions**")
+                st.markdown("**💧 Market Low — live decisions**")
                 _cols = st.columns(min(len(_dip_acts), 3))
                 for _i, _rec in enumerate(_dip_acts):
                     with _cols[_i % len(_cols)]:
