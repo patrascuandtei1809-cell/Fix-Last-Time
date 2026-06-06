@@ -56,14 +56,14 @@ def normalize_size_mode(mode: Optional[str]) -> str:
 class LiveSettings:
     """Every operator-tunable LIVE trading setting. Defaults match the spec."""
     # Strategy thresholds (defaults = the FINAL TRADING RULE)
-    buy_threshold_pct: float = -0.75     # BUY when 20m change ≤ this
-    take_profit_pct: float = 1.50        # SELL when profit ≥ this
-    stop_loss_pct: float = -0.01         # STOP-LOSS when loss ≤ this
+    buy_threshold_pct: float = -0.20     # BUY when 20m change ≤ this
+    take_profit_pct: float = 1.00        # SELL when profit ≥ this
+    stop_loss_pct: float = -0.30         # STOP-LOSS when loss ≤ this
     lookback_minutes: int = 20
 
     # Entry-quality filters (part of the BUY criteria)
     volume_filter_on: bool = True          # require a volume spike to BUY
-    min_volume_multiple: float = 1.0       # last-candle vol ≥ this × avg
+    min_volume_multiple: float = 0.2       # last-candle vol ≥ this × avg
     trend_filter_on: bool = False          # require a short-term upturn to BUY
 
     # Position sizing

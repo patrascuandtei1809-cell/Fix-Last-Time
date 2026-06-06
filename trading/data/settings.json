@@ -6,7 +6,7 @@
     "SOLUSDT"
   ],
   "bot_was_running": false,
-  "strategy": "20-Minute Dip",
+  "strategy": "Market Low",
   "interval": "1m",
   "check_every": 8,
   "threshold": 0.01,
@@ -23,6 +23,8 @@
   "show_stoch": true,
   "show_old_trades": true,
   "show_sl_tp": true,
+  "chart_autofollow": true,
+  "chart_marker_offset_pct": 0.03,
   "global_risk": {
     "max_total_exposure_usdt": 300.0,
     "max_exposure_per_symbol_pct": 100,
