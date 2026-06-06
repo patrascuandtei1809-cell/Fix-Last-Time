@@ -1,0 +1,176 @@
+TRUTHMODE STRATEGY CHANGE — FINAL VERSION
+
+Goal:
+Replace the old fixed 20-minute dip logic with a live “Market Low + AI Filter” strategy.
+
+Do not redesign the bot.
+Do not add research gates.
+Do not add validation gates.
+Do not bring back Reversal Scalper.
+Do not bring back AI HYBRID execution text.
+
+STRATEGY NAME
+----------------
+Rename active strategy to:
+
+Market Low Live Strategy
+
+Remove all dashboard/code references to:
+- 20-Minute Dip
+- 20m change
+- price 20 minutes ago
+- 20-minute interval
+- fixed 20m lookback
+
+BUY LOGIC
+----------------
+The rule engine creates a BUY setup when:
+
+- Current price is near a recent local low
+- Current price is below recent average price
+- Volume >= 1.5x average volume
+- Trend filter = PASS
+- No open position exists for that symbol, unless manage_manual_trades=True
+
+AI FILTER
+----------------
+AI acts like an advanced MACD-style confirmation filter.
+
+AI may analyze:
+- recent candles
+- momentum
+- volatility
+- selling pressure
+- bounce probability
+- risk of further downside
+
+AI must output:
+- Bullish / Neutral / Bearish
+- Confidence %
+- Reason
+- Risk warning
+
+Final BUY requires:
+
+Rule Engine = BUY SETUP
+AND
+AI Prediction = Bullish or Neutral
+AND
+AI Confidence >= 70%
+
+If AI says Bearish with confidence >= 70%, do NOT buy.
+
+AI must NOT:
+- place trades directly
+- change stop-loss
+- change take-profit
+- change cooldown
+- change position size
+- bypass emergency stop
+- bypass safe mode
+- bypass risk limits
+
+SELL LOGIC
+----------------
+Sell when:
+- Profit from entry >= +1.5%
+
+STOP LOSS
+----------------
+Sell immediately when:
+- Loss from entry <= -0.01%
+
+COOLDOWN
+----------------
+After any sell:
+- wait 1 minute before re-entering same symbol
+
+After stop-loss:
+- wait 1 minute before re-entering same symbol
+
+POSITION SIZE
+----------------
+Dashboard must allow:
+- Fixed USDT
+- % of available USDT
+- Use all available USDT
+
+These settings must affect real live Binance orders.
+
+Keep max position limit:
+- 50% of free USDT unless user changes it in dashboard
+
+SAFETY RULES
+----------------
+Keep enabled:
+- Emergency Stop
+- Safe Mode
+- Balance Check
+- Spending Limit
+- Max Position Size
+- Cooldown
+- Daily Loss Protection
+
+Dashboard must clearly show if any safety rule blocks trading.
+
+ACTIVITY PANEL
+----------------
+Show for every symbol:
+- Current price
+- Recent average price
+- Recent local low
+- Distance from local low %
+- Volume multiplier
+- Trend result
+- Rule engine result
+- AI prediction
+- AI confidence
+- AI reason
+- Final decision: BUY / HOLD / SELL
+- Exact reason for no trade
+
+CHART
+----------------
+Show:
+- BUY markers
+- SELL markers
+- Entry price
+- Exit price
+- TP line
+- SL line
+
+Chart zoom must not reset.
+
+MANUAL POSITIONS
+----------------
+If manage_manual_trades=True:
+- bot must manage existing manual positions
+- do not show “manual position will not be managed”
+
+VERIFICATION REQUIRED
+----------------
+Before claiming fixed:
+
+1. List files changed.
+2. Run full tests.
+3. Boot dashboard.
+4. Confirm dashboard no longer shows:
+   - 20-Minute Dip
+   - 20m change
+   - ACTIVE SCALPER
+   - Reversal Scalper
+   - AI MODE HYBRID
+5. Confirm dashboard shows:
+   - Market Low Live Strategy
+   - Rule Engine result
+   - AI Prediction
+   - AI Confidence
+   - Final Decision
+   - real WHY NO TRADE reasons
+
+Report only:
+- files changed
+- tests passed
+- exact UI text removed
+- exact new UI text added
+- restart command for droplet
