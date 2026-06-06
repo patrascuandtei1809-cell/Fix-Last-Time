@@ -384,6 +384,32 @@ def test_exit_fires_even_with_entry_filters_on():
     assert closed.get("trade") is open_trade
 
 
+# ── 8e. Volume gate is fully DISABLED when min_volume_multiple <= 0 ───────────
+def test_volume_gate_disabled_when_multiple_zero():
+    # Clear dip BUY, volume filter ON, but min_volume_multiple = 0 ⇒ the gate
+    # must NOT block even though the fake exposes no volume (ratio 0.0×).
+    ex = _FakeExchange(change_pct=-2.50)
+    eng = le.DipLiveEngine(exchange=ex, cooldown=ls.CooldownStore())
+    s = _settings(buy_threshold_pct=-0.20, volume_filter_on=True,
+                  min_volume_multiple=0.0)
+    rec = eng.evaluate(symbol="BTCUSDT", settings=s,
+                       open_trades=[], current_exposure=0.0,
+                       global_gate_fn=_pass_gate)
+    assert rec.traded is True and ex.buy_calls
+
+    # A positive required multiple re-enables the gate; with no volume data the
+    # BUY is blocked for "volume too low".
+    ex2 = _FakeExchange(change_pct=-2.50)
+    eng2 = le.DipLiveEngine(exchange=ex2, cooldown=ls.CooldownStore())
+    s2 = _settings(buy_threshold_pct=-0.20, volume_filter_on=True,
+                   min_volume_multiple=1.5)
+    rec2 = eng2.evaluate(symbol="BTCUSDT", settings=s2,
+                         open_trades=[], current_exposure=0.0,
+                         global_gate_fn=_pass_gate)
+    assert rec2.traded is False and not ex2.buy_calls
+    assert "volume" in (rec2.reason or "").lower()
+
+
 # ── 9b. Pure entry-quality filters: volume spike + trend upturn ──────────────
 def test_volume_ok_requires_a_spike():
     # last bar 2.0 vs prior avg 1.0 ⇒ 2.0× ≥ 1.5× ⇒ pass
@@ -408,12 +434,12 @@ def test_settings_defaults_and_persistence():
     s = ls.LiveSettings()
     assert s.aggressive_on is True                  # aggressive default ON
     assert s.size_mode in ls.SIZE_MODES
-    assert s.buy_threshold_pct == -0.20
-    assert s.take_profit_pct == 1.00
+    assert s.buy_threshold_pct == -0.05
+    assert s.take_profit_pct == 0.60
     assert s.stop_loss_pct == -0.30
     # FINAL RULE knobs
     assert s.volume_filter_on is True
-    assert s.min_volume_multiple == 0.2
+    assert s.min_volume_multiple == 0.0
     assert s.trend_filter_on is False
     assert s.max_position_pct == 50.0
     assert s.stop_loss_cooldown_sec == 60

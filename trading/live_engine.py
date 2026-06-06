@@ -410,8 +410,11 @@ class DipLiveEngine:
         # 8b. Entry-quality filters (part of the BUY criteria): volume spike +
         #     short-term trend upturn. These only restrict NEW entries; an open
         #     position's exit already ran above and is never gated by these.
-        if getattr(settings, "volume_filter_on", False):
-            _need = float(getattr(settings, "min_volume_multiple", 1.5))
+        _need = float(getattr(settings, "min_volume_multiple", 1.5))
+        # A required multiple of ≤ 0 disables the volume gate completely — even
+        # when volume_filter_on is True — so a small account can trade on any
+        # volume. The diagnostic volume_ratio is still computed/displayed above.
+        if getattr(settings, "volume_filter_on", False) and _need > 0:
             if rec.volume_ratio is None or rec.volume_ratio < _need:
                 rec.decision = "HOLD"
                 rec.reason = (f"Volume too low — {(rec.volume_ratio or 0.0):.2f}× < "
