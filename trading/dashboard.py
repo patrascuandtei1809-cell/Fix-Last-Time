@@ -1527,37 +1527,9 @@ if _ai_on and _ai_last:
         f'{_ai_lconf}%</span>'
         f'</div>'
     )
-# ── HYBRID MODE: GPT advisor status badge + last GPT decision ────────────
-_gpt_enabled = bool(_sig_meta.get("gpt_enabled")) if _sig_meta else False
-_gpt_active  = bool(_sig_meta.get("gpt_active"))  if _sig_meta else False
-_gpt_dec     = (_sig_meta.get("gpt_decision") or "").upper() if _sig_meta else ""
-_gpt_conf    = int(_sig_meta.get("gpt_confidence") or 0) if _sig_meta else 0
-_gpt_reason  = (_sig_meta.get("gpt_reason") or "") if _sig_meta else ""
-_gpt_age     = _sig_meta.get("gpt_age_sec") if _sig_meta else None
-_gpt_pill_html = ""
-_gpt_last_html = ""
-if _gpt_enabled:
-    _gc      = "#7ee787" if _gpt_active else "#6e7681"
-    _gstatus = "ACTIVE" if _gpt_active else "IDLE"
-    _gpt_pill_html = (
-        f'<span class="pill" style="background:{_gc}22;border:1px solid {_gc}66;'
-        f'color:{_gc};font-size:10px;font-weight:700;padding:2px 8px;'
-        f'border-radius:10px;">🤖 GPT · {_gstatus}</span>'
-    )
-    if _gpt_dec in ("BUY", "SELL", "HOLD"):
-        _gdc = {"BUY":"#26a69a","SELL":"#ef5350","HOLD":"#6e7681"}.get(_gpt_dec, "#484f58")
-        _gpt_age_str = f" ({_gpt_age:.0f}s ago)" if isinstance(_gpt_age,(int,float)) and _gpt_age>=0 else ""
-        _gpt_last_html = (
-            f'<div style="display:flex;align-items:center;gap:6px;">'
-            f'<span style="font-size:10px;color:#484f58;">GPT →</span>'
-            f'<span style="font-size:11px;font-weight:800;color:{_gdc};'
-            f'font-family:\'JetBrains Mono\',monospace;">{_gpt_dec}</span>'
-            f'<span style="font-size:10px;color:#6e7681;">·</span>'
-            f'<span style="font-size:11px;color:{_gdc};font-family:\'JetBrains Mono\',monospace;">'
-            f'{_gpt_conf}%</span>'
-            f'<span style="font-size:10px;color:#6e7681;">{_gpt_age_str}</span>'
-            f'</div>'
-        )
+# NOTE: the legacy GPT "HYBRID" advisor badge has been removed — the only live
+# strategy is the 20-Minute Dip and its deterministic AI advisory is already
+# surfaced via the AI pill + AI→ decision above. No GPT/hybrid mode runs.
 
 if _ai_on and _ai_trend:
     _tc = {"UP":"#26a69a","DOWN":"#ef5350","SIDEWAYS":"#a371f7"}.get(_ai_trend, "#6e7681")
@@ -1572,10 +1544,8 @@ _bot_status_html = (
     f'<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">'
     f'<div style="display:flex;align-items:center;gap:6px;">{_bot_dot}{_bot_lbl}</div>'
     f'<div>{_ai_pill}</div>'
-    f'<div>{_gpt_pill_html}</div>'
     f'<div>{_trend_pill_html}</div>'
     f'{_ai_last_html}'
-    f'{_gpt_last_html}'
     f'<div>{_strat_html}</div>'
     f'<div style="display:flex;align-items:center;gap:6px;">'
     f'<span style="font-size:10px;color:#484f58;">SIGNAL</span>'
