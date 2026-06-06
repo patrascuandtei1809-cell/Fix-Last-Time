@@ -21,4 +21,5 @@
 - [Exit before entry gates](dip-exit-must-not-depend-on-entry-gates.md) — open-position stop-loss/TP must run right after price, before safe-mode/balance/klines/cooldown; only emergency stop halts exits.
 - [Runtime files untracked](alphatrade-runtime-files-untracked.md) — droplet `git pull` aborts on bot-rewritten tracked files (activity.json/trades/creds); keep them gitignored, settings.json stays tracked.
 - [Aggressive-mode persistence](aggressive-mode-persistence.md) — intensity store: DB authoritative when reachable, JSON is a FALLBACK not a mirror; tests must monkeypatch _conn+_JSON_PATH; runtime json gitignored.
+- [Emergency stop session-only](emergency-stop-session-only.md) — emergency_stop must never be persisted/restored; THREE dataclasses carry it (risk/global/per-symbol) — skip+force-False all three on cold load.
 - [Trading Streamlit not an artifact](trading-streamlit-not-artifact.md) — screenshot tool can't target trading/ dashboard (port 5000, unregistered); verify via workflow logs + curl :5000; Binance 451 is Replit geo-block, not a bug.

@@ -180,6 +180,15 @@ def test_emergency_stop_blocks_entry():
     assert not ex.buy_calls
 
 
+# ── 6a-bis. Emergency stop DEFAULTS OFF (must not auto-arm on a fresh load) ───
+def test_emergency_stop_defaults_off():
+    from risk import RiskSettings, GlobalRiskSettings
+    # A freshly-constructed risk config must have emergency stop OFF — the
+    # dashboard relies on this so a page refresh never silently halts trading.
+    assert RiskSettings().emergency_stop is False
+    assert GlobalRiskSettings().emergency_stop is False
+
+
 # ── 6b. Safety: safe mode + not-connected block ──────────────────────────────
 def test_safe_mode_and_disconnected_block_entry():
     ex = _FakeExchange(change_pct=-2.50)

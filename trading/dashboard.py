@@ -765,14 +765,28 @@ if not st.session_state.get("_settings_loaded"):
             st.session_state[_k] = _persisted[_k]
     if "risk" in _persisted and isinstance(_persisted["risk"], dict):
         for _rk, _rv in _persisted["risk"].items():
+            # Emergency stop is NEVER restored from disk — it is a session-only
+            # kill switch. A stale persisted `true` (e.g. from an older build or
+            # the droplet's settings.json) must not silently re-arm it on refresh.
+            if _rk == "emergency_stop":
+                continue
             if hasattr(st.session_state.risk, _rk):
                 setattr(st.session_state.risk, _rk, _rv)
+    # Belt-and-suspenders: emergency stop ALWAYS starts OFF on a cold load /
+    # page refresh. It only turns ON when the operator clicks 🚨 Emergency Stop
+    # in the current session.
+    st.session_state.risk.emergency_stop = False
     # Global risk
     if "global_risk" in _persisted and isinstance(_persisted["global_risk"], dict):
         _gr = st.session_state.get("global_risk") or GlobalRiskSettings()
         for _gk, _gv in _persisted["global_risk"].items():
+            # GLOBAL emergency stop is never restored from disk (same rule as
+            # per-symbol risk) — it must start OFF on every refresh/cold start.
+            if _gk == "emergency_stop":
+                continue
             if hasattr(_gr, _gk):
                 setattr(_gr, _gk, _gv)
+        _gr.emergency_stop = False
         st.session_state.global_risk = _gr
     # Per-symbol overrides
     if "per_symbol_risk" in _persisted and isinstance(_persisted["per_symbol_risk"], dict):
@@ -782,8 +796,12 @@ if not st.session_state.get("_settings_loaded"):
                 continue
             _rs = RiskSettings()
             for _rk, _rv in _vals.items():
+                # Never restore a per-symbol emergency stop from disk.
+                if _rk == "emergency_stop":
+                    continue
                 if hasattr(_rs, _rk):
                     setattr(_rs, _rk, _rv)
+            _rs.emergency_stop = False
             _pso[_sym] = _rs
         st.session_state.per_symbol_risk = _pso
     # ── ACTIVE SCALPER MODE: force-snap protected fields back to spec ────
@@ -4253,7 +4271,8 @@ def _collect_settings_snapshot() -> dict:
             "cooldown_seconds":         getattr(_r, "cooldown_seconds", 180),
             "max_daily_loss_pct":       getattr(_r, "max_daily_loss_pct", 5.0),
             "max_trades_per_session":   getattr(_r, "max_trades_per_session", 0),
-            "emergency_stop":           getattr(_r, "emergency_stop", False),
+            # emergency_stop is intentionally NOT persisted — it is a session-only
+            # kill switch that always starts OFF after a refresh/restart.
         },
     }
 
