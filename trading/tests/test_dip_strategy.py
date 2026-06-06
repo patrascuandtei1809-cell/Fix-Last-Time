@@ -399,13 +399,13 @@ def test_settings_defaults_and_persistence():
     s = ls.LiveSettings()
     assert s.aggressive_on is True                  # aggressive default ON
     assert s.size_mode in ls.SIZE_MODES
-    assert s.buy_threshold_pct == -2.00
+    assert s.buy_threshold_pct == -0.75
     assert s.take_profit_pct == 1.50
     assert s.stop_loss_pct == -0.01
     # FINAL RULE knobs
     assert s.volume_filter_on is True
-    assert s.min_volume_multiple == 1.5
-    assert s.trend_filter_on is True
+    assert s.min_volume_multiple == 1.0
+    assert s.trend_filter_on is False
     assert s.max_position_pct == 50.0
     assert s.stop_loss_cooldown_sec == 60
     assert s.reentry_cooldown_sec == 60

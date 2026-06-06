@@ -611,6 +611,24 @@ class TradingBot:
                 if rec.traded:
                     traded = True
                     worker._session_trades += 1
+                # Consolidated per-symbol scan line every cycle — change %,
+                # volume multiple, trend_ok, final decision, block reason.
+                try:
+                    _chg = getattr(rec, "change_pct", None)
+                    _vr  = getattr(rec, "volume_ratio", None)
+                    _tok = getattr(rec, "trend_ok", None)
+                    _dec = getattr(rec, "decision", "HOLD")
+                    _rsn = getattr(rec, "reason", "") or "-"
+                    log_activity(
+                        "SCAN",
+                        f"[SCAN] {worker.symbol} | "
+                        f"change={(f'{_chg:+.2f}%' if _chg is not None else 'n/a')} | "
+                        f"vol={(f'{_vr:.2f}x' if _vr is not None else 'n/a')} | "
+                        f"trend_ok={('-' if _tok is None else _tok)} | "
+                        f"decision={_dec} | block={_rsn}"
+                    )
+                except Exception:
+                    pass
                 # Feed the WHY-NO-TRADE journal so the dashboard shows the real
                 # per-symbol dip reason (the dip path skips the legacy
                 # record_cycle below).
@@ -628,6 +646,17 @@ class TradingBot:
                     pass
             except Exception as exc:
                 log_activity("ERROR", f"Dip engine {key} crashed: {exc}")
+                # Same consolidated per-symbol scan line on the error path, so
+                # every symbol still gets exactly one [SCAN] entry per cycle.
+                try:
+                    log_activity(
+                        "SCAN",
+                        f"[SCAN] {worker.symbol} | change=n/a | vol=n/a | "
+                        f"trend_ok=- | decision=HOLD | "
+                        f"block=Dip engine error: {exc}"
+                    )
+                except Exception:
+                    pass
                 try:
                     diagnostics.record_dip_decision(
                         symbol  = worker.symbol,
