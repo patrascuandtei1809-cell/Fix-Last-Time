@@ -941,6 +941,35 @@ def _fmt_pct(v):
     return f"{v:+.2f}%"
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def _load_carry_breakeven_cells():
+    """Read the latest research report and return the carry FEE-SWEEP cells that
+    carry per-symbol break-even data (`breakeven_four_leg_pct` = gross,
+    `breakeven_funding_only_pct` = funding-only). Cached 60s — the report only
+    changes when research is re-run. Returns [] on any error (fail soft: the
+    card simply hides if no report exists)."""
+    import json as _json
+    path = os.path.join(os.path.dirname(__file__), "data", "research", "latest.json")
+    try:
+        with open(path) as f:
+            report = _json.load(f)
+    except Exception:
+        return []
+    out = []
+    for c in report.get("cells", []):
+        if c.get("kind") != "carry":
+            continue
+        fs = c.get("fee_sweep")
+        if not isinstance(fs, dict):
+            continue  # only fee-sweep carry cells store per-symbol break-evens
+        subs = c.get("subcells", {})
+        if not any(sc.get("breakeven_four_leg_pct") is not None
+                   for sc in subs.values()):
+            continue
+        out.append(c)
+    return out
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # LIVE MARKET DATA — always fetched fresh on every rerun
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3932,6 +3961,111 @@ with st.container():
                          "Closed": _fmt_london(t.get("close_time"), "%Y-%m-%d %H:%M")})
                 st.dataframe(pd.DataFrame(pnl_data), width="stretch",
                              hide_index=True, height=220)
+
+            # ── ⚖️ Carry break-even: funding-only vs gross (research) ──────────
+            # Surfaces the per-symbol break-even four-leg fee for the delta-
+            # neutral carry so an operator scanning the UI can see — at a glance,
+            # without reading the full reason string — whether FUNDING income
+            # alone covers costs (binding = lower of gross / funding-only). When
+            # funding-only is the tighter limit, a healthy-looking gross figure is
+            # propped up by a one-off basis move that funding does NOT cover.
+            _carry_cells = _load_carry_breakeven_cells()
+            try:
+                from research import MIN_SYMBOLS
+            except Exception:
+                MIN_SYMBOLS = 2
+            if _carry_cells:
+                st.markdown('<div class="sec-lbl" style="margin-top:18px;">'
+                            '⚖️ Carry break-even — funding-only vs gross (research)'
+                            '</div>', unsafe_allow_html=True)
+                st.caption("Per-symbol break-even four-leg fee for the delta-neutral "
+                           "carry. A symbol clears only if the fee is below BOTH its "
+                           "gross AND its funding-only carry, so the BINDING limit is "
+                           "the lower of the two. ⚠️ flags symbols where funding-only "
+                           "binds — funding alone does not cover costs. (Research only; "
+                           "carry is never wired to live trading.)")
+                _EPS = 1e-9
+                for _cc in _carry_cells:
+                    _fs = _cc.get("fee_sweep", {})
+                    _be_verdict = _fs.get("verdict_breakeven_four_leg_pct")
+                    _maker = _fs.get("achievable_maker_four_leg_pct")
+                    _taker = _fs.get("achievable_taker_four_leg_pct")
+                    _vd = _cc.get("verdict", "—")
+                    _vd_col = "#3fb950" if _vd == "ACCEPT" else "#f85149"
+                    _strat = _cc.get("strategy") or _cc.get("strategy_key", "Carry")
+                    # Does funding-only bind the breadth verdict (vs the gross-only
+                    # break-even)? Mirror research._breakeven_reason: the verdict BE
+                    # uses binding=min(gross,funding); compute the gross-only BE and
+                    # compare.
+                    _rows = []
+                    for _sym, _sc in _cc.get("subcells", {}).items():
+                        _g = _sc.get("breakeven_four_leg_pct")
+                        if _g is None:
+                            continue
+                        _f = _sc.get("breakeven_funding_only_pct")
+                        if _f is None:
+                            _f = _g
+                        _rows.append((_sym, _g, _f, min(_g, _f)))
+                    _rows.sort(key=lambda r: r[3], reverse=True)
+                    _grosses = sorted((g for _, g, _f, _b in _rows), reverse=True)
+                    _gross_verdict_be = (_grosses[MIN_SYMBOLS - 1]
+                                         if len(_grosses) >= MIN_SYMBOLS else None)
+                    _funding_binds_verdict = (
+                        _be_verdict is not None and _gross_verdict_be is not None
+                        and _gross_verdict_be > _be_verdict + _EPS)
+
+                    st.markdown(
+                        f'<div style="display:flex;align-items:center;gap:8px;'
+                        f'margin:12px 0 4px;"><span style="font-weight:700;'
+                        f'font-size:13px;color:#c9d1d9;">{_strat}</span>'
+                        f'<span style="background:{_vd_col}22;color:{_vd_col};'
+                        f'border:1px solid {_vd_col}66;border-radius:4px;padding:1px 7px;'
+                        f'font-size:11px;font-weight:700;">{_vd}</span></div>',
+                        unsafe_allow_html=True)
+
+                    # Binding verdict break-even line + achievable tiers.
+                    if _be_verdict is not None:
+                        _ord = {1: "st", 2: "nd", 3: "rd"}.get(MIN_SYMBOLS, "th")
+                        _vb = (f"<b>Verdict break-even {_be_verdict:.3f}%</b> "
+                               f"<span style='color:#8b949e;'>(binding = lower of "
+                               f"gross / funding-only · {MIN_SYMBOLS}{_ord}-highest "
+                               f"binding break-even)</span>")
+                        if _maker is not None and _taker is not None:
+                            _clears = ("both clear it" if _taker < _be_verdict else
+                                       "maker clears it, taker does NOT"
+                                       if _maker < _be_verdict else "neither clears it")
+                            _vb += (f" · achievable maker ≈{_maker:.2f}% / taker "
+                                    f"≈{_taker:.2f}% → {_clears}")
+                        if _funding_binds_verdict:
+                            _vb += (f"<br><span style='color:#e3b341;'>⚠️ funding-only "
+                                    f"is the binding limit — the gross break-even is "
+                                    f"{_gross_verdict_be:.3f}% but funding income alone "
+                                    f"only breaks even at {_be_verdict:.3f}%, so the "
+                                    f"verdict flips ACCEPT→REJECT at {_be_verdict:.3f}% "
+                                    f"(a one-off basis move props up the gross figure)."
+                                    f"</span>")
+                        st.markdown(
+                            f'<div style="background:#0d1117;border:1px solid #1e2736;'
+                            f'border-radius:6px;padding:9px 12px;margin-bottom:6px;'
+                            f'color:#c9d1d9;font-size:12px;line-height:1.5;">'
+                            f'{_vb}</div>', unsafe_allow_html=True)
+
+                    # Per-symbol gross / funding-only / binding table.
+                    _be_rows = []
+                    for _sym, _g, _f, _b in _rows:
+                        _funding_binds = _f < _g - _EPS
+                        _be_rows.append({
+                            "Symbol":          _sym.replace("USDT", ""),
+                            "Gross BE %":      f"{_g:+.3f}",
+                            "Funding-only BE %": f"{_f:+.3f}",
+                            "Binding BE %":    f"{_b:+.3f}",
+                            "Binds on":        ("⚠️ funding-only" if _funding_binds
+                                                else "gross"),
+                        })
+                    if _be_rows:
+                        st.dataframe(pd.DataFrame(_be_rows), width="stretch",
+                                     hide_index=True,
+                                     height=min(60 + 35 * len(_be_rows), 240))
 
         st.markdown("<div style='height:48px'></div>", unsafe_allow_html=True)
 
