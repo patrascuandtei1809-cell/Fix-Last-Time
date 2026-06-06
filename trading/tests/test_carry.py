@@ -481,3 +481,152 @@ def test_run_carry_multiyear_uses_strict_vision_and_two_conditional_cells(monkey
         "verdict_reasons"][0].startswith("CONDITIONAL ACCEPT")
     assert not cells["carry_binance_multiyear_taker"][
         "verdict_reasons"][0].startswith("CONDITIONAL")
+
+
+# ── maker-fill FRAGILITY sweep (Task #29) ────────────────────────────────────
+# Re-price the carry across a grid of fill-cost assumptions and verify the
+# break-even four-leg fee + ACCEPT/REJECT-by-cost surface. All offline: flat
+# price (basis ≡ 0) so each symbol's gross carry equals its funding harvest and
+# the break-even four-leg fee is exactly that gross.
+_GRID_COMBOS = (len(R.CARRY_FEE_SWEEP_SPOT) * len(R.CARRY_FEE_SWEEP_PERP)
+                * len(R.CARRY_FEE_SWEEP_SLIP))
+
+
+def _flat_8h(n):
+    """n+1 flat 8h bars (price 100) → basis ≡ 0, gross carry = funding sum."""
+    return _candles([100.0] * (n + 1), step_ms=_8H)
+
+
+def _const_fund_8h(n, rate):
+    """n funding settlements of `rate` each, inside an (n+1)-bar 8h hold."""
+    return _funding([((i + 1) * _8H, rate) for i in range(n)])
+
+
+def _frames(target_grosses):
+    """{symbol: (spot, perp, funding)} with flat price so each symbol's gross
+    carry (in %) equals its target — funding_sum = n*rate over n=10 settlements."""
+    out = {}
+    for sym, gross_pct in target_grosses.items():
+        n = 10
+        px = _flat_8h(n)
+        out[sym] = (px, px, _const_fund_8h(n, (gross_pct / 100.0) / n))
+    return out
+
+
+def test_four_leg_pct_matches_carry_pnl_fees():
+    assert R._four_leg_pct(0.10, 0.05, 0.02) == approx(0.38)   # taker
+    assert R._four_leg_pct(0.02, 0.02, 0.0) == approx(0.08)    # maker
+
+
+def test_breakeven_equals_gross_carry():
+    """Break-even four-leg fee per symbol = its fee-independent gross carry."""
+    be = R._carry_breakeven(_frames({"BTCUSDT": 0.50, "ETHUSDT": 0.40,
+                                     "SOLUSDT": -0.20}))
+    assert be["BTCUSDT"]["gross_pct"] == approx(0.50)
+    assert be["ETHUSDT"]["gross_pct"] == approx(0.40)
+    assert be["SOLUSDT"]["gross_pct"] == approx(-0.20)
+
+
+def test_fee_grid_has_all_combos_sorted_with_keys():
+    grid = R.carry_fee_sensitivity(_frames({"BTCUSDT": 1.0, "ETHUSDT": 1.0,
+                                            "SOLUSDT": -1.0}))
+    assert len(grid) == _GRID_COMBOS
+    fees = [g["four_leg_pct"] for g in grid]
+    assert fees == sorted(fees)                       # cheapest → dearest
+    for g in grid:
+        assert {"spot_fee", "perp_fee", "slip", "four_leg_pct", "mean_net_pct",
+                "n_winners", "n_held", "verdict"} <= set(g)
+
+
+def test_mean_net_decreases_as_fees_rise():
+    grid = R.carry_fee_sensitivity(_frames({"BTCUSDT": 1.0, "ETHUSDT": 1.0,
+                                            "SOLUSDT": -1.0}))
+    assert grid[-1]["four_leg_pct"] > grid[0]["four_leg_pct"]
+    assert grid[-1]["mean_net_pct"] < grid[0]["mean_net_pct"]
+
+
+def test_robust_accept_when_gross_exceeds_dearest_fee():
+    """Both winners' gross (1.0%) > the dearest grid fee → ACCEPT at EVERY combo."""
+    grid = R.carry_fee_sensitivity(_frames({"BTCUSDT": 1.0, "ETHUSDT": 1.0,
+                                            "SOLUSDT": -0.20}))
+    v, reasons, stats = R._fee_sweep_verdict(grid)
+    assert v == "ACCEPT"
+    assert stats["n_accept"] == stats["n_total"] == _GRID_COMBOS
+    assert "robust" in reasons[0]
+
+
+def test_fragile_reject_when_verdict_flips_inside_grid():
+    """Gross 0.20% sits between the cheapest and dearest grid fee → the verdict
+    flips ACCEPT→REJECT inside the grid → fragile → REJECT (load-bearing)."""
+    grid = R.carry_fee_sensitivity(_frames({"BTCUSDT": 0.20, "ETHUSDT": 0.20,
+                                            "SOLUSDT": -0.05}))
+    v, reasons, stats = R._fee_sweep_verdict(grid)
+    assert v == "REJECT"
+    assert 0 < stats["n_accept"] < stats["n_total"]
+    assert "LOAD-BEARING" in reasons[0]
+    assert grid[0]["verdict"] == "ACCEPT"             # cheapest corner clears
+    assert grid[-1]["verdict"] == "REJECT"            # dearest corner does not
+
+
+def test_dead_reject_when_no_combo_clears():
+    """All gross below the cheapest grid fee → never ACCEPT (dead, not fragile)."""
+    grid = R.carry_fee_sensitivity(_frames({"BTCUSDT": 0.02, "ETHUSDT": 0.01,
+                                            "SOLUSDT": -0.10}))
+    v, reasons, stats = R._fee_sweep_verdict(grid)
+    assert v == "REJECT"
+    assert stats["n_accept"] == 0
+    assert "ANY fill assumption" in reasons[0]
+
+
+def test_breakeven_reason_reports_min_symbols_th_highest_gross():
+    """The verdict break-even = the MIN_SYMBOLS-th highest symbol gross."""
+    be = {"BTCUSDT": {"gross_pct": 0.40, "funding_sum_pct": 0.40},
+          "ETHUSDT": {"gross_pct": 0.70, "funding_sum_pct": 0.70},
+          "SOLUSDT": {"gross_pct": -0.02, "funding_sum_pct": -0.02}}
+    be_fee, reason = R._breakeven_reason(be)
+    assert be_fee == approx(0.40)                     # 2nd-highest (MIN_SYMBOLS=2)
+    assert "break-even four-leg fee" in reason
+    assert "ETHUSDT" in reason and "BTCUSDT" in reason
+
+
+def test_breakeven_reason_when_breadth_unreachable():
+    """Fewer than MIN_SYMBOLS positive symbols → no fee clears the breadth rule."""
+    be = {"BTCUSDT": {"gross_pct": 0.40, "funding_sum_pct": 0.40},
+          "ETHUSDT": {"gross_pct": -0.10, "funding_sum_pct": -0.10},
+          "SOLUSDT": {"gross_pct": -0.20, "funding_sum_pct": -0.20}}
+    be_fee, reason = R._breakeven_reason(be)
+    assert be_fee is not None and be_fee <= 0
+    assert "no four-leg fee clears" in reason
+
+
+def test_fee_sweep_cell_shape_and_excluded_from_allowlist():
+    frames = _frames({"BTCUSDT": 1.0, "ETHUSDT": 1.0, "SOLUSDT": -0.20})
+    grid = R.carry_fee_sensitivity(frames)
+    cell = R.build_carry_fee_sweep_cell(
+        grid, R._carry_breakeven(frames),
+        strategy_key="carry_okx_fee_sensitivity",
+        strategy="Carry Fill-Cost Sweep (OKX ~92d)",
+        signal_name="Carry Fragility (OKX)", label="OKX ~92d")
+    assert cell["kind"] == "carry"
+    assert cell["qualify_mode"] == "carry_fee_sweep"
+    assert "grid" in cell["fee_sweep"]
+    assert cell["fee_sweep"]["verdict_breakeven_four_leg_pct"] is not None
+    assert cell["subcells"]["BTCUSDT"]["breakeven_four_leg_pct"] == approx(1.0)
+    # a carry fee-sweep ACCEPT must never reach the live directional allowlist
+    out = R.run_research(specs=[], persist=False, extra_cells=[cell])
+    promoted = {c["strategy_key"] for c in out.get("cells", [])
+                if c["verdict"] == "ACCEPT" and c.get("kind") != "carry"}
+    assert "carry_okx_fee_sensitivity" not in promoted
+
+
+def test_run_carry_maker_sensitivity_emits_two_excluded_cells(monkeypatch):
+    fr_ok = _frames({"BTCUSDT": 1.0, "ETHUSDT": 1.0, "SOLUSDT": -0.20})
+    fr_bn = _frames({"BTCUSDT": 30.0, "ETHUSDT": 30.0, "SOLUSDT": -10.0})
+    monkeypatch.setattr(R, "_carry_okx_frames", lambda sym, **k: fr_ok[sym])
+    monkeypatch.setattr(R, "_carry_binance_frames", lambda sym, **k: fr_bn[sym])
+    out = R.run_carry_maker_sensitivity(use_cache=False, persist=False)
+    keys = {c["strategy_key"] for c in out["cells"]}
+    assert keys == {"carry_okx_fee_sensitivity", "carry_binance_fee_sensitivity"}
+    assert all(c["kind"] == "carry" for c in out["cells"])
+    assert all(c["verdict"] == "ACCEPT" for c in out["cells"])   # gross >> fees
+    assert all(c["fee_sweep"]["n_total"] == _GRID_COMBOS for c in out["cells"])

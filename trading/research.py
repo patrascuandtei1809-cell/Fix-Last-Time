@@ -1270,6 +1270,342 @@ def run_carry_multiyear(*, profiles: Tuple[str, ...] = ("taker", "maker"),
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Maker-fill FRAGILITY sweep (Task #29 — how load-bearing is the maker assumption?)
+# ─────────────────────────────────────────────────────────────────────────────
+# The maker carry ACCEPT assumes ALL FOUR legs fill as resting maker orders at
+# zero slippage. In practice a leg may have to cross the spread (paying taker) or
+# only partially fill. This sweeps `carry_pnl` across a GRID of realistic
+# fill-cost assumptions and reports at which cost level the carry stops ACCEPTing
+# — i.e. the BREAK-EVEN four-leg fee. If the verdict flips ACCEPT→REJECT inside
+# the achievable fee range, the maker assumption is load-bearing and the edge is
+# fragile (we then REJECT it as not robust). NOTE: break-even is a SYMBOL property
+# (net = gross − fee), so fragility is window-dependent — on the current windows
+# the gross carry clears the dearest grid corner, so the maker assumption is NOT
+# load-bearing here. It can be on leaner funding windows.
+#
+# Grid (incl. the OPTIMISTIC spot-maker 0.02 the existing maker cell assumes, so
+# the fragility is visible as a flip when spot fees rise to realistic tiers):
+CARRY_FEE_SWEEP_SPOT = (0.02, 0.06, 0.075, 0.10)   # spot fee %/side (maker→taker)
+CARRY_FEE_SWEEP_PERP = (0.0, 0.01, 0.02)           # perp maker %/side
+CARRY_FEE_SWEEP_SLIP = (0.0, 0.01, 0.02)           # 0 = pure resting maker; >0 cross
+
+
+def _four_leg_pct(spot_fee: float, perp_fee: float, slip: float) -> float:
+    """One-time four-leg cost: open+close spot AND open+close perp, with slip."""
+    return 2 * (spot_fee + slip) + 2 * (perp_fee + slip)
+
+
+def carry_fee_sensitivity(frames_by_symbol: Dict, *,
+                          spot_fees=CARRY_FEE_SWEEP_SPOT,
+                          perp_fees=CARRY_FEE_SWEEP_PERP,
+                          slips=CARRY_FEE_SWEEP_SLIP,
+                          verdict_fn=_carry_verdict) -> List[Dict]:
+    """Sweep `carry_pnl` over a fee grid on PRE-FETCHED frames (pure, offline).
+
+    `frames_by_symbol`: {symbol: (spot_df, perp_df, funding_df)}. For every
+    (spot_fee, perp_fee, slip) combo it re-prices every symbol's hold (cheap — the
+    frames are fetched once) and applies `verdict_fn` (the same breadth rule as the
+    live carry). Returns one row per combo with the four-leg cost, mean net carry,
+    winner count, and ACCEPT/REJECT verdict — sorted cheapest→dearest.
+    """
+    grid: List[Dict] = []
+    for sf in spot_fees:
+        for pf in perp_fees:
+            for sl in slips:
+                results = []
+                for sym, (s, p, f) in frames_by_symbol.items():
+                    r = backtest.carry_pnl(s, p, f, spot_fee_pct=sf,
+                                           perp_fee_pct=pf, slip_pct=sl)
+                    r["symbol"] = sym
+                    results.append(r)
+                verdict, _ = verdict_fn(results)
+                held = [r for r in results if r.get("held")]
+                mean_net = (sum(r["net_carry_pct"] for r in held) / len(held)
+                            if held else 0.0)
+                n_win = sum(1 for r in held
+                            if r["net_carry_pct"] > 0
+                            and r["funding_only_net_pct"] > 0)
+                grid.append({
+                    "spot_fee": sf, "perp_fee": pf, "slip": sl,
+                    "four_leg_pct": _four_leg_pct(sf, pf, sl),
+                    "mean_net_pct": mean_net, "n_winners": n_win,
+                    "n_held": len(held), "verdict": verdict,
+                })
+    grid.sort(key=lambda g: g["four_leg_pct"])
+    return grid
+
+
+def _carry_breakeven(frames_by_symbol: Dict) -> Dict:
+    """Per-symbol break-even four-leg fee = the symbol's fee-independent GROSS
+    carry (net = gross − fees, so net>0 ⟺ fees < gross). Computed once at 0 fees.
+
+    Also returns the funding-only break-even (funding_sum, ignoring basis), which
+    is the conservative read used by the verdict's `funding_only_net>0` guard.
+    """
+    out: Dict[str, Dict] = {}
+    for sym, (s, p, f) in frames_by_symbol.items():
+        z = backtest.carry_pnl(s, p, f, spot_fee_pct=0.0, perp_fee_pct=0.0,
+                               slip_pct=0.0)
+        if z.get("held"):
+            out[sym] = {"gross_pct": z["gross_carry_pct"],
+                        "funding_sum_pct": z["funding_sum_pct"],
+                        "days_held": z["days_held"]}
+        else:
+            out[sym] = {"gross_pct": None, "funding_sum_pct": None,
+                        "error": z.get("error")}
+    return out
+
+
+def _fee_sweep_verdict(grid: List[Dict]) -> Tuple[str, List[str], Dict]:
+    """Robustness verdict for the fill-cost sweep.
+
+    ACCEPT only if the carry ACCEPTs at EVERY grid point (robust to the fill
+    assumption). If it ACCEPTs at the cheap corner but flips REJECT before the
+    dearest, the maker assumption is LOAD-BEARING → REJECT (fragile). If it never
+    ACCEPTs, REJECT (dead even under the most optimistic fills).
+    """
+    n_tot = len(grid)
+    accepts = [g for g in grid if g["verdict"] == "ACCEPT"]
+    n_acc = len(accepts)
+    max_fee_accept = max((g["four_leg_pct"] for g in accepts), default=None)
+    min_fee_reject = min((g["four_leg_pct"] for g in grid
+                          if g["verdict"] != "ACCEPT"), default=None)
+    stats = {"n_accept": n_acc, "n_total": n_tot,
+             "max_four_leg_accept_pct": max_fee_accept,
+             "min_four_leg_reject_pct": min_fee_reject}
+    if n_acc == 0:
+        return ("REJECT",
+                ["carry does NOT clear costs at ANY fill assumption in the grid "
+                 f"(0/{n_tot} fee combos ACCEPT) — no edge even under the most "
+                 "optimistic resting-maker fills"], stats)
+    if n_acc == n_tot:
+        return ("ACCEPT",
+                [f"carry ACCEPTs at EVERY fill assumption ({n_tot}/{n_tot} fee "
+                 f"combos, up to a {max_fee_accept:.2f}% four-leg cost) — robust to "
+                 "the maker-fill assumption"], stats)
+    return ("REJECT",
+            [f"carry ACCEPTs at only {n_acc}/{n_tot} fee combos — it survives the "
+             f"optimistic corner (≤{max_fee_accept:.2f}% four-leg) but flips REJECT "
+             f"at {min_fee_reject:.2f}% four-leg cost; the maker-fill assumption is "
+             "LOAD-BEARING, so the edge is fragile, not robust"], stats)
+
+
+# Achievable real-world four-leg costs to compare the break-even against, so the
+# operator can see whether reachable fee tiers actually clear it.
+_ACHIEVABLE_MAKER_FOUR_LEG = _four_leg_pct(CARRY_SPOT_FEE_MAKER,
+                                           CARRY_PERP_FEE_MAKER, CARRY_MAKER_SLIP)
+_ACHIEVABLE_TAKER_FOUR_LEG = _four_leg_pct(CARRY_SPOT_FEE, CARRY_PERP_FEE,
+                                           DEFAULT_SLIP)
+
+
+def _breakeven_reason(breakeven: Dict) -> Tuple[Optional[float], str]:
+    """Document the BREAK-EVEN fee point: net>0 ⟺ four-leg fee < a symbol's gross
+    carry, and the breadth verdict needs ≥MIN_SYMBOLS symbols clearing — so the
+    verdict break-even four-leg fee is the MIN_SYMBOLS-th highest symbol gross.
+
+    Returns (verdict_breakeven_four_leg_pct, reason_string). The reason names every
+    symbol's break-even and compares the breadth break-even to the achievable maker
+    (~{maker}%) and taker (~{taker}%) four-leg tiers.
+    """
+    grosses = sorted(((s, be["gross_pct"]) for s, be in breakeven.items()
+                      if be.get("gross_pct") is not None),
+                     key=lambda kv: kv[1], reverse=True)
+    parts = " · ".join(f"{s} {g:+.3f}%" for s, g in grosses) or "no symbol held"
+    be_fee = grosses[MIN_SYMBOLS - 1][1] if len(grosses) >= MIN_SYMBOLS else None
+    if be_fee is None or be_fee <= 0:
+        tail = (f"fewer than {MIN_SYMBOLS} symbols have positive gross carry — no "
+                f"four-leg fee clears the breadth rule")
+        return be_fee, (f"break-even four-leg fee per symbol (= gross carry): "
+                        f"{parts}; {tail}")
+    maker, taker = _ACHIEVABLE_MAKER_FOUR_LEG, _ACHIEVABLE_TAKER_FOUR_LEG
+    clears = ("both clear it" if taker < be_fee else
+              "maker clears it, taker does NOT" if maker < be_fee else
+              "neither clears it")
+    ord_suffix = {1: "st", 2: "nd", 3: "rd"}.get(MIN_SYMBOLS, "th")
+    return be_fee, (
+        f"break-even four-leg fee per symbol (= gross carry): {parts}; the breadth "
+        f"verdict needs ≥{MIN_SYMBOLS} symbols clearing, so it flips ACCEPT→REJECT "
+        f"once the four-leg fee exceeds {be_fee:.3f}% (the {MIN_SYMBOLS}{ord_suffix}-"
+        f"highest gross). Achievable maker ≈{maker:.2f}% / taker ≈{taker:.2f}% "
+        f"four-leg → {clears}")
+
+
+def _fee_sweep_note(label: str) -> str:
+    return (
+        f"CARRY / MAKER-FILL FRAGILITY SWEEP ({label}) — re-prices the delta-"
+        f"neutral carry across a grid of fill-cost assumptions (spot "
+        f"{CARRY_FEE_SWEEP_SPOT}%/side · perp {CARRY_FEE_SWEEP_PERP}%/side · slip "
+        f"{CARRY_FEE_SWEEP_SLIP}%/side) to test how load-bearing the resting-maker "
+        f"assumption is. 'net_exp%' = mean NET carry at the OPTIMISTIC corner. "
+        f"Verdict is ACCEPT only if the carry clears costs at EVERY fill assumption "
+        f"(robust); a flip inside the grid means the edge depends on perfect maker "
+        f"fills. Excluded from the live directional allowlist by design.")
+
+
+def build_carry_fee_sweep_cell(grid: List[Dict], breakeven: Dict, *,
+                               strategy_key: str, strategy: str,
+                               signal_name: str, label: str,
+                               note: Optional[str] = None) -> Dict:
+    """Assemble the fill-cost sweep into a `kind=="carry"` cell (allowlist-excluded).
+
+    `subcells` hold the per-symbol break-even four-leg fee; the grid itself is
+    stored under `fee_sweep` so the report keeps the full ACCEPT/REJECT-by-cost
+    surface. `aggregate.expectancy_pct` = mean net at the cheapest (most optimistic)
+    grid corner so the leaderboard renders the best-case carry.
+    """
+    note = note or _fee_sweep_note(label)
+    verdict, reasons, stats = _fee_sweep_verdict(grid)
+    be_fee, be_reason = _breakeven_reason(breakeven)
+    reasons = reasons + [be_reason]
+    stats["verdict_breakeven_four_leg_pct"] = be_fee
+    stats["achievable_maker_four_leg_pct"] = _ACHIEVABLE_MAKER_FOUR_LEG
+    stats["achievable_taker_four_leg_pct"] = _ACHIEVABLE_TAKER_FOUR_LEG
+    best = grid[0] if grid else {"mean_net_pct": 0.0, "four_leg_pct": 0.0}
+
+    subcells: Dict[str, Dict] = {}
+    for sym, be in breakeven.items():
+        if be.get("gross_pct") is None:
+            subcells[sym] = {"trades": 0, "error": be.get("error", "no hold")}
+            continue
+        subcells[sym] = {
+            "trades": 1,
+            "expectancy_pct": be["gross_pct"],
+            "profit_factor": float("inf") if be["gross_pct"] > 0 else 0.0,
+            "win_rate": 100.0 if be["gross_pct"] > 0 else 0.0,
+            "breakeven_four_leg_pct": be["gross_pct"],          # net>0 ⟺ fee<gross
+            "breakeven_funding_only_pct": be["funding_sum_pct"],
+            "gross_carry_pct": be["gross_pct"],
+            "funding_sum_pct": be["funding_sum_pct"],
+            "days_held": be.get("days_held", 0.0),
+        }
+
+    return {
+        "kind":         "carry",
+        "strategy_key": strategy_key,
+        "strategy":     strategy,
+        "signal_name":  signal_name,
+        "interval":     "fee-sweep",
+        "exit_policy":  {"model": "fill-cost sensitivity grid (4 legs)",
+                         "spot_fees": list(CARRY_FEE_SWEEP_SPOT),
+                         "perp_fees": list(CARRY_FEE_SWEEP_PERP),
+                         "slips": list(CARRY_FEE_SWEEP_SLIP)},
+        "qualify_mode": "carry_fee_sweep",
+        "subcells":     subcells,
+        "aggregate": {
+            "trades": len(grid),
+            "expectancy_pct": best["mean_net_pct"],   # mean net @ cheapest corner
+            "profit_factor": float("inf") if best["mean_net_pct"] > 0 else 0.0,
+            "win_rate": (stats["n_accept"] / stats["n_total"] * 100)
+                        if stats["n_total"] else 0.0,
+        },
+        "fee_sweep":    {"grid": grid, **stats},
+        "walk_forward": [],
+        "attribution":  {},
+        "verdict":      verdict,
+        "verdict_reasons": reasons,
+        "errors":       [f"{s}: {b.get('error')}" for s, b in breakeven.items()
+                         if b.get("gross_pct") is None],
+        "note": note,
+    }
+
+
+def run_carry_maker_sensitivity(*, symbols=CARRY_SYMBOLS, use_cache: bool = True,
+                                persist: bool = True,
+                                merge_latest: bool = True) -> Dict:
+    """Run the maker-fill fragility sweep on BOTH carry datasets and MERGE the cells.
+
+    Two `kind=="carry"` cells:
+      • `carry_okx_fee_sensitivity`       — OKX ~92d real spot+perp+funding.
+      • `carry_binance_fee_sensitivity`   — multi-year (~5y) Binance funding-only
+                                            (spot-proxy perp, basis ≡ 0).
+    Never wired live (carry excluded from the allowlist by `kind`).
+    """
+    print("=" * 76)
+    print("AlphaTrade MAKER-FILL FRAGILITY SWEEP — how load-bearing is the maker "
+          "assumption?")
+    print("=" * 76)
+    print(f"grid: spot {CARRY_FEE_SWEEP_SPOT}%/side · perp {CARRY_FEE_SWEEP_PERP}"
+          f"%/side · slip {CARRY_FEE_SWEEP_SLIP}%/side "
+          f"({len(CARRY_FEE_SWEEP_SPOT)*len(CARRY_FEE_SWEEP_PERP)*len(CARRY_FEE_SWEEP_SLIP)} combos)")
+    print("-" * 76)
+
+    datasets = [
+        ("OKX ~92d", "carry_okx_fee_sensitivity",
+         "Carry Fill-Cost Sweep (OKX ~92d)", "Carry Fragility (OKX)",
+         _carry_okx_frames),
+        ("Binance ~5y", "carry_binance_fee_sensitivity",
+         "Carry Fill-Cost Sweep (Binance ~5y)", "Carry Fragility (Binance)",
+         _carry_binance_frames),
+    ]
+
+    cells: List[Dict] = []
+    for label, key, strat, signal, loader in datasets:
+        frames: Dict = {}
+        for sym in symbols:
+            try:
+                frames[sym] = loader(sym, use_cache=use_cache)
+            except Exception as e:
+                print(f"  [{label}] [skip] {sym}: {e}")
+        if not frames:
+            print(f"  [{label}] no data — skipping dataset")
+            continue
+        grid = carry_fee_sensitivity(frames)
+        breakeven = _carry_breakeven(frames)
+        cell = build_carry_fee_sweep_cell(
+            grid, breakeven, strategy_key=key, strategy=strat,
+            signal_name=signal, label=label)
+        print(f"  [{label}] per-symbol break-even four-leg fee (= gross carry):")
+        for sym, be in breakeven.items():
+            if be.get("gross_pct") is not None:
+                print(f"      {sym}: gross {be['gross_pct']:+.3f}% "
+                      f"(funding-only {be['funding_sum_pct']:+.3f}%) → ACCEPTs only "
+                      f"if four-leg fee < {be['gross_pct']:.3f}%")
+        st = cell["fee_sweep"]
+        print(f"  [{label}] ACCEPT at {st['n_accept']}/{st['n_total']} fee combos; "
+              f"max four-leg ACCEPT="
+              f"{st['max_four_leg_accept_pct'] if st['max_four_leg_accept_pct'] is not None else '—'}"
+              f" · first REJECT at="
+              f"{st['min_four_leg_reject_pct'] if st['min_four_leg_reject_pct'] is not None else '—'}")
+        mark = "🟢 ACCEPT" if cell["verdict"] == "ACCEPT" else "🔴 REJECT"
+        print(f"  [{label}] FRAGILITY VERDICT: {mark} — {cell['verdict_reasons'][0]}")
+        print("-" * 76)
+        cells.append(cell)
+    print("=" * 76)
+
+    if persist:
+        return run_research(specs=[], symbols=symbols,
+                            fee=DEFAULT_FEE, slip=DEFAULT_SLIP,
+                            use_cache=use_cache, persist=True,
+                            merge_latest=merge_latest, extra_cells=cells)
+    return {"cells": cells,
+            "carry_verdicts": {c["strategy_key"]: c["verdict"] for c in cells}}
+
+
+def _carry_okx_frames(symbol: str, *, days: int = CARRY_DAYS,
+                      interval: str = CARRY_INTERVAL, use_cache: bool = True):
+    """OKX ~92d real spot + perp + OKX funding (the single-venue carry frames)."""
+    perp = backtest.fetch_okx_candles(symbol, interval, days, "SWAP",
+                                      use_cache=use_cache)
+    spot = backtest.fetch_okx_candles(symbol, interval, days, "SPOT",
+                                      use_cache=use_cache)
+    funding = backtest.fetch_funding_rates(symbol, days, use_cache=use_cache,
+                                           source="okx")
+    return spot, perp, funding
+
+
+def _carry_binance_frames(symbol: str, *, days: int = CARRY_MULTIYEAR_DAYS,
+                          interval: str = CARRY_MULTIYEAR_INTERVAL,
+                          use_cache: bool = True):
+    """Multi-year Binance funding (Vision) with spot proxying the perp leg → the
+    basis term is exactly 0 (conservative funding-only carry frames)."""
+    funding = backtest.fetch_funding_rates(symbol, days, use_cache=use_cache,
+                                           source="binance-vision")
+    spot = backtest.fetch_klines(symbol, interval, days, use_cache=use_cache)
+    leg = spot.rename(columns={"close": "okx_close"})[["open_time", "okx_close"]]
+    return leg, leg, funding
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Rolling-window carry robustness (Task #24 — is the +7% APR an endpoint artifact?)
 # ─────────────────────────────────────────────────────────────────────────────
 # The multi-year carry ACCEPTs over ONE ~5y buy-and-hold (BTC/ETH positive, SOL
@@ -1566,9 +1902,18 @@ if __name__ == "__main__":
                          "holds stepped monthly across ~5y funding) and merge both "
                          "cells into latest.json — verdict by breadth of positive "
                          "windows, never wired live")
+    ap.add_argument("--carry-maker-sweep", action="store_true",
+                    help="run the MAKER-FILL FRAGILITY sweep (re-price the carry "
+                         "across a grid of fill-cost assumptions on the OKX ~92d AND "
+                         "Binance ~5y datasets) and merge both cells into "
+                         "latest.json — documents the break-even four-leg fee, never "
+                         "wired live")
     args = ap.parse_args()
 
-    if args.carry_rolling:
+    if args.carry_maker_sweep:
+        run_carry_maker_sensitivity(use_cache=not args.no_cache,
+                                    persist=not args.no_persist, merge_latest=True)
+    elif args.carry_rolling:
         run_carry_rolling(use_cache=not args.no_cache,
                           persist=not args.no_persist, merge_latest=True)
     elif args.carry_multiyear:

@@ -142,6 +142,25 @@ static archive = OK (multi-year); OKX REST = OK (~92d cap); Binance fapi = 451;
 Bybit = 403; binance.us = no futures; Kraken futures schema messy. Prefer the
 Vision archive for any multi-year funding history; OKX only for short windows.
 
+## Maker-fill assumption is NOT load-bearing on current windows (but window-dependent)
+**The carry's break-even cost is a SYMBOL PROPERTY, not a fee-model choice:**
+net = gross − fees, so a symbol clears iff `four-leg fee < its gross carry`, and
+the breadth verdict (≥2 symbols) flips ACCEPT→REJECT once the fee exceeds the
+**2nd-highest symbol's gross**. So sweeping the fee grid is informative only
+relative to that break-even. On the current OKX ~92d and Binance ~5y windows the
+2nd-highest gross (BTC ≈0.41% OKX / ETH ≈35.6% Binance) sits ABOVE the dearest
+maker-grid cost (0.32%) AND above achievable taker (~0.38% OKX), so the carry
+ACCEPTs at EVERY fill assumption — the maker-fill assumption is robust here, not
+fragile. SOL never clears (negative gross) under any fee.
+**Why this matters:** the task premised a "razor-thin +0.101%/hold" maker ACCEPT;
+that was a leaner earlier funding window. Fragility is window-dependent — judge it
+by `gross vs break-even`, never by the fee model in isolation.
+**How to apply:** `python research.py --carry-maker-sweep --merge` → two
+`kind=="carry"` cells (`carry_okx_fee_sensitivity` / `carry_binance_fee_sensitivity`)
+with `fee_sweep.grid` + `verdict_breakeven_four_leg_pct`. Verdict is ACCEPT only
+if it clears at EVERY grid corner (robust); a flip inside the grid = REJECT
+(fragile, load-bearing). Still never wired live (carry excluded by `kind`).
+
 ## latest.json must stay COMPLETE — use the merge path
 **Rule:** Running `research.py --only <subset>` OVERWRITES `latest.json` with
 only those cells, which breaks tests that assert the full technical sweep is
