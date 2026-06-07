@@ -49,6 +49,11 @@ except Exception:                      # pragma: no cover - research optional
 _bot: Optional["TradingBot"] = None
 _bot_lock = threading.Lock()
 
+# Upper bound on simultaneously-scanned symbols. Scanner-driven dynamic symbol
+# sets (top 10-15 across Binance+MEXC) must fit; real concurrency is still
+# bounded by the global open-trades cap + per-symbol risk gates.
+MAX_ACTIVE_SYMBOLS = 15
+
 # ── Shared live state: dict keyed by symbol ─────────────────────────────────
 _state_lock = threading.Lock()
 _shared_per_symbol: Dict[str, Dict] = {}   # symbol → {df, price, signal, ...}
@@ -1264,6 +1269,39 @@ def get_bot_last_signal() -> dict:
     return {}
 
 
+def resolve_scanner_symbols(exchange_mode: str = "binance",
+                            top_n: int = MAX_ACTIVE_SYMBOLS) -> List[str]:
+    """Read the latest scanner output and return the symbols the bot should
+    trade, scoped to the active execution venue.
+
+    - exchange_mode="binance" → only Binance opportunities (execution is Binance)
+    - exchange_mode="mexc"    → only MEXC opportunities
+    - exchange_mode="multi"   → execution currently falls back to Binance, so we
+      still scope to Binance symbols to avoid trading a symbol on a venue that
+      isn't actually wired for orders yet.
+
+    Returns [] when no scan exists yet, so callers can fall back to their
+    configured/static symbol list. Deduplicates while preserving scanner rank.
+    """
+    try:
+        from scanner import load_opportunities
+    except Exception as e:  # noqa: BLE001
+        print(f"[BOT] scanner unavailable: {e}", flush=True)
+        return []
+    venue = "binance" if exchange_mode in ("binance", "multi") else exchange_mode
+    opps = load_opportunities(exchange=venue)
+    seen: set = set()
+    out: List[str] = []
+    for o in opps:
+        sym = o.get("symbol")
+        if sym and sym not in seen:
+            seen.add(sym)
+            out.append(sym)
+        if len(out) >= top_n:
+            break
+    return out
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Builder — accepts BOTH new multi-symbol signature AND legacy single-symbol.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1280,6 +1318,8 @@ def create_bot(
     per_symbol_risk:       Optional[Dict[str, RiskManager]] = None,
     global_risk:           Optional[GlobalRiskManager] = None,
     exchange:              Optional[Exchange] = None,
+    exchange_mode:         str = "binance",   # "binance" | "mexc" | "multi"
+    mexc_live_orders:      bool = False,       # MEXC stays DRY-RUN until True
     initial_balance:       float = 1000.0,
     # AI assist (extra decision layer)
     ai_assist:             bool = True,         # ACTIVE SCALPER — AI always on
@@ -1289,9 +1329,27 @@ def create_bot(
     """Build (or rebuild) the singleton bot. LIVE Binance Mainnet only."""
     global _bot, _primary_symbol
 
-    # Build / register the exchange
+    # Build / register the exchange.
+    # Default path (exchange_mode="binance") is unchanged — Binance LIVE.
+    # exchange_mode="mexc" builds a MexcExchange (DRY-RUN unless mexc_live_orders).
+    # An explicitly-passed `exchange` always wins (used by tests / dashboard).
     if exchange is None:
-        exchange = BinanceExchange(client=client)
+        if exchange_mode == "mexc":
+            from exchanges.mexc import MexcExchange, MexcClient, load_mexc_credentials
+            _creds = load_mexc_credentials()
+            _mclient = MexcClient(*_creds) if _creds else None
+            exchange = MexcExchange(client=_mclient, live_orders=mexc_live_orders)
+            print(f"[BOT] exchange_mode=mexc — MexcExchange "
+                  f"({'LIVE' if mexc_live_orders else 'DRY-RUN'}, "
+                  f"creds={'yes' if _creds else 'no'})", flush=True)
+        else:
+            if exchange_mode == "multi":
+                # Smart cross-exchange routing is not built yet — default to the
+                # safe Binance path so nothing trades on an unrouted venue.
+                print("[BOT] exchange_mode=multi not yet routable — using Binance "
+                      "execution for now (scanner may still surface both).",
+                      flush=True)
+            exchange = BinanceExchange(client=client)
         ex_registry.clear()
         ex_registry.register(exchange)
     else:
@@ -1300,9 +1358,14 @@ def create_bot(
     # ACTIVE SCALPER MODE: hardcoded to BTC + ETH + SOL unless caller overrides.
     sym_list = symbols if symbols else ([symbol] if symbol else
                                         ["BTCUSDT", "ETHUSDT", "SOLUSDT"])
-    if len(sym_list) > 3:
-        print(f"[BOT] capping symbols list to 3 (got {len(sym_list)})", flush=True)
-        sym_list = sym_list[:3]
+    # Cap raised 3 → MAX_ACTIVE_SYMBOLS so scanner-driven dynamic symbol sets
+    # (top 10-15 across Binance+MEXC) fit. Existing strategy/risk gates still
+    # apply per symbol, and the global open-trades cap limits real concurrency,
+    # so a wider scan universe does not mean more simultaneous positions.
+    if len(sym_list) > MAX_ACTIVE_SYMBOLS:
+        print(f"[BOT] capping symbols list to {MAX_ACTIVE_SYMBOLS} "
+              f"(got {len(sym_list)})", flush=True)
+        sym_list = sym_list[:MAX_ACTIVE_SYMBOLS]
 
     # Resolve per-symbol risk managers (fallback to shared one)
     per_sym = dict(per_symbol_risk or {})

@@ -6,6 +6,9 @@
     "SOLUSDT"
   ],
   "bot_was_running": false,
+  "exchange_mode": "binance",
+  "mexc_live_orders": false,
+  "use_scanner_symbols": false,
   "strategy": "EMA_MACD_RSI_VOLUME_V2",
   "interval": "4h",
   "check_every": 8,

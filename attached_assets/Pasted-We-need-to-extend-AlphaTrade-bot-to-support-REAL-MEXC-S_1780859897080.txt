@@ -1,0 +1,63 @@
+We need to extend AlphaTrade bot to support REAL MEXC Spot execution, not only MEXC scanning.
+
+Current status:
+- Binance LIVE execution works.
+- MEXC API credentials are saved in `data/.mexc_creds.json`.
+- MEXC account test works:
+  - `/api/v3/account` returns status 200
+  - canTrade=true
+  - USDT available = 27.59885
+- Dashboard already displays MEXC balance from `data/mexc_balance.json`.
+- Bot now supports 10 active symbols; `ACTIVE SCAN` shows 10 symbols.
+- Current execution is still Binance only:
+  - `bot.py create_bot()` defaults to `BinanceExchange(client=client)`
+  - dashboard still says api.binance.com
+- Strategy is currently blocking most scanner symbols with:
+  - “not research-validated for EMA_MACD_RSI_VOLUME_V2”
+
+Goal:
+1. Add `exchanges/mexc.py` implementing `MexcExchange(Exchange)` compatible with existing `exchanges/binance.py`.
+2. Add MEXC API client functionality:
+   - public price
+   - public klines
+   - public 24h ticker
+   - account balance
+   - symbol filters / precision
+   - market BUY by quote amount
+   - market SELL by base quantity
+   - order normalization with executed qty, price, fee if available
+3. Modify bot creation so exchange can be selected:
+   - `exchange_mode = "binance" | "mexc" | "multi"`
+   - for now implement safe MEXC-only mode using `MexcExchange`
+4. Dashboard must show:
+   - active execution exchange: Binance or MEXC
+   - Binance balance
+   - MEXC balance
+   - last trade source exchange
+   - open positions with exchange name
+5. Scanner must rotate active symbols from `data/multi_exchange_opportunities.json`.
+   - For Binance execution, use only BINANCE symbols.
+   - For MEXC execution, use only MEXC symbols.
+6. Add safety:
+   - no withdrawals permission required
+   - default MEXC trade size max 2 USDT
+   - do not trade if USDT balance < 5
+   - do not market-buy symbols with volatility > 120% or 24h change < -35%
+7. Do NOT remove Binance support.
+8. Do NOT expose API keys in logs.
+9. Start with DRY-RUN/Test mode for MEXC order functions, then provide one explicit switch to enable live MEXC orders.
+
+Important existing files:
+- `bot.py`
+- `dashboard.py`
+- `exchanges/binance.py`
+- `exchanges/base.py`
+- `mexc_scanner.py`
+- `mexc_balance.py`
+- `data/.mexc_creds.json`
+- `data/multi_exchange_opportunities.json`
+- `data/settings.json`
+
+First task:
+Inspect `exchanges/base.py`, `exchanges/binance.py`, `bot.py`, and `dashboard.py`.
+Then implement `exchanges/mexc.py` and show the minimal diff needed to let `create_bot()` use MEXC safely.

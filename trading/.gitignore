@@ -5,4 +5,9 @@ data/trades/
 
 # LIVE API credentials — never commit secrets.
 data/.binance_creds.json
+data/.mexc_creds.json
 data/aggressive_mode.json
+
+# Scanner / multi-exchange runtime output (rewritten constantly).
+data/mexc_balance.json
+data/multi_exchange_opportunities.json

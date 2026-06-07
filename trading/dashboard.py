@@ -612,6 +612,14 @@ def _init():
         "show_stoch":          True,
         "show_old_trades":     True,
         "show_sl_tp":          True,
+        # ── Multi-exchange + scanner (June 2026) ─────────────────────────────
+        # Execution venue: "binance" (default, unchanged) | "mexc" | "multi".
+        # MEXC stays DRY-RUN until the operator explicitly flips mexc_live_orders.
+        # use_scanner_symbols=ON makes the bot trade the scanner's top picks
+        # (scoped to the active venue) instead of the static BTC/ETH/SOL set.
+        "exchange_mode":       "binance",
+        "mexc_live_orders":    False,
+        "use_scanner_symbols": False,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -688,6 +696,28 @@ _refresh_ms = max(5, int(st.session_state.get("refresh_secs", 5))) * 1000
 st_autorefresh(interval=_refresh_ms, key="alphatrade_autorefresh", limit=None)
 
 
+def _effective_bot_symbols(fallback):
+    """Resolve the symbol set the bot should trade.
+
+    When `use_scanner_symbols` is ON, use the scanner's top picks scoped to the
+    active execution venue (`exchange_mode`). Falls back to `fallback` (the
+    configured/static active_symbols) whenever the scanner has no output yet, so
+    the bot never starts with an empty symbol list.
+    """
+    if not st.session_state.get("use_scanner_symbols", False):
+        return fallback
+    try:
+        import bot as _bm
+        syms = _bm.resolve_scanner_symbols(
+            st.session_state.get("exchange_mode", "binance"),
+            top_n=_bm.MAX_ACTIVE_SYMBOLS,
+        )
+        return syms or fallback
+    except Exception as _e:  # noqa: BLE001
+        print(f"[BOT] scanner symbol resolution failed: {_e}", flush=True)
+        return fallback
+
+
 def _maybe_resume_bot():
     """If `bot_was_running` was persisted (user had bot ON before the server
     restarted) AND we just auto-reconnected the LIVE client, rebuild + start
@@ -709,6 +739,7 @@ def _maybe_resume_bot():
     if st.session_state.get("_user_stopped_bot"):
         return
     syms = cfg.get("active_symbols") or st.session_state.active_symbols
+    syms = _effective_bot_symbols(syms)
     if not syms:
         return
     # Rebuild per-symbol risk managers from persisted overrides
@@ -731,6 +762,8 @@ def _maybe_resume_bot():
             initial_balance   = st.session_state.initial_balance,
             ai_assist         = True,                 # ACTIVE SCALPER — always on
             ai_aggressiveness = "Active Scalper",     # ignored — single mode
+            exchange_mode     = st.session_state.get("exchange_mode", "binance"),
+            mexc_live_orders  = bool(st.session_state.get("mexc_live_orders", False)),
             manage_manual_trades = bool(getattr(st.session_state.global_risk,
                                                 "manage_manual_trades", False)),
         )
@@ -754,6 +787,7 @@ if not st.session_state.get("_settings_loaded"):
         "threshold", "initial_balance", "manual_amount",
         "refresh_secs", "tg_enabled", "tg_token", "tg_chat_id",
         "active_symbols", "bot_was_running",
+        "exchange_mode", "mexc_live_orders", "use_scanner_symbols",
         "ai_assist", "ai_aggressiveness", "aggressive_mode",
         # Chart indicator toggles
         "show_ema", "show_volume", "show_rsi", "show_macd",
@@ -2001,6 +2035,34 @@ with st.sidebar:
         if _cur is not None:
             _kp = (getattr(_cur, "api_key", "") or "")[:6]
             st.caption(f"🔑 Key `{_kp}…` · 🌐 `api.binance.com`")
+
+        # ── MEXC balance (shown when MEXC routing is active) ──────────────────
+        if st.session_state.get("exchange_mode") in ("mexc", "multi"):
+            _mexc_live = bool(st.session_state.get("mexc_live_orders", False))
+            _mexc_tag = ("⚠️ LIVE" if _mexc_live else "🔒 DRY-RUN")
+            try:
+                from exchanges.mexc import (
+                    MexcExchange as _MX, MexcClient as _MXC,
+                    load_mexc_credentials as _load_mx_creds,
+                )
+                _mx_creds = _load_mx_creds()
+                if not _mx_creds:
+                    st.caption(f"🔵 MEXC ({_mexc_tag}) — no MEXC keys saved "
+                               "(save `data/.mexc_creds.json` to show balance).")
+                else:
+                    _mx = _MX(client=_MXC(*_mx_creds), live_orders=_mexc_live)
+                    _mxb = _mx.get_balance("USDT")
+                    _mx_total = float(_mxb.get("total", 0.0))
+                    _mx_free  = float(_mxb.get("free", 0.0))
+                    _mx_lock  = float(_mxb.get("locked", 0.0))
+                    st.markdown(f"""
+<div style="background:#0a1020;border:1px solid #3b82f644;border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+  <div style="font-size:9px;color:#3b82f6;font-weight:700;letter-spacing:.1em;margin-bottom:4px;">MEXC · {_mexc_tag}</div>
+  <div style="font-size:18px;font-weight:700;color:#f0f6fc;font-family:'JetBrains Mono',monospace;">${_mx_total:,.2f} <span style="font-size:11px;color:#6e7681;">USDT total</span></div>
+  <div style="font-size:10px;color:#8b949e;margin-top:4px;font-family:'JetBrains Mono',monospace;">free ${_mx_free:,.2f} · locked ${_mx_lock:,.2f}</div>
+</div>""", unsafe_allow_html=True)
+            except Exception as _mxe:
+                st.caption(f"🔵 MEXC ({_mexc_tag}) — balance unavailable: {_mxe}")
         _dc1, _dc2 = st.columns(2)
         with _dc1:
             if st.button("🔌 Disconnect", width="stretch",
@@ -2244,14 +2306,15 @@ with st.sidebar:
                 st.error("Connect to Binance first — LIVE bot requires API keys.")
             else:
                 # Build per-symbol risk managers from overrides (fallback = shared)
+                _eff_syms = _effective_bot_symbols(st.session_state.active_symbols)
                 _per_sym_rm = {}
-                for _s in st.session_state.active_symbols:
+                for _s in _eff_syms:
                     _ov = st.session_state.per_symbol_risk.get(_s)
                     _per_sym_rm[_s] = RiskManager(_ov) if _ov else st.session_state.risk_manager
                 _global_rm = GlobalRiskManager(st.session_state.global_risk)
                 b = bot_module.create_bot(
                     client=c,
-                    symbols=st.session_state.active_symbols,
+                    symbols=_eff_syms,
                     per_symbol_risk=_per_sym_rm,
                     global_risk=_global_rm,
                     strategy=st.session_state.strategy,
@@ -2264,6 +2327,8 @@ with st.sidebar:
                     initial_balance=st.session_state.initial_balance,
                     ai_assist=True,                       # ACTIVE SCALPER — always on
                     ai_aggressiveness="Active Scalper",   # ignored — single mode
+                    exchange_mode=st.session_state.get("exchange_mode", "binance"),
+                    mexc_live_orders=bool(st.session_state.get("mexc_live_orders", False)),
                     manage_manual_trades=bool(getattr(st.session_state.global_risk,
                                                       "manage_manual_trades", False)),
                 )
@@ -2713,6 +2778,84 @@ with st.sidebar:
         else:
             st.caption("⚠️ Bot WILL auto-close your manual trades on SL/TP/exit.")
 
+    # ── Multi-exchange + symbol scanner ───────────────────────────────────────
+    with st.expander("🔭 Scanner & Exchange (Binance + MEXC)", expanded=False):
+        st.caption("Discover the best USDT-spot pairs across Binance + MEXC and "
+                   "route execution per venue. MEXC stays in DRY-RUN until you "
+                   "explicitly enable live MEXC orders.")
+        _mode_opts = ["binance", "mexc", "multi"]
+        _cur_mode = st.session_state.get("exchange_mode", "binance")
+        st.session_state.exchange_mode = st.radio(
+            "Execution exchange",
+            _mode_opts,
+            index=_mode_opts.index(_cur_mode) if _cur_mode in _mode_opts else 0,
+            format_func=lambda m: {
+                "binance": "🟡 Binance (LIVE)",
+                "mexc": "🔵 MEXC",
+                "multi": "🌐 Multi (routes to Binance for now)",
+            }[m],
+            help="Which venue the bot places orders on. 'multi' currently falls "
+                 "back to Binance execution until cross-exchange routing lands.",
+        )
+        if st.session_state.exchange_mode == "mexc":
+            st.session_state.mexc_live_orders = st.checkbox(
+                "⚠️ Enable LIVE MEXC orders (max 2 USDT/trade)",
+                value=bool(st.session_state.get("mexc_live_orders", False)),
+                key="cb_mexc_live",
+                help="OFF (default): MEXC orders are simulated (DRY-RUN) — nothing "
+                     "is sent. ON: real MEXC orders, hard-capped at 2 USDT/buy and "
+                     "blocked if MEXC USDT balance < 5.",
+            )
+            if st.session_state.mexc_live_orders:
+                st.caption("⚠️ LIVE MEXC orders ON — capped at 2 USDT/trade.")
+            else:
+                st.caption("🔒 MEXC in DRY-RUN — no real orders sent.")
+        else:
+            st.session_state.mexc_live_orders = False
+
+        st.session_state.use_scanner_symbols = st.checkbox(
+            "Trade scanner-selected symbols (not fixed BTC/ETH/SOL)",
+            value=bool(st.session_state.get("use_scanner_symbols", False)),
+            key="cb_use_scanner",
+            help="ON: when you (re)start the bot it trades the scanner's top picks "
+                 "for the active exchange. Existing strategy + risk gates still "
+                 "apply to every symbol. OFF: keep your configured active symbols.",
+        )
+
+        if st.button("🔄 Refresh scan now", width="stretch", key="btn_scan_now"):
+            try:
+                import scanner as _sc
+                with st.spinner("Scanning Binance + MEXC…"):
+                    _sc.scan(write=True)
+                st.success("Scan updated.")
+            except Exception as _e:  # noqa: BLE001
+                st.error(f"Scan failed: {_e}")
+
+        try:
+            import scanner as _sc
+            _opps = _sc.load_opportunities()
+        except Exception:
+            _opps = []
+        if _opps:
+            _venue = st.session_state.exchange_mode
+            _scoped = [o for o in _opps
+                       if _venue == "multi" or o.get("exchange") ==
+                       ("binance" if _venue == "multi" else _venue)]
+            st.caption(f"Top opportunities ({len(_opps)} total · showing "
+                       f"{'all venues' if _venue=='multi' else _venue}):")
+            _rows = [{
+                "Exch": o.get("exchange", "—"),
+                "Symbol": o.get("symbol", "—"),
+                "Price": f"${o.get('price', 0):,.6g}",
+                "Vol%": f"{o.get('volatility', 0):.1f}",
+                "Chg%": f"{o.get('change', 0):+.1f}",
+                "Score": o.get("score", 0),
+            } for o in (_scoped or _opps)[:15]]
+            st.dataframe(pd.DataFrame(_rows), width="stretch",
+                         hide_index=True, height=240)
+        else:
+            st.caption("No scan yet — click **Refresh scan now**.")
+
     # ── Per-symbol risk overrides ─────────────────────────────────────────────
     with st.expander("🎯 Per-symbol risk overrides", expanded=False):
         st.caption("Leave OFF to use the shared risk settings above.")
@@ -3050,13 +3193,14 @@ with st.container():
                     if c is None:
                         st.error("Connect to Binance first — LIVE bot requires API keys.")
                     else:
+                        _eff_syms2 = _effective_bot_symbols(st.session_state.active_symbols)
                         _per_sym_rm2 = {}
-                        for _s in st.session_state.active_symbols:
+                        for _s in _eff_syms2:
                             _ov = st.session_state.per_symbol_risk.get(_s)
                             _per_sym_rm2[_s] = RiskManager(_ov) if _ov else st.session_state.risk_manager
                         b = bot_module.create_bot(
                             client=c,
-                            symbols=st.session_state.active_symbols,
+                            symbols=_eff_syms2,
                             per_symbol_risk=_per_sym_rm2,
                             global_risk=GlobalRiskManager(st.session_state.global_risk),
                             strategy=st.session_state.strategy,
@@ -3067,6 +3211,8 @@ with st.container():
                             initial_balance=st.session_state.initial_balance,
                             ai_assist=bool(st.session_state.get("ai_assist", False)),
                             ai_aggressiveness="Active Scalper",   # ACTIVE SCALPER MODE — ignored
+                            exchange_mode=st.session_state.get("exchange_mode", "binance"),
+                            mexc_live_orders=bool(st.session_state.get("mexc_live_orders", False)),
                             manage_manual_trades=bool(getattr(st.session_state.global_risk,
                                                               "manage_manual_trades", False)),
                         )
@@ -3837,6 +3983,7 @@ with st.container():
                     pct = t.get("profit_loss_pct")
                     rows.append({
                         "ID":       t.get("id","—"),
+                        "Exch":     (t.get("exchange") or "binance"),
                         "Coin":     t.get("coin","—"),
                         "Type":     "🤖 Bot" if t.get("type")=="bot" else "👤 Manual",
                         "Side":     t.get("side","—"),
@@ -4237,6 +4384,9 @@ def _collect_settings_snapshot() -> dict:
         "symbol":          st.session_state.symbol,
         "active_symbols":  st.session_state.active_symbols,
         "bot_was_running": bool(st.session_state.get("bot_was_running", False)),
+        "exchange_mode":       st.session_state.get("exchange_mode", "binance"),
+        "mexc_live_orders":    bool(st.session_state.get("mexc_live_orders", False)),
+        "use_scanner_symbols": bool(st.session_state.get("use_scanner_symbols", False)),
         "strategy":        st.session_state.strategy,
         "interval":        st.session_state.interval,
         "check_every":     st.session_state.check_every,
