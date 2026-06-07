@@ -584,9 +584,10 @@ def _init():
         "active_symbols":   ["BTCUSDT", "ETHUSDT", "SOLUSDT"], # symbols the bot trades on (max 3)
         "per_symbol_risk":  {},          # {symbol: RiskSettings} — overrides global risk
         "global_risk":      None,        # GlobalRiskSettings (built lazily below)
-        # ACTIVE SCALPER MODE — single hardcoded profile (no dropdowns).
-        "strategy":         "Active Scalper",
-        "interval":         "1m",                # 1-minute candles
+        # V2 @ 4h is the DEFAULT live strategy (validated, fee-aware). The 1m
+        # dip ("Market Low") path is still selectable but is no longer default.
+        "strategy":         "EMA_MACD_RSI_VOLUME_V2",
+        "interval":         "4h",                # V2 is validated at 4h ONLY
         "check_every":      2,                   # 2s tick — ACTIVE SCALPER spec
         "threshold":        0.01,                # 0.01% — ACTIVE SCALPER spec
         "risk":             RiskSettings(),
@@ -808,11 +809,12 @@ if not st.session_state.get("_settings_loaded"):
     # The persisted settings.json on disk may pre-date the FULL RESET (e.g.
     # contains BTCUSDT only, 15s tick, 0.05% threshold, 50/100 risk). The
     # operator has no UI to change these in the new build, so override.
-    # EXCEPTION: the operator MAY now opt into EMA_MACD_RSI_VOLUME_V2 from the
-    # sidebar — if that was persisted, keep it. Anything else snaps back to
-    # the default Market Low live strategy.
-    if st.session_state.get("strategy") != "EMA_MACD_RSI_VOLUME_V2":
-        st.session_state.strategy       = "Market Low"
+    # V2 @ 4h is now the DEFAULT live strategy (research-validated, fee-aware).
+    # The 1m "Market Low" dip path lost money after fees and is no longer the
+    # default — it is still opt-in from the sidebar. Honor an EXPLICIT Market
+    # Low choice; everything else (legacy "Active Scalper", empty, or V2) → V2.
+    if st.session_state.get("strategy") != "Market Low":
+        st.session_state.strategy       = "EMA_MACD_RSI_VOLUME_V2"
     # Interval: V2 is research-validated at 4h ONLY — keep 4h when it's selected;
     # every other (scalping) strategy snaps back to 1m.
     if st.session_state.get("strategy") == "EMA_MACD_RSI_VOLUME_V2":
@@ -2141,20 +2143,20 @@ with st.sidebar:
                              if st.session_state.interval in INTERVALS else 2)
     st.session_state.interval = intv_sel
 
-    # Active strategy. The default live strategy is the Market Low
-    # (DipLiveEngine). Task #19 adds the research-validated EMA_MACD_RSI_VOLUME_V2
-    # @ 4h (ETH only) as a SECOND, gated live path (StrategyLiveEngine). The
-    # operator picks which one runs; create_bot() routes V2 → strategy_mode and
-    # everything else → the dip live path.
-    _strat_opts = ["Market Low", "EMA_MACD_RSI_VOLUME_V2"]
-    _strat_cur  = st.session_state.get("strategy", "Market Low")
+    # Active strategy. The DEFAULT live strategy is now the research-validated
+    # EMA_MACD_RSI_VOLUME_V2 @ 4h (gated StrategyLiveEngine, BTC/ETH/SOL). The
+    # legacy 1m dip "Market Low" (DipLiveEngine) is still selectable but is no
+    # longer the default — it lost money after fees. create_bot() routes V2 →
+    # strategy_mode and everything else → the dip live path.
+    _strat_opts = ["EMA_MACD_RSI_VOLUME_V2", "Market Low"]
+    _strat_cur  = st.session_state.get("strategy", "EMA_MACD_RSI_VOLUME_V2")
     if _strat_cur not in _strat_opts:
-        _strat_cur = "Market Low"
+        _strat_cur = "EMA_MACD_RSI_VOLUME_V2"
     strat_pick = st.selectbox(
         "Live strategy", _strat_opts,
         index=_strat_opts.index(_strat_cur),
-        help="Market Low is the default live path. EMA_MACD_RSI_VOLUME_V2 is "
-             "research-validated at 4h (ETH only).",
+        help="EMA_MACD_RSI_VOLUME_V2 @ 4h is the default research-validated live "
+             "path (BTC/ETH/SOL). Market Low is the legacy 1m dip (opt-in).",
     )
     st.session_state.strategy = strat_pick
     if strat_pick == "EMA_MACD_RSI_VOLUME_V2":
@@ -2173,7 +2175,7 @@ with st.sidebar:
         )
         # ── Live research-validation banner (Task #19) ──────────────────────
         # Show which symbols the research allowlist authorizes for V2/4h. Only
-        # validated symbols (ETH today) will place LIVE orders; the rest are
+        # validated symbols (BTC/ETH/SOL) will place LIVE orders; the rest are
         # blocked fail-closed by is_strategy_validated in the live engine.
         try:
             from research import is_strategy_validated as _isv
@@ -2254,7 +2256,9 @@ with st.sidebar:
                     global_risk=_global_rm,
                     strategy=st.session_state.strategy,
                     risk_manager=st.session_state.risk_manager,
-                    interval=intv_sel,
+                    # Use the COERCED interval (V2 forces 4h above) — not the raw
+                    # selectbox value, which may still be a stale non-4h pick.
+                    interval=st.session_state.interval,
                     check_every=ck_val,
                     threshold=thr_val / 100,
                     initial_balance=st.session_state.initial_balance,

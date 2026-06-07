@@ -6,8 +6,8 @@
     "SOLUSDT"
   ],
   "bot_was_running": false,
-  "strategy": "Market Low",
-  "interval": "1m",
+  "strategy": "EMA_MACD_RSI_VOLUME_V2",
+  "interval": "4h",
   "check_every": 8,
   "threshold": 0.01,
   "initial_balance": 1000.0,

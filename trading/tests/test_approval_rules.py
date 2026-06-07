@@ -212,21 +212,23 @@ def test_multiyear_carry_cells_present_and_quarantined_from_edge():
     assert all(e.get("kind") != "carry" for e in allow["validated"])
 
 
-# ───────────────── 5: live allowlist = ETH V2 @ 4h only ──────────────────────
-def test_live_allowlist_snapshot_is_eth_v2_only():
-    """The committed allowlist (what the live bot reads on boot) authorizes ONLY
-    ETH V2 @ 4h — the lone deep-validation ROBUST cell. The canonical sweep
-    ACCEPTs the whole BTC/ETH/SOL basket, but BTC/SOL must stay off the live gate."""
+# ──────────── 5: live allowlist = V2 @ 4h on BTC/ETH/SOL basket ──────────────
+def test_live_allowlist_snapshot_is_v2_btc_eth_sol():
+    """The committed allowlist (what the live bot reads on boot) authorizes V2 @ 4h
+    on the BTC/ETH/SOL basket — each symbol shows POSITIVE after-fee expectancy on
+    the ~4y window (SOL strongest, BTC marginal). The gate stays symbol-scoped and
+    fail-closed: only these three trade, everything else is blocked."""
     doc = json.load(open(ALLOWLIST))
     assert len(doc["validated"]) == 1
     e = doc["validated"][0]
     assert e["strategy"] == "EMA_MACD_RSI_VOLUME_V2"
     assert e["interval"] == "4h"
-    assert e["symbols"] == ["ETHUSDT"]
-    # the gate (reading the committed allowlist) enforces the symbol scope
-    assert R.is_strategy_validated("EMA_MACD_RSI_VOLUME_V2", "4h", "ETHUSDT")[0] is True
-    for off in ("BTCUSDT", "SOLUSDT"):
-        assert R.is_strategy_validated("EMA_MACD_RSI_VOLUME_V2", "4h", off)[0] is False
+    assert e["symbols"] == ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+    # the gate (reading the committed allowlist) authorizes the basket
+    for sym in ("BTCUSDT", "ETHUSDT", "SOLUSDT"):
+        assert R.is_strategy_validated("EMA_MACD_RSI_VOLUME_V2", "4h", sym)[0] is True
+    # off-basket symbols stay blocked (fail-closed)
+    assert R.is_strategy_validated("EMA_MACD_RSI_VOLUME_V2", "4h", "XRPUSDT")[0] is False
     # a symbol-less query never matches a symbol-scoped entry (fail-safe)
     assert R.is_strategy_validated("EMA_MACD_RSI_VOLUME_V2", "4h")[0] is False
 

@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-06-06T05:39:46.643785+00:00",
+  "updated_at": "2026-06-07T12:12:31.728117+00:00",
   "fee_pct_per_side": 0.1,
   "slippage_pct_per_side": 0.02,
   "validated": [
@@ -17,7 +17,9 @@
         "max_red": 0
       },
       "symbols": [
-        "ETHUSDT"
+        "BTCUSDT",
+        "ETHUSDT",
+        "SOLUSDT"
       ],
       "net_expectancy_pct": 0.2299363626258458,
       "profit_factor": 1.1271648451646736,

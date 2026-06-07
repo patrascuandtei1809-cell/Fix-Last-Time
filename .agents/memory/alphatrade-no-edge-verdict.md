@@ -1,7 +1,22 @@
 ---
 name: AlphaTrade after-fee edge verdict
-description: Research sweep verdict — sub-4h all fee-dead; multi-year history flips V2 @ 4h to a canonical ACCEPT, but live is symbol-scoped to the lone deep-ROBUST cell (ETH).
+description: Research sweep verdict — sub-4h all fee-dead; multi-year history flips V2 @ 4h to a canonical ACCEPT. Live = V2 @ 4h on BTC/ETH/SOL (operator-promoted from plain backtest; SOL strong, ETH ok, BTC marginal — deep validation still rates BTC/SOL only WEAK).
 ---
+
+## UPDATE — operator promoted the live allowlist to the full BTC/ETH/SOL basket (June 2026)
+The losing 1m dip ("Market Low") path is no longer the live default. V2 @ 4h is
+now THE default live strategy (cold-start + force-snap default to it; 1m dip is
+opt-in only). The live allowlist (`validated_strategies.json`) was widened from
+ETH-only to **BTCUSDT + ETHUSDT + SOLUSDT** at the operator's explicit request,
+gated on a fresh per-symbol plain backtest over ~4y (all positive after fees:
+SOL +0.66%/trade PF2.46, ETH +0.13% PF1.25, BTC +0.05% PF1.13 — BTC marginal,
+one clearly-negative WF fold). **Caveat that still stands:** this is the PLAIN
+backtest bar, NOT the stricter deep validation (Monte-Carlo + sensitivity) below,
+which rates BTC/SOL only WEAK and ETH ROBUST. The operator chose breadth over the
+deep-ROBUST-only rule. Exit policy unchanged (ATR 1.5×SL / 3.0×TP). Gate stays
+symbol-scoped + fail-closed (off-basket symbols blocked, symbol-less query never
+matches). Pinned by `test_approval_rules.py::test_live_allowlist_snapshot_is_v2_btc_eth_sol`.
+The ETH-only history below is kept for context.
 
 ## UPDATE — multi-year history flips ONE technical cell (June 2026)
 Extending the canonical sweep to ~5y (1825d) on 1h/4h (via per-interval
