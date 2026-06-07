@@ -1,0 +1,100 @@
+I want you to perform a complete audit of my crypto trading bot project.
+
+Please analyze the entire project, including all source code, files, dependencies, infrastructure, configurations, databases, APIs, deployment settings, and integrations.
+
+My project has been developed across multiple platforms, including Replit, Render, DigitalOcean, GitHub, VPS environments, and AI-assisted development with Claude.
+
+I want a full professional assessment of the current state of the project.
+
+Please provide:
+
+1. A complete overview of the current architecture.
+2. What is currently working correctly.
+3. What is partially implemented.
+4. What is broken or not functioning as intended.
+5. Any bugs, security vulnerabilities, performance bottlenecks, or technical debt.
+6. Any unnecessary, duplicate, or obsolete code.
+7. Opportunities to improve performance, scalability, reliability, and maintainability.
+
+Please evaluate whether the bot currently has or needs:
+
+* Risk management system
+* Dynamic position sizing
+* Stop loss management
+* Take profit management
+* Trailing stop logic
+* Drawdown protection
+* Portfolio management
+* Capital allocation logic
+* Market regime detection
+* Volatility filters
+* Liquidity filters
+* Volume filters
+* Multi-timeframe analysis
+* Multi-asset support
+* Multi-exchange support
+* Paper trading mode
+* Backtesting framework
+* Walk-forward testing
+* Monte Carlo testing
+* Live trading readiness
+
+Please review the current trading strategy and determine:
+
+* What type of strategy it is
+* Its strengths and weaknesses
+* Which market conditions it performs best in
+* Which market conditions it should avoid
+* Whether it is suitable for BTC, ETH, SOL, mid-cap altcoins, meme coins, or newly listed tokens
+
+Please assess exchange compatibility and readiness for:
+
+* Binance
+* MEXC
+* Bitget
+* Bybit
+* Gate.io
+
+Please verify:
+
+* API implementation quality
+* Rate limit handling
+* Error handling
+* Automatic recovery systems
+* Reconnection logic
+* Logging
+* Monitoring
+* Alert systems
+* Database structure
+* Data integrity
+* Security best practices
+* API key protection
+* Secret management
+
+I also want you to evaluate whether the bot can be upgraded to automatically scan hundreds or thousands of crypto assets and select trading opportunities based on:
+
+* Volume growth
+* Liquidity
+* Volatility
+* Spread
+* Momentum
+* Market capitalization
+* Listing age
+* Relative strength
+
+Please identify everything missing to make this a professional-grade trading system in 2026.
+
+Finally, provide:
+
+1. A complete list of issues found.
+2. A complete list of recommended improvements.
+3. A prioritized implementation roadmap.
+4. A 30-day plan.
+5. A 60-day plan.
+6. A 90-day plan.
+7. The highest-impact improvements for profitability.
+8. The highest-impact improvements for risk reduction.
+9. The estimated difficulty of each improvement.
+10. The estimated benefit of each improvement.
+
+Do not make assumptions. Inspect the actual codebase, infrastructure, configuration, and deployment before drawing conclusions.
