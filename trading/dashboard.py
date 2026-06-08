@@ -584,10 +584,10 @@ def _init():
         "active_symbols":   ["BTCUSDT", "ETHUSDT", "SOLUSDT"], # symbols the bot trades on (max 3)
         "per_symbol_risk":  {},          # {symbol: RiskSettings} — overrides global risk
         "global_risk":      None,        # GlobalRiskSettings (built lazily below)
-        # V2 @ 4h is the DEFAULT live strategy (validated, fee-aware). The 1m
-        # dip ("Market Low") path is still selectable but is no longer default.
-        "strategy":         "EMA_MACD_RSI_VOLUME_V2",
-        "interval":         "4h",                # V2 is validated at 4h ONLY
+        # SCANNER MARKET-LOW on MEXC is the ONLY live auto-trade strategy.
+        # EMA/MACD/V2 are removed from auto-trading per the final spec.
+        "strategy":         "Market Low",
+        "interval":         "1m",                # Market-Low rule runs on 1m
         "check_every":      2,                   # 2s tick — ACTIVE SCALPER spec
         "threshold":        0.01,                # 0.01% — ACTIVE SCALPER spec
         "risk":             RiskSettings(),
@@ -617,7 +617,9 @@ def _init():
         # MEXC stays DRY-RUN until the operator explicitly flips mexc_live_orders.
         # use_scanner_symbols=ON makes the bot trade the scanner's top picks
         # (scoped to the active venue) instead of the static BTC/ETH/SOL set.
-        "exchange_mode":       "multi",
+        # MEXC = sole auto-trading venue. Binance is DISPLAY/RECONCILIATION ONLY
+        # and must NOT auto-trade. MEXC stays DRY-RUN until mexc_live_orders is on.
+        "exchange_mode":       "mexc",
         "mexc_live_orders":    False,
         "use_scanner_symbols": True,
     }
@@ -714,10 +716,11 @@ def _effective_bot_plan(fallback):
     """
     if not st.session_state.get("use_scanner_symbols", False):
         return fallback, {}, False
-    mode = st.session_state.get("exchange_mode", "binance")
+    mode = st.session_state.get("exchange_mode", "mexc")
     try:
         import bot as _bm
-        opps = _bm.resolve_scanner_opportunities(mode, top_n=_bm.MAX_ACTIVE_SYMBOLS)
+        # Final spec: scanner selects MAX 3 active trade candidates.
+        opps = _bm.resolve_scanner_opportunities(mode, top_n=3)
     except Exception as _e:  # noqa: BLE001
         print(f"[BOT] scanner opportunity resolution failed: {_e}", flush=True)
         opps = []
@@ -784,7 +787,7 @@ def _maybe_resume_bot():
             initial_balance   = st.session_state.initial_balance,
             ai_assist         = True,                 # ACTIVE SCALPER — always on
             ai_aggressiveness = "Active Scalper",     # ignored — single mode
-            exchange_mode     = st.session_state.get("exchange_mode", "binance"),
+            exchange_mode     = st.session_state.get("exchange_mode", "mexc"),
             mexc_live_orders  = bool(st.session_state.get("mexc_live_orders", False)),
             symbol_venues     = _venues,
             scanner_driven    = _scan_driven,
@@ -876,18 +879,16 @@ if not st.session_state.get("_settings_loaded"):
     # The persisted settings.json on disk may pre-date the FULL RESET (e.g.
     # contains BTCUSDT only, 15s tick, 0.05% threshold, 50/100 risk). The
     # operator has no UI to change these in the new build, so override.
-    # V2 @ 4h is now the DEFAULT live strategy (research-validated, fee-aware).
-    # The 1m "Market Low" dip path lost money after fees and is no longer the
-    # default — it is still opt-in from the sidebar. Honor an EXPLICIT Market
-    # Low choice; everything else (legacy "Active Scalper", empty, or V2) → V2.
-    if st.session_state.get("strategy") != "Market Low":
-        st.session_state.strategy       = "EMA_MACD_RSI_VOLUME_V2"
-    # Interval: V2 is research-validated at 4h ONLY — keep 4h when it's selected;
-    # every other (scalping) strategy snaps back to 1m.
-    if st.session_state.get("strategy") == "EMA_MACD_RSI_VOLUME_V2":
-        st.session_state.interval       = "4h"
-    else:
-        st.session_state.interval       = "1m"
+    # SCANNER MARKET-LOW on MEXC is the ONLY sanctioned live auto-trade path.
+    # EMA/MACD/V2 are removed from auto-trading per the final spec — any persisted
+    # legacy strategy/interval is force-snapped back to Market Low @ 1m.
+    st.session_state.strategy           = "Market Low"
+    st.session_state.interval           = "1m"
+    # SCANNER MARKET-LOW on MEXC is the ONLY sanctioned auto-trade venue.
+    # Force-snap exchange_mode to "mexc" on every cold start BEFORE the bot
+    # auto-resumes, so a stale/legacy persisted "binance"/"multi" can NEVER
+    # route a worker to BinanceExchange. Binance is display/reconciliation only.
+    st.session_state.exchange_mode      = "mexc"
     st.session_state.check_every        = 2
     st.session_state.threshold          = 0.01
     st.session_state.ai_assist          = True
@@ -949,6 +950,38 @@ if not st.session_state.get("_settings_loaded"):
     except Exception as _e:
         print(f"[LIVE-SETTINGS] load failed, using defaults: {_e}", flush=True)
         st.session_state.live_settings = live_settings.LiveSettings()
+
+    # ── MARKET-LOW RULE INVARIANTS (final spec) ──────────────────────────────
+    # The Scanner Market-Low rule MUST run with the trend filter ON and the
+    # volume filter active (min_volume_multiple ≥ 1.0). A stale/legacy DB row
+    # may carry trend_filter_on=False or min_volume_multiple=0.0 (filters off);
+    # force-snap them back to spec on cold start and persist the correction so
+    # the droplet self-heals on first boot after deploy. Thresholds
+    # (buy −0.05 / TP +0.60 / SL −0.30) and cooldowns stay operator-loaded.
+    try:
+        _ls = st.session_state.live_settings
+        _ls_fixed = False
+        if not bool(getattr(_ls, "trend_filter_on", False)):
+            _ls.trend_filter_on = True
+            _ls_fixed = True
+        if float(getattr(_ls, "min_volume_multiple", 0.0) or 0.0) < 1.0:
+            _ls.min_volume_multiple = 1.0
+            _ls_fixed = True
+        if not bool(getattr(_ls, "volume_filter_on", False)):
+            _ls.volume_filter_on = True
+            _ls_fixed = True
+        if _ls_fixed:
+            try:
+                live_settings.save_settings(
+                    _ls, actor="market-low-invariant",
+                    note="force trend+volume filters ON per final spec")
+            except Exception:
+                pass
+            print("[LIVE-SETTINGS] force-snapped Market-Low filters: "
+                  "trend_filter_on=True min_volume_multiple>=1.0 "
+                  "volume_filter_on=True", flush=True)
+    except Exception as _e:
+        print(f"[LIVE-SETTINGS] filter invariant snap failed: {_e}", flush=True)
 
     st.session_state._settings_loaded = True
     if _persisted:
@@ -1595,9 +1628,9 @@ if bot_inst is not None and getattr(bot_inst, "strategy_mode", False):
     _live_strat = getattr(bot_inst, "live_strategy_name", None) or "EMA_MACD_RSI_VOLUME_V2"
     _live_tf    = getattr(bot_inst, "live_strategy_interval", None) or "4h"
 elif bot_inst is not None and getattr(bot_inst, "dip_mode", False):
-    _live_path, _live_strat, _live_tf = "dip", "Market Low (20-Min Dip)", "1m"
+    _live_path, _live_strat, _live_tf = "dip", "Scanner Market-Low on MEXC", "1m"
 elif st.session_state.get("strategy") == "Market Low":
-    _live_path, _live_strat, _live_tf = "dip", "Market Low (20-Min Dip)", "1m"
+    _live_path, _live_strat, _live_tf = "dip", "Scanner Market-Low on MEXC", "1m"
 else:
     _live_path  = "strategy"
     _live_strat = st.session_state.get("strategy") or "EMA_MACD_RSI_VOLUME_V2"
@@ -2263,85 +2296,24 @@ with st.sidebar:
                              if st.session_state.interval in INTERVALS else 2)
     st.session_state.interval = intv_sel
 
-    # Active strategy. The DEFAULT live strategy is now the research-validated
-    # EMA_MACD_RSI_VOLUME_V2 @ 4h (gated StrategyLiveEngine, BTC/ETH/SOL). The
-    # legacy 1m dip "Market Low" (DipLiveEngine) is still selectable but is no
-    # longer the default — it lost money after fees. create_bot() routes V2 →
-    # strategy_mode and everything else → the dip live path.
-    _strat_opts = ["EMA_MACD_RSI_VOLUME_V2", "Market Low"]
-    _strat_cur  = st.session_state.get("strategy", "EMA_MACD_RSI_VOLUME_V2")
-    if _strat_cur not in _strat_opts:
-        _strat_cur = "EMA_MACD_RSI_VOLUME_V2"
-    strat_pick = st.selectbox(
-        "Live strategy", _strat_opts,
-        index=_strat_opts.index(_strat_cur),
-        help="EMA_MACD_RSI_VOLUME_V2 @ 4h is the default research-validated live "
-             "path (BTC/ETH/SOL). Market Low is the legacy 1m dip (opt-in).",
+    # Active strategy — SCANNER MARKET-LOW on MEXC is the ONLY live auto-trade
+    # path. EMA/MACD/V2 are removed from auto-trading per the final spec. The
+    # ungated DipLiveEngine executes the Market-Low rule on scanner-selected MEXC
+    # symbols. No strategy selectbox: there is only one sanctioned live rule.
+    st.session_state.strategy = "Market Low"
+    st.markdown(
+        '<div style="background:#15233a;border:1px solid #1f6feb;border-radius:6px;'
+        'padding:8px 10px;margin:4px 0;color:#a9c7ff;font-weight:700;font-size:13px;">'
+        '🛰️ SCANNER MARKET-LOW STRATEGY ON MEXC'
+        '<div style="font-size:10px;font-weight:600;color:#79c0ff;'
+        'margin-top:4px;letter-spacing:0.5px;">'
+        'Scanner ranks the MEXC spot universe · feeds max 3 into the Market-Low rule'
+        '</div></div>',
+        unsafe_allow_html=True,
     )
-    st.session_state.strategy = strat_pick
-    if strat_pick == "EMA_MACD_RSI_VOLUME_V2":
-        # Research-validated cell is V2 @ 4h ONLY — lock the interval to 4h so the
-        # live gate (is_strategy_validated) can authorize it.
-        st.session_state.interval = "4h"
-        st.markdown(
-            '<div style="background:#15233a;border:1px solid #1f6feb;border-radius:6px;'
-            'padding:8px 10px;margin:4px 0;color:#a9c7ff;font-weight:700;font-size:13px;">'
-            '📈 EMA · MACD · RSI · VOLUME V2 · 4h'
-            '<div style="font-size:10px;font-weight:600;color:#79c0ff;'
-            'margin-top:4px;letter-spacing:0.5px;">'
-            'Research-validated · trend + momentum + volume · ATR SL/TP'
-            '</div></div>',
-            unsafe_allow_html=True,
-        )
-        # ── Live research-validation banner (Task #19) ──────────────────────
-        # Show which symbols the research allowlist authorizes for V2/4h. Only
-        # validated symbols (BTC/ETH/SOL) will place LIVE orders; the rest are
-        # blocked fail-closed by is_strategy_validated in the live engine.
-        try:
-            from research import is_strategy_validated as _isv
-            _ok_syms, _blocked_syms = [], []
-            for _s in (st.session_state.get("active_symbols")
-                       or ["BTCUSDT", "ETHUSDT", "SOLUSDT"]):
-                _allow, _ = _isv("EMA_MACD_RSI_VOLUME_V2", "4h", _s)
-                (_ok_syms if _allow else _blocked_syms).append(
-                    _s.replace("USDT", ""))
-            _ok_txt = (("✅ Enabled: " + ", ".join(_ok_syms))
-                       if _ok_syms else "⚠️ No symbol validated yet")
-            _bl_txt = (" · 🔒 Blocked: " + ", ".join(_blocked_syms)
-                       if _blocked_syms else "")
-            _bg = "#11251a" if _ok_syms else "#2d1a1a"
-            _bd = "#2ea043" if _ok_syms else "#f85149"
-            _fg = "#7ee787" if _ok_syms else "#ff9c9c"
-            st.markdown(
-                f'<div style="background:{_bg};border:1px solid {_bd};'
-                f'border-radius:6px;padding:7px 10px;margin:4px 0;color:{_fg};'
-                f'font-weight:700;font-size:12px;">{_ok_txt}{_bl_txt}'
-                '<div style="font-size:10px;font-weight:600;color:#8b949e;'
-                'margin-top:3px;">Live trades only on research-validated symbols. '
-                'Risk caps · emergency stop · manual-trade protection still apply.'
-                '</div></div>',
-                unsafe_allow_html=True,
-            )
-        except Exception:
-            pass
-        st.caption("LONG when EMA50>EMA200, MACD hist>0, RSI>50, volume>1.2×20-avg. "
-                   "Stop-loss / take-profit sized from ATR. Needs ≥200 candles — "
-                   "uses a deeper kline fetch. Validated at 4h only.")
-    else:
-        st.session_state.strategy = "Market Low"
-        st.markdown(
-            '<div style="background:#15233a;border:1px solid #1f6feb;border-radius:6px;'
-            'padding:8px 10px;margin:4px 0;color:#a9c7ff;font-weight:700;font-size:13px;">'
-            '💧 MARKET LOW'
-            '<div style="font-size:10px;font-weight:600;color:#79c0ff;'
-            'margin-top:4px;letter-spacing:0.5px;">'
-            'The only live strategy · tune it in the 💧 Market Low panel below'
-            '</div></div>',
-            unsafe_allow_html=True,
-        )
-        st.caption("BUY on a market-low setup with volume + trend confirmation, sell at "
-                   "target profit, stop-loss to cap the downside. Configure every "
-                   "number in the 💧 Market Low Strategy panel.")
+    st.caption("BUY when market-low change ≤ −0.05% with volume + trend "
+               "confirmation, SELL at +0.60%, STOP at −0.30%, 1-min cooldown. "
+               "MEXC is the trading venue; Binance is display/reconciliation only.")
 
     st.markdown('<hr class="s-div"/>', unsafe_allow_html=True)
 
@@ -2386,7 +2358,7 @@ with st.sidebar:
                     initial_balance=st.session_state.initial_balance,
                     ai_assist=True,                       # ACTIVE SCALPER — always on
                     ai_aggressiveness="Active Scalper",   # ignored — single mode
-                    exchange_mode=st.session_state.get("exchange_mode", "binance"),
+                    exchange_mode=st.session_state.get("exchange_mode", "mexc"),
                     mexc_live_orders=bool(st.session_state.get("mexc_live_orders", False)),
                     symbol_venues=_eff_venues,
                     scanner_driven=_eff_scan,
@@ -2842,38 +2814,34 @@ with st.sidebar:
 
     # ── Multi-exchange + symbol scanner ───────────────────────────────────────
     with st.expander("🔭 Scanner & Exchange (Binance + MEXC)", expanded=False):
-        st.caption("Discover the best USDT-spot pairs across Binance + MEXC and "
-                   "route execution per venue. MEXC stays in DRY-RUN until you "
-                   "explicitly enable live MEXC orders.")
-        _mode_opts = ["binance", "mexc", "multi"]
-        _cur_mode = st.session_state.get("exchange_mode", "binance")
-        st.session_state.exchange_mode = st.radio(
-            "Execution exchange",
-            _mode_opts,
-            index=_mode_opts.index(_cur_mode) if _cur_mode in _mode_opts else 0,
-            format_func=lambda m: {
-                "binance": "🟡 Binance (LIVE)",
-                "mexc": "🔵 MEXC",
-                "multi": "🌐 Multi (routes to Binance for now)",
-            }[m],
-            help="Which venue the bot places orders on. 'multi' currently falls "
-                 "back to Binance execution until cross-exchange routing lands.",
+        st.caption("MEXC is the SOLE auto-trading venue. Binance is "
+                   "DISPLAY / RECONCILIATION ONLY and never auto-trades. The "
+                   "scanner ranks the MEXC spot universe and feeds the top "
+                   "picks into the Market-Low rule. MEXC stays in DRY-RUN until "
+                   "you explicitly enable live MEXC orders.")
+        # MEXC = sole auto-trading venue (final spec). Binance auto-trade is
+        # disabled by design — no UI to re-enable it (display/reconciliation only).
+        st.session_state.exchange_mode = "mexc"
+        st.markdown(
+            '<div style="background:#102132;border:1px solid #1f6feb;border-radius:6px;'
+            'padding:6px 10px;margin:2px 0 6px;color:#79b0ff;font-weight:700;'
+            'font-size:12px;">🔵 Execution venue: MEXC '
+            '<span style="color:#6e7681;font-weight:600;">· Binance auto-trade '
+            'DISABLED (display/reconciliation only)</span></div>',
+            unsafe_allow_html=True,
         )
-        if st.session_state.exchange_mode == "mexc":
-            st.session_state.mexc_live_orders = st.checkbox(
-                "⚠️ Enable LIVE MEXC orders (max 2 USDT/trade)",
-                value=bool(st.session_state.get("mexc_live_orders", False)),
-                key="cb_mexc_live",
-                help="OFF (default): MEXC orders are simulated (DRY-RUN) — nothing "
-                     "is sent. ON: real MEXC orders, hard-capped at 2 USDT/buy and "
-                     "blocked if MEXC USDT balance < 5.",
-            )
-            if st.session_state.mexc_live_orders:
-                st.caption("⚠️ LIVE MEXC orders ON — capped at 2 USDT/trade.")
-            else:
-                st.caption("🔒 MEXC in DRY-RUN — no real orders sent.")
+        st.session_state.mexc_live_orders = st.checkbox(
+            "⚠️ Enable LIVE MEXC orders (max 2 USDT/trade)",
+            value=bool(st.session_state.get("mexc_live_orders", False)),
+            key="cb_mexc_live",
+            help="OFF (default): MEXC orders are simulated (DRY-RUN) — nothing "
+                 "is sent. ON: real MEXC orders, hard-capped at 2 USDT/buy and "
+                 "blocked if MEXC USDT balance < 5.",
+        )
+        if st.session_state.mexc_live_orders:
+            st.caption("⚠️ LIVE MEXC orders ON — capped at 2 USDT/trade.")
         else:
-            st.session_state.mexc_live_orders = False
+            st.caption("🔒 MEXC in DRY-RUN — no real orders sent.")
 
         st.session_state.use_scanner_symbols = st.checkbox(
             "Trade scanner-selected symbols (not fixed BTC/ETH/SOL)",
@@ -3099,8 +3067,10 @@ with st.container():
         # req: show every coin held with symbol / free / locked / USDT value / PnL,
         # and never mix Binance and MEXC balances.
         st.markdown('<div style="font-size:11px;font-weight:800;color:#f0b90b;'
-                    'letter-spacing:.08em;margin:12px 0 4px;">🟡 BINANCE PORTFOLIO '
-                    '— HOLDINGS</div>', unsafe_allow_html=True)
+                    'letter-spacing:.08em;margin:12px 0 4px;">🟡 LEGACY BINANCE '
+                    'HOLDINGS <span style="color:#6e7681;font-weight:600;">· '
+                    'display / reconciliation only — not auto-traded</span></div>',
+                    unsafe_allow_html=True)
         if account_holdings:
             # Per-coin open unrealized PnL (USDT) from OPEN Binance positions only.
             _pnl_by_coin = {}
@@ -3330,7 +3300,7 @@ with st.container():
                             initial_balance=st.session_state.initial_balance,
                             ai_assist=bool(st.session_state.get("ai_assist", False)),
                             ai_aggressiveness="Active Scalper",   # ACTIVE SCALPER MODE — ignored
-                            exchange_mode=st.session_state.get("exchange_mode", "binance"),
+                            exchange_mode=st.session_state.get("exchange_mode", "mexc"),
                             mexc_live_orders=bool(st.session_state.get("mexc_live_orders", False)),
                             symbol_venues=_eff_venues2,
                             scanner_driven=_eff_scan2,
@@ -4549,7 +4519,7 @@ def _collect_settings_snapshot() -> dict:
         "symbol":          st.session_state.symbol,
         "active_symbols":  st.session_state.active_symbols,
         "bot_was_running": bool(st.session_state.get("bot_was_running", False)),
-        "exchange_mode":       st.session_state.get("exchange_mode", "binance"),
+        "exchange_mode":       st.session_state.get("exchange_mode", "mexc"),
         "mexc_live_orders":    bool(st.session_state.get("mexc_live_orders", False)),
         "use_scanner_symbols": bool(st.session_state.get("use_scanner_symbols", False)),
         "strategy":        st.session_state.strategy,

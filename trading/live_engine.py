@@ -44,7 +44,7 @@ RESERVE_FRACTION = 0.75          # never deploy more than 75% of free USDT
 # 20-minute price change on 1-minute candles. These labels are used for the
 # dashboard / activity records ONLY — the live path is NOT research-gated, so
 # they are never checked against any validation allowlist before an entry.
-DIP_STRATEGY_NAME = "20-Minute Dip"
+DIP_STRATEGY_NAME = "Scanner Market-Low on MEXC"
 DIP_INTERVAL = "1m"
 
 # Task #19 — the ONE research-approved live strategy. Unlike the dip path, this
@@ -482,7 +482,7 @@ class DipLiveEngine:
             "exchange": getattr(self.exchange, "name", "binance"),
             "type": "bot",
             "manual": False,
-            "strategy": "20-Minute Dip",
+            "strategy": DIP_STRATEGY_NAME,
             "side": "BUY",
             "entry_price": fill_price,
             "exit_price": None,

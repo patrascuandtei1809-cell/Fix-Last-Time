@@ -437,10 +437,10 @@ def test_settings_defaults_and_persistence():
     assert s.buy_threshold_pct == -0.05
     assert s.take_profit_pct == 0.60
     assert s.stop_loss_pct == -0.30
-    # FINAL RULE knobs
+    # FINAL RULE knobs — volume + trend filters ON (Scanner Market-Low spec)
     assert s.volume_filter_on is True
-    assert s.min_volume_multiple == 0.0
-    assert s.trend_filter_on is False
+    assert s.min_volume_multiple == 1.0     # volume gate active (≥ 1× avg)
+    assert s.trend_filter_on is True
     assert s.max_position_pct == 50.0
     assert s.stop_loss_cooldown_sec == 60
     assert s.reentry_cooldown_sec == 60
