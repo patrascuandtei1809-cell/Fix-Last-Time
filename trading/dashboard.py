@@ -748,16 +748,58 @@ def _effective_bot_symbols(fallback):
     return _effective_bot_plan(fallback)[0]
 
 
+def _mexc_ready() -> bool:
+    """True if MEXC can trade right now.
+
+    DRY-RUN (mexc_live_orders OFF) is ALWAYS ready — no creds needed. Live MEXC
+    orders require MEXC API keys on disk. This is independent of any Binance
+    client: MEXC is the sole auto-trading venue and must survive a Binance
+    outage (Binance is display/reconciliation only)."""
+    if st.session_state.get("mexc_live_orders", False):
+        try:
+            from exchanges.mexc import load_mexc_credentials
+            return load_mexc_credentials() is not None
+        except Exception:
+            return False
+    return True  # DRY-RUN is always ready
+
+
+def _bot_start_blocker():
+    """Return a human-readable reason the bot cannot start, else None.
+
+    When `exchange_mode == "mexc"` (the only sanctioned live auto-trade venue),
+    the bot starts/auto-resumes on MEXC readiness ALONE — no connected Binance
+    client required, so it survives a Binance API outage. For any other mode
+    (legacy Binance/multi execution) a connected Binance client is still needed.
+    """
+    mode = st.session_state.get("exchange_mode", "mexc")
+    if mode == "mexc":
+        if _mexc_ready():
+            return None
+        return ("Add MEXC API keys (or keep MEXC in DRY-RUN) — live MEXC "
+                "orders require MEXC credentials.")
+    if _cl() is None:
+        return "Connect to Binance first — LIVE bot requires API keys."
+    return None
+
+
 def _maybe_resume_bot():
     """If `bot_was_running` was persisted (user had bot ON before the server
     restarted) AND we just auto-reconnected the LIVE client, rebuild + start
     the bot using the persisted settings. This makes the bot refresh-proof
     and independent of UI lifecycle.
+
+    MEXC mode resumes on MEXC readiness alone (no Binance client needed) so a
+    cold start while Binance is down still brings the bot back.
     """
     import bot as _bm
     if _bm.get_bot() and _bm.get_bot().is_running():
         return
-    if not st.session_state.get("client"):
+    mode = st.session_state.get("exchange_mode", "mexc")
+    if mode == "mexc":
+        if not _mexc_ready():
+            return
+    elif not st.session_state.get("client"):
         return
     try:
         cfg = _bm.load_settings() or {}
@@ -2339,10 +2381,13 @@ with st.sidebar:
     bc1, bc2 = st.columns(2)
     with bc1:
         if st.button("▶ Start", width="stretch", disabled=bot_running):
-            c = _cl()
-            if c is None:
-                st.error("Connect to Binance first — LIVE bot requires API keys.")
+            _blk = _bot_start_blocker()
+            if _blk:
+                st.error(_blk)
             else:
+                # MEXC mode: `c` may be None (Binance not required) — create_bot
+                # builds a MexcExchange and ignores the unused client.
+                c = _cl()
                 # Build per-symbol risk managers from overrides (fallback = shared)
                 _eff_syms, _eff_venues, _eff_scan = _effective_bot_plan(
                     st.session_state.active_symbols)
@@ -3384,10 +3429,12 @@ with st.container():
                     st.session_state.bot_was_running   = False
                     st.session_state._user_stopped_bot = True
                 else:
-                    c = _cl()
-                    if c is None:
-                        st.error("Connect to Binance first — LIVE bot requires API keys.")
+                    _blk = _bot_start_blocker()
+                    if _blk:
+                        st.error(_blk)
                     else:
+                        # MEXC mode: `c` may be None (Binance not required).
+                        c = _cl()
                         _eff_syms2, _eff_venues2, _eff_scan2 = _effective_bot_plan(
                             st.session_state.active_symbols)
                         _per_sym_rm2 = {}

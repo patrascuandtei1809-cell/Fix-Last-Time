@@ -5,7 +5,7 @@
     "ETHUSDT",
     "SOLUSDT"
   ],
-  "bot_was_running": false,
+  "bot_was_running": true,
   "exchange_mode": "mexc",
   "mexc_live_orders": false,
   "use_scanner_symbols": true,
