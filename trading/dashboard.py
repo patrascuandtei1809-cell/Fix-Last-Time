@@ -709,26 +709,31 @@ except Exception as _sce:  # noqa: BLE001
 def _effective_bot_plan(fallback):
     """Resolve (symbols, venue_map, scanner_driven) for the bot.
 
-    When `use_scanner_symbols` is ON we ALWAYS run the ungated scanner-driven
-    scalper path (scanner_driven=True), even before the first scan completes —
-    in that window we fall back to `fallback` symbols on the default venue. Once
-    the scanner has output, symbols + per-symbol venue routing come from it.
+    Operator spec (June 2026): when `use_scanner_symbols` is ON the bot runs the
+    ungated scalper (Market-Low) path with a fixed routing split:
+
+      • BTC/ETH/SOL are PINNED to the **binance** venue (always traded there,
+        never rotated).
+      • Up to 3 volatile alts come from the **mexc** scanner (EXCLUDING the 3
+        majors), and are rotated as they go quiet (handled in the orchestrator).
+
+    Returns the majors even before the first scan completes, so the Binance side
+    never starts empty. When the toggle is OFF, fall back to the static set on
+    the default venue (no scanner path).
     """
     if not st.session_state.get("use_scanner_symbols", False):
         return fallback, {}, False
-    mode = st.session_state.get("exchange_mode", "mexc")
     try:
         import bot as _bm
-        # Final spec: scanner selects MAX 3 active trade candidates.
-        opps = _bm.resolve_scanner_opportunities(mode, top_n=3)
+        plan = _bm.resolve_live_plan(top_n_mexc=3)
     except Exception as _e:  # noqa: BLE001
-        print(f"[BOT] scanner opportunity resolution failed: {_e}", flush=True)
-        opps = []
-    if opps:
-        syms   = [o["symbol"] for o in opps]
-        venues = {o["symbol"]: o["exchange"] for o in opps}
+        print(f"[BOT] live plan resolution failed: {_e}", flush=True)
+        plan = []
+    if plan:
+        syms   = [p["symbol"] for p in plan]
+        venues = {p["symbol"]: p["exchange"] for p in plan}
         return syms, venues, True
-    # Scanner ON but no scan yet → ungated path on the static fallback set.
+    # Resolution failed entirely → ungated path on the static fallback set.
     return fallback, {}, True
 
 
@@ -787,10 +792,11 @@ def _maybe_resume_bot():
             initial_balance   = st.session_state.initial_balance,
             ai_assist         = True,                 # ACTIVE SCALPER — always on
             ai_aggressiveness = "Active Scalper",     # ignored — single mode
-            exchange_mode     = st.session_state.get("exchange_mode", "mexc"),
+            exchange_mode     = st.session_state.get("exchange_mode", "multi"),
             mexc_live_orders  = bool(st.session_state.get("mexc_live_orders", False)),
             symbol_venues     = _venues,
             scanner_driven    = _scan_driven,
+            rotate_scanner    = _scan_driven,
             manage_manual_trades = bool(getattr(st.session_state.global_risk,
                                                 "manage_manual_trades", False)),
         )
@@ -884,11 +890,13 @@ if not st.session_state.get("_settings_loaded"):
     # legacy strategy/interval is force-snapped back to Market Low @ 1m.
     st.session_state.strategy           = "Market Low"
     st.session_state.interval           = "1m"
-    # SCANNER MARKET-LOW on MEXC is the ONLY sanctioned auto-trade venue.
-    # Force-snap exchange_mode to "mexc" on every cold start BEFORE the bot
-    # auto-resumes, so a stale/legacy persisted "binance"/"multi" can NEVER
-    # route a worker to BinanceExchange. Binance is display/reconciliation only.
-    st.session_state.exchange_mode      = "mexc"
+    # SPLIT ROUTING (operator spec, June 2026): Binance auto-trades ONLY the 3
+    # majors (BTC/ETH/SOL, Market-Low, pinned), MEXC scanner auto-trades the
+    # volatile alts. Force-snap exchange_mode to "multi" on every cold start so
+    # the combined plan (resolve_live_plan) routes majors→binance and the
+    # scanner alts→mexc. The combined plan is what enforces "no OTHER Binance
+    # coin is ever auto-bought" — every non-major Binance holding is legacy/dust.
+    st.session_state.exchange_mode      = "multi"
     st.session_state.check_every        = 2
     st.session_state.threshold          = 0.01
     st.session_state.ai_assist          = True
@@ -2358,10 +2366,11 @@ with st.sidebar:
                     initial_balance=st.session_state.initial_balance,
                     ai_assist=True,                       # ACTIVE SCALPER — always on
                     ai_aggressiveness="Active Scalper",   # ignored — single mode
-                    exchange_mode=st.session_state.get("exchange_mode", "mexc"),
+                    exchange_mode=st.session_state.get("exchange_mode", "multi"),
                     mexc_live_orders=bool(st.session_state.get("mexc_live_orders", False)),
                     symbol_venues=_eff_venues,
                     scanner_driven=_eff_scan,
+                    rotate_scanner=_eff_scan,
                     manage_manual_trades=bool(getattr(st.session_state.global_risk,
                                                       "manage_manual_trades", False)),
                 )
@@ -2814,20 +2823,25 @@ with st.sidebar:
 
     # ── Multi-exchange + symbol scanner ───────────────────────────────────────
     with st.expander("🔭 Scanner & Exchange (Binance + MEXC)", expanded=False):
-        st.caption("MEXC is the SOLE auto-trading venue. Binance is "
-                   "DISPLAY / RECONCILIATION ONLY and never auto-trades. The "
-                   "scanner ranks the MEXC spot universe and feeds the top "
-                   "picks into the Market-Low rule. MEXC stays in DRY-RUN until "
-                   "you explicitly enable live MEXC orders.")
-        # MEXC = sole auto-trading venue (final spec). Binance auto-trade is
-        # disabled by design — no UI to re-enable it (display/reconciliation only).
-        st.session_state.exchange_mode = "mexc"
+        st.caption("SPLIT ROUTING: Binance auto-trades ONLY BTC/ETH/SOL "
+                   "(Market-Low rule, pinned, never rotated). The MEXC scanner "
+                   "ranks the spot universe and auto-trades the top volatile "
+                   "alts (Market-Low rule, excluding the 3 majors), rotating "
+                   "out coins that go quiet. Max 3 open trades total. Every "
+                   "OTHER Binance coin is legacy/dust — shown but never "
+                   "auto-bought. MEXC stays in DRY-RUN until you enable live "
+                   "MEXC orders.")
+        # SPLIT ROUTING (operator spec): majors→binance, scanner alts→mexc.
+        # "multi" lets the combined plan route per-symbol; no other Binance coin
+        # is ever auto-bought (the combined plan only ever lists the 3 majors on
+        # the Binance venue).
+        st.session_state.exchange_mode = "multi"
         st.markdown(
             '<div style="background:#102132;border:1px solid #1f6feb;border-radius:6px;'
             'padding:6px 10px;margin:2px 0 6px;color:#79b0ff;font-weight:700;'
-            'font-size:12px;">🔵 Execution venue: MEXC '
-            '<span style="color:#6e7681;font-weight:600;">· Binance auto-trade '
-            'DISABLED (display/reconciliation only)</span></div>',
+            'font-size:12px;">🔵 Split routing: BTC/ETH/SOL → Binance '
+            '<span style="color:#6e7681;font-weight:600;">· scanner alts → MEXC '
+            '· no other Binance coin is auto-traded</span></div>',
             unsafe_allow_html=True,
         )
         st.session_state.mexc_live_orders = st.checkbox(
@@ -2844,12 +2858,13 @@ with st.sidebar:
             st.caption("🔒 MEXC in DRY-RUN — no real orders sent.")
 
         st.session_state.use_scanner_symbols = st.checkbox(
-            "Trade scanner-selected symbols (not fixed BTC/ETH/SOL)",
+            "Split routing: BTC/ETH/SOL on Binance + scanner alts on MEXC",
             value=bool(st.session_state.get("use_scanner_symbols", False)),
             key="cb_use_scanner",
-            help="ON: when you (re)start the bot it trades the scanner's top picks "
-                 "for the active exchange. Existing strategy + risk gates still "
-                 "apply to every symbol. OFF: keep your configured active symbols.",
+            help="ON: when you (re)start the bot it always trades BTC/ETH/SOL on "
+                 "Binance (Market-Low, pinned) PLUS the MEXC scanner's top "
+                 "volatile alts (Market-Low, rotated as they go quiet). OFF: keep "
+                 "your configured active symbols on the default venue only.",
         )
 
         if st.button("🔄 Refresh scan now", width="stretch", key="btn_scan_now"):
@@ -3105,6 +3120,98 @@ with st.container():
                        f"counted in Account Value above, so your real total may "
                        f"be a little higher than shown.")
 
+        # ── Close legacy/dust Binance coins → USDT (manual, confirmed) ──────────
+        # Operator spec (June 2026): every non-major Binance coin is legacy/dust
+        # and must be sellable BACK to USDT — but ONLY when Binance min-notional
+        # allows AND with an explicit confirmation. Majors (the 3 auto-traded
+        # coins) and stablecoins are excluded. Nothing is hidden; nothing is sold
+        # without the operator ticking the confirm box.
+        try:
+            import bot as _bm_majors
+            _MAJOR_SET = set(_bm_majors.BINANCE_MAJORS)
+        except Exception:  # noqa: BLE001
+            _MAJOR_SET = {"BTCUSDT", "ETHUSDT", "SOLUSDT"}
+        _sellable = []
+        for _h in (account_holdings or []):
+            _a = str(_h.get("asset", "")).upper()
+            if not _a or _a in _FEE_STABLES or f"{_a}USDT" in _MAJOR_SET:
+                continue
+            if float(_h.get("free", _h.get("amount", 0)) or 0) <= 0:
+                continue
+            _sellable.append(_h)
+        if _sellable:
+            with st.expander("🧹 Convert a legacy coin to USDT", expanded=False):
+                st.caption("Sell a non-major Binance holding back to USDT. Only "
+                           "coins whose value clears Binance's minimum order size "
+                           "can be sold — tiny dust below the minimum can't be "
+                           "converted (Binance rejects it). The 3 auto-traded "
+                           "majors and stablecoins are not listed here.")
+                _opts = {f"{_h['asset']} · ${_h.get('value', 0):,.2f}": _h
+                         for _h in _sellable}
+                _pick = st.selectbox("Coin to sell", list(_opts.keys()),
+                                     key="legacy_sell_pick")
+                _sel = _opts.get(_pick)
+                if _sel:
+                    _asset = str(_sel["asset"]).upper()
+                    _sym   = f"{_asset}USDT"
+                    _free  = float(_sel.get("free", _sel.get("amount", 0)) or 0)
+                    _val   = float(_sel.get("value", 0) or 0)
+                    _c     = _cl()
+                    _min_notional = None
+                    if _c is not None:
+                        try:
+                            _min_notional = float(_c.get_min_notional(_sym))
+                        except Exception:  # noqa: BLE001
+                            _min_notional = None
+                    _mn_txt = (f"${_min_notional:,.2f}" if _min_notional
+                               else "≈$10 (default)")
+                    st.markdown(f"**{_asset}** — free `{_free:,.8g}` · value "
+                                f"**${_val:,.2f}** · Binance min order {_mn_txt}")
+                    _floor  = _min_notional if _min_notional else 10.0
+                    _below  = _val < _floor
+                    if _below:
+                        st.warning(f"⚠️ ${_val:,.2f} is below the minimum order "
+                                   f"size ({_mn_txt}) — Binance won't let you sell "
+                                   f"this dust. Nothing will be sent.")
+                    _confirm = st.checkbox(
+                        f"✅ Confirm: sell ALL {_asset} to USDT (real LIVE order)",
+                        key="legacy_sell_confirm", value=False)
+                    if st.button(f"💱 Sell {_asset} → USDT", key="legacy_sell_btn",
+                                 width="stretch",
+                                 disabled=bool(_below or not _confirm)):
+                        if _c is None:
+                            st.error("❌ Connect to Binance first — sells require a "
+                                     "real order.")
+                        else:
+                            try:
+                                _q_rnd = _c.round_quantity(_sym, _free)
+                            except Exception:  # noqa: BLE001
+                                _q_rnd = round(_free, 6)
+                            if _q_rnd <= 0:
+                                st.error("❌ Rounded quantity is zero — can't sell.")
+                            else:
+                                from binance_client import extract_fill as _ef
+                                try:
+                                    _order = _c.place_market_order(_sym, "SELL", _q_rnd)
+                                    _exec_q, _xp = _ef(_order)
+                                except Exception as _e:  # noqa: BLE001
+                                    st.error(f"❌ LIVE sell failed (nothing sold): {_e}")
+                                    log_activity("ERROR",
+                                        f"🧹 Legacy sell {_asset} FAILED on Binance: {_e}")
+                                    st.stop()
+                                if _xp <= 0 or _exec_q <= 0:
+                                    st.error("❌ Sell response missing execution "
+                                             "data — coin NOT sold.")
+                                    st.stop()
+                                _proceeds = _exec_q * _xp
+                                log_activity("INFO",
+                                    f"🧹 Sold legacy {_exec_q:,.8g} {_asset} → "
+                                    f"≈${_proceeds:,.2f} USDT @ ${_xp:,.6g} "
+                                    f"(manual, confirmed).")
+                                st.success(f"✅ Sold {_exec_q:,.8g} {_asset} for "
+                                           f"≈${_proceeds:,.2f} USDT.")
+                                st.rerun()
+
         # ── MEXC (MCD) PORTFOLIO — ALWAYS shown, in its OWN section ─────────────
         # req: show the MEXC wallet separately and never mix it with Binance.
         _mexc_live = bool(st.session_state.get("mexc_live_orders", False))
@@ -3300,10 +3407,11 @@ with st.container():
                             initial_balance=st.session_state.initial_balance,
                             ai_assist=bool(st.session_state.get("ai_assist", False)),
                             ai_aggressiveness="Active Scalper",   # ACTIVE SCALPER MODE — ignored
-                            exchange_mode=st.session_state.get("exchange_mode", "mexc"),
+                            exchange_mode=st.session_state.get("exchange_mode", "multi"),
                             mexc_live_orders=bool(st.session_state.get("mexc_live_orders", False)),
                             symbol_venues=_eff_venues2,
                             scanner_driven=_eff_scan2,
+                            rotate_scanner=_eff_scan2,
                             manage_manual_trades=bool(getattr(st.session_state.global_risk,
                                                               "manage_manual_trades", False)),
                         )

@@ -54,6 +54,14 @@ _bot_lock = threading.Lock()
 # bounded by the global open-trades cap + per-symbol risk gates.
 MAX_ACTIVE_SYMBOLS = 15
 
+# ── Venue routing (operator spec, June 2026) ────────────────────────────────
+# Binance may auto-trade ONLY these three majors (same Market-Low rule). Every
+# other tradable coin is discovered by the scanner and traded on MEXC. These are
+# PINNED to the Binance venue and are NEVER rotated out by the scanner. No other
+# Binance coin is ever auto-bought — the rest are legacy/dust (display + manual
+# close only).
+BINANCE_MAJORS = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+
 # ── Shared live state: dict keyed by symbol ─────────────────────────────────
 _state_lock = threading.Lock()
 _shared_per_symbol: Dict[str, Dict] = {}   # symbol → {df, price, signal, ...}
@@ -546,6 +554,19 @@ class TradingBot:
         self._dip_engines: Dict[str, DipLiveEngine] = {}
         self._cooldown = live_settings.cooldown_store()
 
+        # ── Dynamic scanner rotation (Task #41) ──────────────────────────────
+        # While running, periodically re-resolve the MEXC scanner top-N and swap
+        # idle (no-open-position) workers that dropped out of the ranking for the
+        # new top candidates. Binance majors are PINNED and never rotated; a
+        # symbol with an open trade is never dropped. create_bot() wires the
+        # worker factory + flips _scanner_rotation_on on for scanner runs.
+        self._pinned_symbols: set = set(BINANCE_MAJORS)
+        self._scanner_top_n: int = 3
+        self._rotation_interval_sec: int = 120   # re-rank cadence (matches scanner daemon)
+        self._last_rotation_at: float = 0.0
+        self._worker_factory = None              # set by create_bot: (sym, venue) -> SymbolWorker
+        self._scanner_rotation_on: bool = False
+
         # ── Research-validated strategy live path (Task #19) ─────────────────
         # When strategy_mode is True the orchestrator runs the gated
         # StrategyLiveEngine per symbol INSTEAD of the dip engine. Unlike the dip
@@ -585,6 +606,10 @@ class TradingBot:
         settings = live_settings.get_settings()
         # Aggressive default ON ⇒ scan faster; calmer cadence when OFF.
         self.check_every = 2 if settings.aggressive_on else 6
+
+        # Task #41 — rotate stale scanner picks before iterating workers so the
+        # snapshot below reflects any swap (self-throttled; no-op when disabled).
+        self._maybe_rotate_scanner_symbols()
 
         traded = False
         for key, worker in list(self.workers.items()):
@@ -819,6 +844,7 @@ class TradingBot:
     # ── Worker management ────────────────────────────────────────────────────
     def add_worker(self, worker: SymbolWorker):
         key = f"{worker.exchange.name}:{worker.symbol}"
+        worker._on_candidate = self._collect_candidate
         self.workers[key] = worker
         log_activity("INFO", f"➕ Worker added: {key}")
 
@@ -827,6 +853,91 @@ class TradingBot:
         if key in self.workers:
             del self.workers[key]
             log_activity("INFO", f"➖ Worker removed: {key}")
+
+    # ── Dynamic scanner rotation (Task #41) ──────────────────────────────────
+    def _open_symbols_by_venue(self) -> Dict[str, set]:
+        """Map venue → set of FULL symbols (e.g. {"mexc": {"DOGEUSDT"}}) that
+        currently have an OPEN position. Trade records store the full symbol in
+        ``coin`` (see live_engine / symbol_worker), so coin == worker.symbol."""
+        out: Dict[str, set] = {}
+        try:
+            for t in get_open_trades():
+                ex  = (t.get("exchange") or "binance").lower()
+                sym = (t.get("coin") or "").upper()
+                if sym:
+                    out.setdefault(ex, set()).add(sym)
+        except Exception as e:  # noqa: BLE001
+            print(f"[ROTATE] open-trade scan failed: {e}", flush=True)
+        return out
+
+    def _maybe_rotate_scanner_symbols(self):
+        """Periodically re-resolve the MEXC scanner top-N and swap stale picks.
+
+        Rules (operator spec):
+          • Binance majors (``_pinned_symbols``) are NEVER rotated out.
+          • A MEXC worker that dropped out of the new top-N is removed ONLY when
+            it has no open position.
+          • New top-N MEXC picks not already running are added.
+          • Each rotation is logged with what changed.
+        Safe to call once per cycle — it self-throttles to
+        ``_rotation_interval_sec`` and no-ops unless rotation is enabled."""
+        if not self._scanner_rotation_on or self._worker_factory is None:
+            return
+        now = time.time()
+        if now - self._last_rotation_at < self._rotation_interval_sec:
+            return
+        self._last_rotation_at = now
+
+        try:
+            opps = resolve_scanner_opportunities(
+                "mexc", top_n=self._scanner_top_n + len(self._pinned_symbols))
+        except Exception as e:  # noqa: BLE001
+            print(f"[ROTATE] scanner resolve failed: {e}", flush=True)
+            return
+        desired = [o["symbol"] for o in opps
+                   if o.get("symbol") and o["symbol"] not in self._pinned_symbols
+                   ][:self._scanner_top_n]
+        if not desired:
+            # No scanner output yet (cold start / transient) — keep the current
+            # set rather than churning workers on an empty ranking.
+            return
+        desired_set = set(desired)
+
+        mexc_open = self._open_symbols_by_venue().get("mexc", set())
+        # Current MEXC *scanner* workers (exclude pinned majors).
+        current = {w.symbol: key for key, w in list(self.workers.items())
+                   if getattr(w.exchange, "name", "") == "mexc"
+                   and w.symbol not in self._pinned_symbols}
+
+        dropped: List[str] = []
+        for sym, key in current.items():
+            if sym not in desired_set and sym not in mexc_open:
+                self.workers.pop(key, None)
+                dropped.append(sym)
+
+        added: List[str] = []
+        for sym in desired:
+            key = f"mexc:{sym}"
+            if key in self.workers:
+                continue
+            try:
+                w = self._worker_factory(sym, "mexc")
+            except Exception as e:  # noqa: BLE001
+                print(f"[ROTATE] failed to build worker {sym}: {e}", flush=True)
+                continue
+            w._on_candidate = self._collect_candidate
+            self.workers[key] = w
+            added.append(sym)
+
+        if dropped or added:
+            kept_open = sorted(s for s in current if s in mexc_open)
+            log_activity("INFO",
+                f"[ROTATE] scanner refresh — "
+                f"added={added or '-'} dropped={dropped or '-'} "
+                f"kept_open={kept_open or '-'} "
+                f"top{self._scanner_top_n}={desired}")
+            print(f"[ROTATE] added={added} dropped={dropped} "
+                  f"kept_open={kept_open} top={desired}", flush=True)
 
     # ── Main loop ────────────────────────────────────────────────────────────
     def _loop(self):
@@ -1377,6 +1488,34 @@ def resolve_scanner_opportunities(exchange_mode: str = "binance",
     return out
 
 
+def resolve_live_plan(top_n_mexc: int = 3) -> List[Dict]:
+    """Final operator spec (June 2026) routing plan as an ordered list of
+    ``[{"symbol","exchange"}]``:
+
+    - BTC/ETH/SOL pinned to **binance** (always traded there, same Market-Low
+      rule, never rotated).
+    - Then up to ``top_n_mexc`` MEXC scanner volatile alts (**mexc**), EXCLUDING
+      the Binance majors so the same coin is never traded on both venues.
+
+    Returns the majors even when the scanner has no output yet, so the Binance
+    side never starts empty.
+    """
+    out: List[Dict] = [{"symbol": s, "exchange": "binance"} for s in BINANCE_MAJORS]
+    # Over-fetch a little so excluding majors still yields top_n_mexc alts.
+    alts = resolve_scanner_opportunities(
+        "mexc", top_n=top_n_mexc + len(BINANCE_MAJORS))
+    added = 0
+    for o in alts:
+        sym = o.get("symbol")
+        if not sym or sym in BINANCE_MAJORS:
+            continue
+        out.append({"symbol": sym, "exchange": "mexc"})
+        added += 1
+        if added >= top_n_mexc:
+            break
+    return out
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Builder — accepts BOTH new multi-symbol signature AND legacy single-symbol.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1397,6 +1536,8 @@ def create_bot(
     mexc_live_orders:      bool = False,       # MEXC stays DRY-RUN until True
     symbol_venues:         Optional[Dict[str, str]] = None,  # {symbol: "binance"|"mexc"} for per-worker routing
     scanner_driven:        bool = False,       # True ⇒ ungated scalper path (never V2-gated)
+    rotate_scanner:        bool = False,       # True ⇒ periodically swap stale MEXC scanner picks (Task #41)
+    scanner_top_n:         int  = 3,           # # of MEXC scanner alts to keep active (majors are extra + pinned)
     initial_balance:       float = 1000.0,
     # AI assist (extra decision layer)
     ai_assist:             bool = True,         # ACTIVE SCALPER — AI always on
@@ -1500,12 +1641,19 @@ def create_bot(
                 if stale not in sym_list:
                     _shared_per_symbol.pop(stale, None)
 
-        for sym in sym_list:
-            rm = per_sym[sym]
-            # Route this worker to the venue its scanner opportunity came from.
-            _venue = (symbol_venues or {}).get(sym)
-            _ex = _venue_exchanges.get(_venue, exchange) if _venue else exchange
-            w = SymbolWorker(
+        def _make_worker(sym: str, venue: Optional[str] = None) -> SymbolWorker:
+            """Build one configured worker. Reused for the initial set AND for
+            scanner rotation (Task #41) so a rotated-in symbol is constructed
+            exactly like an original one. ``venue`` (when given) forces the
+            execution exchange (e.g. rotation always routes new picks to mexc)."""
+            rm = per_sym.get(sym) or risk_manager or RiskManager(RiskSettings())
+            per_sym.setdefault(sym, rm)
+            if venue:
+                _ex = _get_venue_exchange(venue)
+            else:
+                _v = (symbol_venues or {}).get(sym)
+                _ex = _get_venue_exchange(_v) if _v else exchange
+            return SymbolWorker(
                 exchange          = _ex,
                 symbol            = sym,
                 strategy          = strategy,
@@ -1518,13 +1666,16 @@ def create_bot(
                 on_close_trade    = close_trade,
                 on_telegram       = _tg_dispatch,
                 # on_candidate is bound in TradingBot.__init__ after workers
-                # dict is built — leave None here.
+                # dict is built (and in add_worker for rotated-in workers).
                 on_candidate      = None,
                 ai_assist         = ai_assist,
                 ai_aggressiveness = ai_aggressiveness,
                 manage_manual_trades = manage_manual_trades,
             )
-            workers[f"{_ex.name}:{sym}"] = w
+
+        for sym in sym_list:
+            w = _make_worker(sym)
+            workers[f"{w.exchange.name}:{sym}"] = w
 
         _primary_symbol = sym_list[0]
         _bot = TradingBot(
@@ -1533,6 +1684,11 @@ def create_bot(
             check_every     = check_every,
             initial_balance = initial_balance,
         )
+        # Wire scanner rotation (Task #41): factory + enable flag. Pinned majors
+        # are never rotated; rotation only swaps MEXC scanner picks.
+        _bot._worker_factory      = _make_worker
+        _bot._scanner_rotation_on = bool(rotate_scanner)
+        _bot._scanner_top_n       = int(scanner_top_n)
 
         # ── Live-path selection ──────────────────────────────────────────────
         # The research-validated strategy (EMA_MACD_RSI_VOLUME_V2) runs via the
