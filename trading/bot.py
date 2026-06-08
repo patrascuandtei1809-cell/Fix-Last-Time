@@ -1334,15 +1334,44 @@ def resolve_scanner_symbols(exchange_mode: str = "binance",
     except Exception as e:  # noqa: BLE001
         print(f"[BOT] scanner unavailable: {e}", flush=True)
         return []
-    venue = "binance" if exchange_mode in ("binance", "multi") else exchange_mode
-    opps = load_opportunities(exchange=venue)
+    return [o["symbol"] for o in
+            resolve_scanner_opportunities(exchange_mode, top_n=top_n)]
+
+
+def resolve_scanner_opportunities(exchange_mode: str = "binance",
+                                  top_n: int = MAX_ACTIVE_SYMBOLS) -> List[Dict]:
+    """Read the latest scanner output and return ranked opportunities as
+    ``[{"symbol": ..., "exchange": ...}]`` so the caller can route each worker
+    to the venue its opportunity came from.
+
+    - exchange_mode="binance" → only Binance opportunities
+    - exchange_mode="mexc"    → only MEXC opportunities
+    - exchange_mode="multi"   → BOTH venues, merged by scanner rank (score desc).
+      Each worker then executes on the venue the coin was discovered on (MEXC
+      stays DRY-RUN unless the operator enables live MEXC orders).
+
+    Deduplicates by SYMBOL (highest-scored venue wins) so the same coin is never
+    traded twice. Returns [] when no scan exists yet → callers fall back to a
+    static symbol list.
+    """
+    try:
+        from scanner import load_opportunities
+    except Exception as e:  # noqa: BLE001
+        print(f"[BOT] scanner unavailable: {e}", flush=True)
+        return []
+    # load_opportunities() returns ALL venues already ranked by score (desc).
+    opps = load_opportunities()
+    if exchange_mode in ("binance", "mexc"):
+        opps = [o for o in opps if o.get("exchange") == exchange_mode]
+    # "multi" → keep both venues in scanner rank order.
     seen: set = set()
-    out: List[str] = []
+    out: List[Dict] = []
     for o in opps:
         sym = o.get("symbol")
-        if sym and sym not in seen:
+        ex  = o.get("exchange")
+        if sym and ex and sym not in seen:
             seen.add(sym)
-            out.append(sym)
+            out.append({"symbol": sym, "exchange": ex})
         if len(out) >= top_n:
             break
     return out
@@ -1366,6 +1395,8 @@ def create_bot(
     exchange:              Optional[Exchange] = None,
     exchange_mode:         str = "binance",   # "binance" | "mexc" | "multi"
     mexc_live_orders:      bool = False,       # MEXC stays DRY-RUN until True
+    symbol_venues:         Optional[Dict[str, str]] = None,  # {symbol: "binance"|"mexc"} for per-worker routing
+    scanner_driven:        bool = False,       # True ⇒ ungated scalper path (never V2-gated)
     initial_balance:       float = 1000.0,
     # AI assist (extra decision layer)
     ai_assist:             bool = True,         # ACTIVE SCALPER — AI always on
@@ -1375,31 +1406,59 @@ def create_bot(
     """Build (or rebuild) the singleton bot. LIVE Binance Mainnet only."""
     global _bot, _primary_symbol
 
-    # Build / register the exchange.
+    # Build / register the exchange(s).
     # Default path (exchange_mode="binance") is unchanged — Binance LIVE.
     # exchange_mode="mexc" builds a MexcExchange (DRY-RUN unless mexc_live_orders).
+    # exchange_mode="multi" (with symbol_venues) now ROUTES per worker: a shared
+    # BinanceExchange handles Binance opportunities and a shared MexcExchange
+    # handles MEXC opportunities — never mixed.
     # An explicitly-passed `exchange` always wins (used by tests / dashboard).
-    if exchange is None:
-        if exchange_mode == "mexc":
-            from exchanges.mexc import MexcExchange, MexcClient, load_mexc_credentials
+    _venue_exchanges: Dict[str, Exchange] = {}
+
+    def _get_venue_exchange(venue: str) -> Exchange:
+        """Build (once) and cache the Exchange for a venue."""
+        ex = _venue_exchanges.get(venue)
+        if ex is not None:
+            return ex
+        if venue == "mexc":
+            from exchanges.mexc import (MexcExchange, MexcClient,
+                                        load_mexc_credentials)
             _creds = load_mexc_credentials()
             _mclient = MexcClient(*_creds) if _creds else None
-            exchange = MexcExchange(client=_mclient, live_orders=mexc_live_orders)
-            print(f"[BOT] exchange_mode=mexc — MexcExchange "
+            ex = MexcExchange(client=_mclient, live_orders=mexc_live_orders)
+            print(f"[BOT] venue=mexc — MexcExchange "
                   f"({'LIVE' if mexc_live_orders else 'DRY-RUN'}, "
                   f"creds={'yes' if _creds else 'no'})", flush=True)
         else:
-            if exchange_mode == "multi":
-                # Smart cross-exchange routing is not built yet — default to the
-                # safe Binance path so nothing trades on an unrouted venue.
-                print("[BOT] exchange_mode=multi not yet routable — using Binance "
-                      "execution for now (scanner may still surface both).",
-                      flush=True)
-            exchange = BinanceExchange(client=client)
-        ex_registry.clear()
-        ex_registry.register(exchange)
+            ex = BinanceExchange(client=client)
+            print("[BOT] venue=binance — BinanceExchange (LIVE)", flush=True)
+        _venue_exchanges[venue] = ex
+        return ex
+
+    if exchange is None:
+        if symbol_venues:
+            # Per-worker routing: build only the venues actually referenced.
+            ex_registry.clear()
+            for _v in sorted(set(symbol_venues.values())):
+                ex_registry.register(_get_venue_exchange(_v))
+            # `exchange` (the default/primary) used for any symbol missing a
+            # venue mapping — prefer Binance unless mode is mexc-only.
+            exchange = _get_venue_exchange("mexc" if exchange_mode == "mexc"
+                                           else "binance")
+        else:
+            if exchange_mode == "mexc":
+                exchange = _get_venue_exchange("mexc")
+            else:
+                if exchange_mode == "multi":
+                    print("[BOT] exchange_mode=multi without symbol_venues — "
+                          "defaulting all workers to Binance execution.",
+                          flush=True)
+                exchange = _get_venue_exchange("binance")
+            ex_registry.clear()
+            ex_registry.register(exchange)
     else:
         ex_registry.register(exchange)
+        _venue_exchanges[getattr(exchange, "name", "binance")] = exchange
 
     # ACTIVE SCALPER MODE: hardcoded to BTC + ETH + SOL unless caller overrides.
     sym_list = symbols if symbols else ([symbol] if symbol else
@@ -1443,8 +1502,11 @@ def create_bot(
 
         for sym in sym_list:
             rm = per_sym[sym]
+            # Route this worker to the venue its scanner opportunity came from.
+            _venue = (symbol_venues or {}).get(sym)
+            _ex = _venue_exchanges.get(_venue, exchange) if _venue else exchange
             w = SymbolWorker(
-                exchange          = exchange,
+                exchange          = _ex,
                 symbol            = sym,
                 strategy          = strategy,
                 risk_manager      = rm,
@@ -1462,7 +1524,7 @@ def create_bot(
                 ai_aggressiveness = ai_aggressiveness,
                 manage_manual_trades = manage_manual_trades,
             )
-            workers[f"{exchange.name}:{sym}"] = w
+            workers[f"{_ex.name}:{sym}"] = w
 
         _primary_symbol = sym_list[0]
         _bot = TradingBot(
@@ -1472,10 +1534,20 @@ def create_bot(
             initial_balance = initial_balance,
         )
 
-        # ── Live-path selection (Task #19) ───────────────────────────────────
+        # ── Live-path selection ──────────────────────────────────────────────
         # The research-validated strategy (EMA_MACD_RSI_VOLUME_V2) runs via the
         # GATED StrategyLiveEngine; everything else keeps the (ungated) dip path.
-        if strategy == V2_STRATEGY_NAME:
+        # SCANNER-DRIVEN mode ALWAYS uses the ungated scalper path — the scanner
+        # already did the momentum/volume/volatility selection, so we never apply
+        # the symbol-scoped V2 research gate to scanner picks.
+        if scanner_driven:
+            _bot.strategy_mode = False
+            _bot.dip_mode      = True
+            log_activity("INFO",
+                "🛰️ Scanner-driven scalper path ON — trading scanner picks "
+                f"across {', '.join(sorted(_venue_exchanges)) or 'binance'} "
+                "(ungated; max 3 concurrent)")
+        elif strategy == V2_STRATEGY_NAME:
             _bot.strategy_mode        = True
             _bot.dip_mode             = False
             _bot.live_strategy_name   = strategy

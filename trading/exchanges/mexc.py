@@ -42,6 +42,12 @@ from .base import Exchange
 _BASE = "https://api.mexc.com"
 _RECV_WINDOW = 5000
 
+# Simulated free USDT returned by a DRY-RUN MexcExchange that has no
+# authenticated client, so scanner-routed MEXC opportunities can be evaluated
+# and logged as simulated (paper) trades instead of being skipped. Has NO effect
+# once real MEXC creds are saved (live balance is used) or live_orders is ON.
+SIM_DRY_RUN_USDT = 1000.0
+
 # Credentials live next to the Binance creds, same 0600 discipline.
 _CREDS_PATH = Path(__file__).resolve().parent.parent / "data" / ".mexc_creds.json"
 
@@ -350,6 +356,13 @@ class MexcExchange(Exchange):
     # ── account ──
     def get_balance(self, asset: str = "USDT") -> Dict[str, float]:
         if not self.client:
+            # DRY-RUN with no MEXC creds: return a deterministic SIMULATED wallet
+            # so scanner-routed MEXC opportunities can still be evaluated and
+            # logged as simulated (paper) trades instead of being silently
+            # skipped at the balance gate. Only USDT carries simulated funds.
+            if not self.live_orders:
+                free = float(SIM_DRY_RUN_USDT) if asset.upper() == "USDT" else 0.0
+                return {"free": free, "locked": 0.0, "total": free}
             raise RuntimeError(
                 f"MexcExchange.get_balance({asset}) called without an "
                 "authenticated client — save MEXC keys first.")

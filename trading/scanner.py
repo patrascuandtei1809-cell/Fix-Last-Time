@@ -20,10 +20,11 @@ from __future__ import annotations
 import json
 import math
 import re
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import requests
 
@@ -264,6 +265,49 @@ def load_opportunities(exchange: Optional[str] = None) -> List[dict]:
     except Exception as e:  # noqa: BLE001
         print(f"[SCANNER][ERROR] failed to read opportunities: {e}", flush=True)
         return []
+
+
+# ── background cadence daemon ────────────────────────────────────────────────
+_daemon_started = False
+_daemon_lock = threading.Lock()
+
+
+def start_scanner_daemon(interval_sec: int = 120,
+                         cfg: Optional[ScanConfig] = None,
+                         on_log: Optional[Callable[[str, str], None]] = None
+                         ) -> bool:
+    """Start (once) a daemon thread that re-runs ``scan(write=True)`` on a
+    cadence so the bot always trades fresh scanner picks. Idempotent — repeated
+    calls are no-ops. Returns True if it started the thread, False if one was
+    already running. Each refresh is logged via ``on_log`` (e.g. activity.json).
+    """
+    global _daemon_started
+    with _daemon_lock:
+        if _daemon_started:
+            return False
+        _daemon_started = True
+
+    def _loop():
+        while True:
+            try:
+                payload = scan(cfg=cfg, write=True)
+                n = len(payload.get("opportunities", []))
+                scored = payload.get("count_scored", 0)
+                if on_log:
+                    try:
+                        on_log("SCAN",
+                               f"[SCANNER] refreshed {n} opportunities "
+                               f"(scored {scored} across Binance+MEXC)")
+                    except Exception:
+                        pass
+            except Exception as e:  # noqa: BLE001
+                print(f"[SCANNER][daemon] scan failed: {e}", flush=True)
+            time.sleep(max(15, int(interval_sec)))
+
+    t = threading.Thread(target=_loop, daemon=True, name="alphatrade-scanner")
+    t.start()
+    print(f"[SCANNER] daemon started (every {interval_sec}s)", flush=True)
+    return True
 
 
 if __name__ == "__main__":

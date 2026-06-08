@@ -6,7 +6,7 @@
     "SOLUSDT"
   ],
   "bot_was_running": false,
-  "exchange_mode": "binance",
+  "exchange_mode": "multi",
   "mexc_live_orders": false,
   "use_scanner_symbols": false,
   "strategy": "EMA_MACD_RSI_VOLUME_V2",
@@ -31,7 +31,7 @@
   "global_risk": {
     "max_total_exposure_usdt": 300.0,
     "max_exposure_per_symbol_pct": 100,
-    "max_open_trades_total": 30,
+    "max_open_trades_total": 3,
     "max_daily_loss_pct": 5.0,
     "manage_manual_trades": true
   },

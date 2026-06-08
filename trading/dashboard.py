@@ -617,9 +617,9 @@ def _init():
         # MEXC stays DRY-RUN until the operator explicitly flips mexc_live_orders.
         # use_scanner_symbols=ON makes the bot trade the scanner's top picks
         # (scoped to the active venue) instead of the static BTC/ETH/SOL set.
-        "exchange_mode":       "binance",
+        "exchange_mode":       "multi",
         "mexc_live_orders":    False,
-        "use_scanner_symbols": False,
+        "use_scanner_symbols": True,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -685,15 +685,48 @@ def _init():
 
 _init()
 
-# ── Auto-refresh (silent JS-driven, no page-stall flash) ─────────────────────
-# streamlit-autorefresh = JS setInterval → triggers rerun WITHOUT blocking python.
-# Minimum 5s. MUST render EARLY (right after _init populates refresh_secs): if the
-# autorefresh iframe is the LAST element on the page, the browser scrolls down to
-# it on every refresh → the page "jumps to the bottom" on its own. Rendering it at
-# the top keeps the scroll position stable.
-from streamlit_autorefresh import st_autorefresh
-_refresh_ms = max(5, int(st.session_state.get("refresh_secs", 5))) * 1000
-st_autorefresh(interval=_refresh_ms, key="alphatrade_autorefresh", limit=None)
+# ── Auto-refresh REMOVED (scanner-driven redesign) ───────────────────────────
+# st_autorefresh was removed entirely: the live bot runs in its own background
+# thread (independent of the Streamlit UI lifecycle), so the page no longer needs
+# to force reruns. Killing the autorefresh iframe also fixes the blank/jump-on-
+# refresh failures (an iframe re-mount that could blank the page when one
+# exchange call was slow). The ↻ Refresh button and the browser reload give the
+# operator manual control; the bot keeps trading regardless of the UI.
+
+# ── Background scanner daemon (cadence refresh of opportunities) ──────────────
+# Idempotent: starts exactly one daemon thread per process that re-scans
+# Binance+MEXC and rewrites multi_exchange_opportunities.json, logging each
+# refresh to activity.json. The scanner is READ-ONLY public data (no keys).
+try:
+    import scanner as _scanner_mod
+    _scanner_mod.start_scanner_daemon(interval_sec=120, on_log=log_activity)
+except Exception as _sce:  # noqa: BLE001
+    print(f"[SCANNER] daemon start failed: {_sce}", flush=True)
+
+
+def _effective_bot_plan(fallback):
+    """Resolve (symbols, venue_map, scanner_driven) for the bot.
+
+    When `use_scanner_symbols` is ON we ALWAYS run the ungated scanner-driven
+    scalper path (scanner_driven=True), even before the first scan completes —
+    in that window we fall back to `fallback` symbols on the default venue. Once
+    the scanner has output, symbols + per-symbol venue routing come from it.
+    """
+    if not st.session_state.get("use_scanner_symbols", False):
+        return fallback, {}, False
+    mode = st.session_state.get("exchange_mode", "binance")
+    try:
+        import bot as _bm
+        opps = _bm.resolve_scanner_opportunities(mode, top_n=_bm.MAX_ACTIVE_SYMBOLS)
+    except Exception as _e:  # noqa: BLE001
+        print(f"[BOT] scanner opportunity resolution failed: {_e}", flush=True)
+        opps = []
+    if opps:
+        syms   = [o["symbol"] for o in opps]
+        venues = {o["symbol"]: o["exchange"] for o in opps}
+        return syms, venues, True
+    # Scanner ON but no scan yet → ungated path on the static fallback set.
+    return fallback, {}, True
 
 
 def _effective_bot_symbols(fallback):
@@ -704,18 +737,7 @@ def _effective_bot_symbols(fallback):
     configured/static active_symbols) whenever the scanner has no output yet, so
     the bot never starts with an empty symbol list.
     """
-    if not st.session_state.get("use_scanner_symbols", False):
-        return fallback
-    try:
-        import bot as _bm
-        syms = _bm.resolve_scanner_symbols(
-            st.session_state.get("exchange_mode", "binance"),
-            top_n=_bm.MAX_ACTIVE_SYMBOLS,
-        )
-        return syms or fallback
-    except Exception as _e:  # noqa: BLE001
-        print(f"[BOT] scanner symbol resolution failed: {_e}", flush=True)
-        return fallback
+    return _effective_bot_plan(fallback)[0]
 
 
 def _maybe_resume_bot():
@@ -738,8 +760,8 @@ def _maybe_resume_bot():
     # the ⏹ Stop button; stop sets a session flag so we don't re-launch.
     if st.session_state.get("_user_stopped_bot"):
         return
-    syms = cfg.get("active_symbols") or st.session_state.active_symbols
-    syms = _effective_bot_symbols(syms)
+    _fb = cfg.get("active_symbols") or st.session_state.active_symbols
+    syms, _venues, _scan_driven = _effective_bot_plan(_fb)
     if not syms:
         return
     # Rebuild per-symbol risk managers from persisted overrides
@@ -764,6 +786,8 @@ def _maybe_resume_bot():
             ai_aggressiveness = "Active Scalper",     # ignored — single mode
             exchange_mode     = st.session_state.get("exchange_mode", "binance"),
             mexc_live_orders  = bool(st.session_state.get("mexc_live_orders", False)),
+            symbol_venues     = _venues,
+            scanner_driven    = _scan_driven,
             manage_manual_trades = bool(getattr(st.session_state.global_risk,
                                                 "manage_manual_trades", False)),
         )
@@ -823,6 +847,15 @@ if not st.session_state.get("_settings_loaded"):
                 setattr(_gr, _gk, _gv)
         _gr.emergency_stop = False
         st.session_state.global_risk = _gr
+    # HARD CAP (scanner-driven redesign): never allow more than 3 concurrent open
+    # trades, regardless of a persisted/legacy settings.json that may carry an
+    # older value (e.g. 30). Clamp BEFORE the bot auto-resumes so the gate runs
+    # with the enforced ceiling.
+    try:
+        if int(st.session_state.global_risk.max_open_trades_total) > 3:
+            st.session_state.global_risk.max_open_trades_total = 3
+    except Exception:
+        pass
     # Per-symbol overrides
     if "per_symbol_risk" in _persisted and isinstance(_persisted["per_symbol_risk"], dict):
         _pso: dict = {}
@@ -2331,7 +2364,8 @@ with st.sidebar:
                 st.error("Connect to Binance first — LIVE bot requires API keys.")
             else:
                 # Build per-symbol risk managers from overrides (fallback = shared)
-                _eff_syms = _effective_bot_symbols(st.session_state.active_symbols)
+                _eff_syms, _eff_venues, _eff_scan = _effective_bot_plan(
+                    st.session_state.active_symbols)
                 _per_sym_rm = {}
                 for _s in _eff_syms:
                     _ov = st.session_state.per_symbol_risk.get(_s)
@@ -2354,6 +2388,8 @@ with st.sidebar:
                     ai_aggressiveness="Active Scalper",   # ignored — single mode
                     exchange_mode=st.session_state.get("exchange_mode", "binance"),
                     mexc_live_orders=bool(st.session_state.get("mexc_live_orders", False)),
+                    symbol_venues=_eff_venues,
+                    scanner_driven=_eff_scan,
                     manage_manual_trades=bool(getattr(st.session_state.global_risk,
                                                       "manage_manual_trades", False)),
                 )
@@ -2780,8 +2816,9 @@ with st.sidebar:
         )
         g.max_open_trades_total = st.slider(
             "Max open trades (total, all symbols)",
-            1, 50, int(g.max_open_trades_total), 1,
-            help="Hard cap on simultaneous open positions across all symbols. "
+            1, 3, min(3, int(g.max_open_trades_total)), 1,
+            help="Hard cap on simultaneous open positions across all symbols "
+                 "(scanner-driven redesign caps this at 3). "
                  "Saved automatically and kept across refresh/restart.",
         )
         g.max_daily_loss_pct = st.slider(
@@ -3274,7 +3311,8 @@ with st.container():
                     if c is None:
                         st.error("Connect to Binance first — LIVE bot requires API keys.")
                     else:
-                        _eff_syms2 = _effective_bot_symbols(st.session_state.active_symbols)
+                        _eff_syms2, _eff_venues2, _eff_scan2 = _effective_bot_plan(
+                            st.session_state.active_symbols)
                         _per_sym_rm2 = {}
                         for _s in _eff_syms2:
                             _ov = st.session_state.per_symbol_risk.get(_s)
@@ -3294,6 +3332,8 @@ with st.container():
                             ai_aggressiveness="Active Scalper",   # ACTIVE SCALPER MODE — ignored
                             exchange_mode=st.session_state.get("exchange_mode", "binance"),
                             mexc_live_orders=bool(st.session_state.get("mexc_live_orders", False)),
+                            symbol_venues=_eff_venues2,
+                            scanner_driven=_eff_scan2,
                             manage_manual_trades=bool(getattr(st.session_state.global_risk,
                                                               "manage_manual_trades", False)),
                         )

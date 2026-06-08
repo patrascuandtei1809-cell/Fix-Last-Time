@@ -1,0 +1,91 @@
+FINAL ALPHATRADE REQUIREMENT — EXACT VERSION
+
+Do NOT rebuild the bot from zero.
+Do NOT change the existing live rule.
+Do NOT use EMA/MACD/V2.
+Do NOT trade Binance automatically anymore.
+
+KEEP ONLY THIS LIVE RULE:
+- BUY when market-low change <= -0.05%
+- SELL at +0.60%
+- STOP-LOSS at -0.30%
+- cooldown 1 minute after SELL or STOP
+- trend filter ON
+- volume filter ON
+
+NEW ARCHITECTURE:
+1. MEXC = main trading exchange.
+2. Binance = display/reconciliation only.
+3. Binance must NOT auto-trade unless manually enabled in the future.
+4. Existing Binance coins must always be shown as LEGACY BINANCE HOLDINGS.
+5. Real exchange balances must override local files.
+6. Never hide real open coins/trades.
+
+SCANNER:
+- separate background job/worker
+- must not freeze dashboard
+- scans 500–1000+ MEXC spot coins
+- dynamically rotates coins when activity drops
+- never stays stuck on dead/unsafe coins
+- ranks coins by:
+  volume
+  volatility
+  liquidity
+  spread
+  momentum
+  recent movement
+  safety
+- selects max 3 active trade candidates
+- sends selected coins into the existing Market-Low rule
+- logs selected and rejected coins with reasons
+
+DASHBOARD:
+- must not go blank on refresh
+- disable st_autorefresh completely
+- Binance wallet section separate
+- MEXC wallet section separate
+- show every position with:
+  exchange
+  wallet
+  symbol
+  qty
+  entry
+  current price
+  value
+  PnL
+  fees
+- show scanner opinion
+- show AI opinion
+- show bot final decision
+- show BUY/SELL/HOLD reason
+- show chart markers for entries/exits
+- show fee comparison Binance vs MEXC
+- show legacy Binance holdings always
+
+MIGRATION:
+- archive old conflicting UI/history
+- remove/disable labels that contradict current setup:
+  EMA/V2
+  20-Min Dip
+  Binance scalper
+  BTC/ETH/SOL fixed-only mode
+- do not delete real exchange positions
+- do not auto-sell Binance legacy holdings
+- new label must be:
+  Scanner Market-Low Strategy on MEXC
+
+SAFETY:
+- MEXC live orders OFF by default
+- max 3 open trades
+- respect risk limits
+- log every scan/order/AI decision/bot decision/exchange used
+- dashboard must survive Binance or MEXC API failure
+- droplet must not overload or crash
+
+BEFORE LIVE TRADING, show me:
+- changed files
+- exact settings.json
+- proof Binance auto-trading is disabled
+- proof MEXC is main exchange
+- proof MEXC live orders are OFF by default
+- safe restart command
