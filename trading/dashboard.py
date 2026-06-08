@@ -1171,6 +1171,8 @@ def _compute_account_value(_client, bust: str) -> dict:
         _amt = float(_b.get("total") or 0)
         if _amt <= 0:
             continue
+        _free   = float(_b.get("free") or 0)
+        _locked = float(_b.get("locked") or 0)
         if _asset in _STABLES:
             _val = _amt
         else:
@@ -1180,11 +1182,13 @@ def _compute_account_value(_client, bust: str) -> dict:
                 _val = 0.0   # no USDT pair / dust / transient quote failure
         if _val > 0:
             total += _val
-            holdings.append({"asset": _asset, "amount": _amt, "value": _val})
+            holdings.append({"asset": _asset, "amount": _amt, "free": _free,
+                             "locked": _locked, "value": _val})
         elif _asset not in _STABLES:
             # Held a real coin but couldn't price it — flag it so the total is
             # never silently understated (this is what confused the user before).
-            unpriced.append({"asset": _asset, "amount": _amt})
+            unpriced.append({"asset": _asset, "amount": _amt, "free": _free,
+                             "locked": _locked})
     holdings.sort(key=lambda h: h["value"], reverse=True)
     return {"total": total, "holdings": holdings, "unpriced": unpriced}
 
@@ -1548,18 +1552,39 @@ else:
     _bot_dot = '<span class="dot dot-x"></span>'
     _bot_lbl = '<span style="font-size:11px;font-weight:700;color:#6e7681;">BOT OFF</span>'
 
+# ── ACTIVE LIVE STRATEGY — single source of truth = the running bot ──────
+# req: confirm whether the live bot runs Market Low 1m or EMA_MACD_RSI_VOLUME_V2
+# 4h. Read the ACTUAL orchestrator flags when a bot exists; otherwise reflect
+# what WOULD run from the persisted session (create_bot routes V2 →
+# strategy_mode, everything else → the dip "Market Low" path).
+if bot_inst is not None and getattr(bot_inst, "strategy_mode", False):
+    _live_path  = "strategy"
+    _live_strat = getattr(bot_inst, "live_strategy_name", None) or "EMA_MACD_RSI_VOLUME_V2"
+    _live_tf    = getattr(bot_inst, "live_strategy_interval", None) or "4h"
+elif bot_inst is not None and getattr(bot_inst, "dip_mode", False):
+    _live_path, _live_strat, _live_tf = "dip", "Market Low (20-Min Dip)", "1m"
+elif st.session_state.get("strategy") == "Market Low":
+    _live_path, _live_strat, _live_tf = "dip", "Market Low (20-Min Dip)", "1m"
+else:
+    _live_path  = "strategy"
+    _live_strat = st.session_state.get("strategy") or "EMA_MACD_RSI_VOLUME_V2"
+    _live_tf    = st.session_state.get("interval") or "4h"
+_live_gated = (_live_path == "strategy")
+
 _strat_html = (f'<span style="font-size:10px;color:#484f58;">STRATEGY</span> '
                f'<span style="font-size:11px;font-weight:700;color:#79b0ff;font-family:\'JetBrains Mono\',monospace;">'
-               f'{st.session_state.strategy}</span>')
+               f'{_live_strat} @ {_live_tf}</span>')
 
-# ── Strategy pill — the only live strategy is the Market Low ──────────
+# ── Strategy pill — reflects the REAL live path (V2 4h vs Market Low 1m) ─
 _ai_on   = True
-_ai_prof = "Market Low"
-_ai_col  = "#2ea043"
+_ai_prof = _live_strat
+_ai_col  = "#2ea043" if _live_path == "strategy" else "#3b82f6"
+_ai_icon = "🎯" if _live_path == "strategy" else "💧"
+_ai_gate = " · research-gated" if _live_gated else ""
 _ai_pill = (f'<span class="pill" style="background:{_ai_col}22;'
             f'border:1px solid {_ai_col}66;color:{_ai_col};'
             f'font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">'
-            f'💧 Market Low Live Strategy</span>')
+            f'{_ai_icon} {_live_strat} @ {_live_tf}{_ai_gate}</span>')
 
 # Last AI decision for the current symbol (from shared state set in tick())
 _ai_last  = (_sig_meta.get("ai_decision") or "").upper() if _sig_meta else ""
@@ -3033,22 +3058,78 @@ with st.container():
 </div>
 """, unsafe_allow_html=True)
 
-        # ── Holdings breakdown: show WHERE the money is (coins, not lost) ───────
+        # ── BINANCE PORTFOLIO — per-coin holdings (kept SEPARATE from MEXC) ─────
+        # req: show every coin held with symbol / free / locked / USDT value / PnL,
+        # and never mix Binance and MEXC balances.
+        st.markdown('<div style="font-size:11px;font-weight:800;color:#f0b90b;'
+                    'letter-spacing:.08em;margin:12px 0 4px;">🟡 BINANCE PORTFOLIO '
+                    '— HOLDINGS</div>', unsafe_allow_html=True)
         if account_holdings:
-            _STABLES = ("USDT", "USDC", "BUSD", "FDUSD", "TUSD", "DAI")
-            _hbits = []
-            for _h in account_holdings[:6]:
-                if _h["asset"] in _STABLES:
-                    _hbits.append(f"{_h['amount']:,.2f} {_h['asset']}")
-                else:
-                    _hbits.append(f"{_h['amount']:,.6g} {_h['asset']} (${_h['value']:,.2f})")
-            st.caption("💼 Held as:  " + "   ·   ".join(_hbits)
-                       + "  —  money in coins isn't lost, it's just not USDT.")
+            # Per-coin open unrealized PnL (USDT) from OPEN Binance positions only.
+            _pnl_by_coin = {}
+            for _t in open_trades:
+                if (_t.get("exchange") or "binance") != "binance":
+                    continue
+                _c = (_t.get("coin") or "").upper()
+                if _c:
+                    _pnl_by_coin[_c] = (_pnl_by_coin.get(_c, 0.0)
+                                        + float(_t.get("_unrealized") or 0.0))
+            _hrows = []
+            for _h in account_holdings:
+                _a   = _h["asset"]
+                _pnl = _pnl_by_coin.get(_a)
+                _hrows.append({
+                    "Symbol":     _a,
+                    "Free":       f"{_h.get('free', _h['amount']):,.8g}",
+                    "Locked":     f"{_h.get('locked', 0.0):,.8g}",
+                    "USDT Value": f"${_h['value']:,.2f}",
+                    "PnL (USDT)": (f"{_pnl:+,.2f}" if _pnl is not None else "—"),
+                })
+            st.dataframe(pd.DataFrame(_hrows), width="stretch", hide_index=True,
+                         height=min(40 + 36 * len(_hrows), 320))
+            st.caption("💼 Money held in coins isn't lost — it's just not USDT. "
+                       "PnL shown only for coins with an OPEN bot/manual position.")
+        else:
+            st.caption("No priced Binance holdings yet "
+                       "(connect to Binance, or no coins currently held).")
         if account_unpriced:
             _ub = ", ".join(f"{_u['amount']:,.6g} {_u['asset']}" for _u in account_unpriced[:6])
             st.warning(f"⚠️ Couldn't get a live price for: {_ub}. These are NOT "
                        f"counted in Account Value above, so your real total may "
                        f"be a little higher than shown.")
+
+        # ── MEXC (MCD) PORTFOLIO — ALWAYS shown, in its OWN section ─────────────
+        # req: show the MEXC wallet separately and never mix it with Binance.
+        _mexc_live = bool(st.session_state.get("mexc_live_orders", False))
+        _mexc_tag  = "⚠️ LIVE" if _mexc_live else "🔒 DRY-RUN"
+        st.markdown(f'<div style="font-size:11px;font-weight:800;color:#3b82f6;'
+                    f'letter-spacing:.08em;margin:14px 0 4px;">🔵 MEXC (MCD) '
+                    f'PORTFOLIO · {_mexc_tag} — separate wallet</div>',
+                    unsafe_allow_html=True)
+        try:
+            from exchanges.mexc import (
+                MexcExchange as _MX, MexcClient as _MXC,
+                load_mexc_credentials as _load_mx_creds,
+            )
+            _mx_creds = _load_mx_creds()
+            if not _mx_creds:
+                st.caption("🔵 MEXC: no MEXC keys saved — wallet not connected "
+                           "(save `data/.mexc_creds.json` to show balance). "
+                           "Binance trading is unaffected.")
+            else:
+                _mx   = _MX(client=_MXC(*_mx_creds), live_orders=_mexc_live)
+                _mxb  = _mx.get_balance("USDT")
+                _mx_total = float(_mxb.get("total", 0.0))
+                _mx_free  = float(_mxb.get("free", 0.0))
+                _mx_lock  = float(_mxb.get("locked", 0.0))
+                st.markdown(f"""
+<div style="background:#0a1020;border:1px solid #3b82f644;border-radius:8px;padding:10px 12px;margin-bottom:6px;">
+  <div style="font-size:9px;color:#3b82f6;font-weight:700;letter-spacing:.1em;margin-bottom:4px;">MEXC WALLET · {_mexc_tag}</div>
+  <div style="font-size:18px;font-weight:700;color:#f0f6fc;font-family:'JetBrains Mono',monospace;">${_mx_total:,.2f} <span style="font-size:11px;color:#6e7681;">USDT total</span></div>
+  <div style="font-size:10px;color:#8b949e;margin-top:4px;font-family:'JetBrains Mono',monospace;">free ${_mx_free:,.2f} · locked ${_mx_lock:,.2f}</div>
+</div>""", unsafe_allow_html=True)
+        except Exception as _mxe:
+            st.caption(f"🔵 MEXC ({_mexc_tag}) — balance unavailable: {_mxe}")
 
         # ── Bot spending limit meter: how much of YOUR money is in play ─────────
         _bot_limit   = float(getattr(st.session_state.global_risk,
@@ -3988,6 +4069,7 @@ with st.container():
                         "Type":     "🤖 Bot" if t.get("type")=="bot" else "👤 Manual",
                         "Side":     t.get("side","—"),
                         "Strategy": t.get("strategy","—"),
+                        "Qty":      f"{float(t.get('quantity') or 0):,.8g}",
                         "Entry":    f"${t.get('entry_price',0):.4f}",
                         "Exit":     f"${t.get('exit_price',0):.4f}" if t.get("exit_price") else "open",
                         "Invested": f"${t.get('invested',0):.2f}",
@@ -4007,13 +4089,56 @@ with st.container():
                 )
 
         with tab_a:
-            # ── 💧 Dip strategy — per-symbol live decision panel ───────────────
+            # ── 🔭 SCANNER — per-symbol live decisions (always rendered) ────────
+            # Works for BOTH the V2 strategy path and the Market Low dip path so
+            # the panel is NEVER blank. Source = live_engine activity store (the
+            # strategy + dip engines both publish here every cycle).
             try:
                 _dip_acts = live_engine.get_all_activity()
             except Exception:
                 _dip_acts = []
-            if _dip_acts:
-                st.markdown("**💧 Market Low — live decisions**")
+            _acts_by_sym = {}
+            for _a in _dip_acts:
+                try:
+                    _acts_by_sym[_a.symbol] = _a
+                except Exception:
+                    pass
+            _scan_syms = (st.session_state.get("active_symbols")
+                          or ["BTCUSDT", "ETHUSDT", "SOLUSDT"])
+            st.markdown(f"**🔭 Scanner — live decisions · {_live_strat} @ {_live_tf}**")
+            _scols = st.columns(len(_scan_syms))
+            for _si, _sym in enumerate(_scan_syms):
+                _rec = _acts_by_sym.get(_sym)
+                if _rec is not None:
+                    _dec  = (getattr(_rec, "decision", "HOLD") or "HOLD").upper()
+                    _rsn  = (getattr(_rec, "reason", "") or "—")
+                    _px   = (f"${_rec.price:,.4f}"
+                             if getattr(_rec, "price", None) else "—")
+                    try:
+                        _when = _fmt_london(_rec.at)
+                    except Exception:
+                        _when = "—"
+                else:
+                    _dec, _rsn, _px, _when = "—", "waiting for first scan…", "—", "—"
+                _dc = {"BUY": "#26a69a", "SELL": "#ef5350", "HOLD": "#6e7681",
+                       "SKIP": "#6e7681", "STOP_LOSS": "#ef5350"}.get(_dec, "#484f58")
+                with _scols[_si]:
+                    st.markdown(
+                        f'<div class="card">'
+                        f'<div class="c-lbl">{_sym.replace("USDT","")}'
+                        f'<span style="color:#484f58;">/USDT</span></div>'
+                        f'<div class="c-val" style="color:{_dc};">{_dec}</div>'
+                        f'<div style="font-size:11px;color:#8b949e;">'
+                        f'price {_px}<br>'
+                        f'last scan <b>{_when}</b><br>'
+                        f'reason {_rsn[:160]}'
+                        f'</div></div>',
+                        unsafe_allow_html=True)
+            st.markdown("---")
+
+            # ── 💧 Dip strategy — rich per-symbol diagnostics (dip path only) ───
+            if _dip_acts and _live_path == "dip":
+                st.markdown("**💧 Market Low — live decisions (detail)**")
                 _cols = st.columns(min(len(_dip_acts), 3))
                 for _i, _rec in enumerate(_dip_acts):
                     with _cols[_i % len(_cols)]:

@@ -736,8 +736,54 @@ class TradingBot:
                 if rec.traded:
                     traded = True
                     worker._session_trades += 1
+                # Consolidated per-symbol scan line every cycle so activity.json
+                # records EVERY scan on the V2 strategy path too (req: log every
+                # scan + order). Mirrors the dip-path [SCAN] line.
+                try:
+                    _dec = getattr(rec, "decision", "HOLD")
+                    _rsn = getattr(rec, "reason", "") or "-"
+                    log_activity(
+                        "SCAN",
+                        f"[SCAN] {worker.symbol} @{self.live_strategy_interval or '4h'} | "
+                        f"strategy={self.live_strategy_name or 'EMA_MACD_RSI_VOLUME_V2'} | "
+                        f"decision={_dec} | traded={bool(rec.traded)} | block={_rsn}"
+                    )
+                except Exception:
+                    pass
+                # Feed the WHY-NO-TRADE journal so the dashboard per-symbol panel
+                # populates on the V2 path as well (it skips record_cycle).
+                try:
+                    diagnostics.record_dip_decision(
+                        symbol  = worker.symbol,
+                        signal  = getattr(rec, "decision", "HOLD"),
+                        reason  = getattr(rec, "reason", ""),
+                        traded  = bool(rec.traded),
+                        blocked = not bool(rec.traded),
+                    )
+                except Exception:
+                    pass
             except Exception as exc:
                 log_activity("ERROR", f"Strategy engine {key} crashed: {exc}")
+                # Still emit exactly one [SCAN] line per symbol on the error path.
+                try:
+                    log_activity(
+                        "SCAN",
+                        f"[SCAN] {worker.symbol} | decision=HOLD | traded=False | "
+                        f"block=Strategy engine error: {exc}"
+                    )
+                    diagnostics.record_dip_decision(
+                        symbol  = worker.symbol,
+                        signal  = "HOLD",
+                        reason  = f"Strategy engine error: {exc}",
+                        traded  = False,
+                        blocked = True,
+                    )
+                except Exception:
+                    pass
+        try:
+            diagnostics.record_dip_cycle(traded)
+        except Exception:
+            pass
         return traded
 
     # ── Control ──────────────────────────────────────────────────────────────
