@@ -26,8 +26,8 @@ out of view) — which is why "trades recorded but no markers" happened.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import timezone
 from typing import Any, List, Optional
-from zoneinfo import ZoneInfo
 
 import pandas as pd
 
@@ -46,10 +46,20 @@ class MarkerPoint:
 
 @dataclass
 class UnmatchedTrade:
-    """A trade whose BUY or SELL marker could not be placed on the chart."""
+    """A trade whose BUY or SELL marker could not be placed on the chart.
+
+    ``out_of_range`` distinguishes the two very different "unmatched" cases:
+
+    * ``True``  — the trade simply falls outside the candles currently fetched
+      for the chart (older than the window, or chart still loading). This is
+      EXPECTED and benign — the marker is listed in the panel, NOT warned about.
+    * ``False`` — a genuine data problem (missing/zero price, unparseable
+      timestamp). This is the only case that warrants an operator warning.
+    """
     trade_id: str
     kind: str         # "BUY" | "SELL"
     reason: str
+    out_of_range: bool = False
 
 
 @dataclass
@@ -70,6 +80,26 @@ class MarkerResult:
     @property
     def unmatched_count(self) -> int:
         return len(self.unmatched)
+
+    @property
+    def errors(self) -> List[UnmatchedTrade]:
+        """Genuine data problems (NOT merely out of chart range) — the only
+        markers that should raise an operator-facing warning."""
+        return [u for u in self.unmatched if not u.out_of_range]
+
+    @property
+    def out_of_range(self) -> List[UnmatchedTrade]:
+        """Markers whose trade simply falls outside the fetched candle window —
+        expected/benign; listed in the panel but never warned about."""
+        return [u for u in self.unmatched if u.out_of_range]
+
+    @property
+    def error_count(self) -> int:
+        return len(self.errors)
+
+    @property
+    def out_of_range_count(self) -> int:
+        return len(self.out_of_range)
 
 
 def _tid(t: dict) -> str:
@@ -95,11 +125,22 @@ def _as_ns(obj):
 def _to_axis_time(ts: Any, axis_tz, tzname: str):
     """Coerce any trade timestamp to the candle axis's time reference.
 
-    Mirrors ``dashboard._to_london``: a tz-aware value is converted; a naive
-    value is assumed to be server-local and converted via ``astimezone``. When
-    the axis is tz-naive (the real case — London wall-clock) the result is
-    tz-stripped so it compares directly against the candle index. Returns
-    ``None`` if the value is missing/unparseable.
+    Single, deterministic rule (removes the old offset-naive vs offset-aware
+    bug): EVERY timestamp is first normalized to a **UTC tz-aware** instant, then
+    expressed on the candle axis.
+
+    * tz-aware input  -> converted to UTC (``astimezone``).
+    * naive input     -> assumed to be the same wall-clock the trade was written
+      in (``datetime.now()`` = server-local) and converted to UTC. Because both
+      the write and this read happen on the same host, ``astimezone(utc)``
+      resolves the local offset identically, so a naive local timestamp lands on
+      the right UTC instant without depending on a hard-coded zone.
+
+    Once we hold a UTC-aware instant, converting it TO the axis zone is always
+    unambiguous (only the reverse, localizing a naive wall-clock, has DST
+    ambiguity — which we never do here). When the axis is tz-naive (the real
+    case — London wall-clock) the tz is stripped so it compares directly against
+    the candle index. Returns ``None`` if the value is missing/unparseable.
     """
     if ts is None or ts == "":
         return None
@@ -110,21 +151,20 @@ def _to_axis_time(ts: Any, axis_tz, tzname: str):
     if parsed is None or pd.isna(parsed):
         return None
 
-    london = ZoneInfo(tzname)
     py = parsed.to_pydatetime()
     try:
-        # astimezone: naive -> assume system-local; aware -> convert. Same rule
-        # the dashboard uses for DISPLAY, so markers align with shown times.
-        london_dt = py.astimezone(london)
+        # Normalize to a UTC tz-aware instant. naive -> assume system-local
+        # (matches how datetime.now() wrote it); aware -> convert. Either way
+        # the result is unambiguous UTC, so no tz-naive/aware mix survives.
+        utc_ts = pd.Timestamp(py.astimezone(timezone.utc))
     except Exception:
         return None
-    out = pd.Timestamp(london_dt)
 
     if axis_tz is None:
-        # Candle axis is naive wall-clock -> drop tz so comparison works.
-        return _as_ns(out.tz_localize(None))
-    # Defensive: tz-aware axis -> express in that tz.
-    return _as_ns(out.tz_convert(axis_tz))
+        # Candle axis is naive wall-clock -> express UTC in that zone, drop tz.
+        return _as_ns(utc_ts.tz_convert(tzname).tz_localize(None))
+    # tz-aware axis -> express the UTC instant in that zone.
+    return _as_ns(utc_ts.tz_convert(axis_tz))
 
 
 def _match_candle(ts, idx: pd.DatetimeIndex, tol: pd.Timedelta):
@@ -188,13 +228,15 @@ def build_trade_markers(
         for t in sym_trades:
             tid = _tid(t)
             result.unmatched.append(
-                UnmatchedTrade(tid, "BUY", "no candle data on chart"))
+                UnmatchedTrade(tid, "BUY", "no candle data on chart",
+                               out_of_range=True))
             xp = t.get("exit_price")
             ct = t.get("close_time")
             is_closed = (t.get("status") == "closed") or (xp is not None and ct is not None)
             if is_closed:
                 result.unmatched.append(
-                    UnmatchedTrade(tid, "SELL", "no candle data on chart"))
+                    UnmatchedTrade(tid, "SELL", "no candle data on chart",
+                                   out_of_range=True))
         return result
 
     # Tolerance = one candle interval (median spacing) so a trade timestamped a
@@ -223,7 +265,8 @@ def build_trade_markers(
                 snap = _match_candle(raw, idx, tol)
                 if snap is None:
                     result.unmatched.append(
-                        UnmatchedTrade(tid, "BUY", "open_time outside chart history"))
+                        UnmatchedTrade(tid, "BUY", "open_time outside chart history",
+                                       out_of_range=True))
                 else:
                     result.buy.append(
                         MarkerPoint(snap, float(ep), tid, ttype, raw))
@@ -246,7 +289,8 @@ def build_trade_markers(
         snap = _match_candle(raw, idx, tol)
         if snap is None:
             result.unmatched.append(
-                UnmatchedTrade(tid, "SELL", "close_time outside chart history"))
+                UnmatchedTrade(tid, "SELL", "close_time outside chart history",
+                               out_of_range=True))
             continue
         result.sell.append(MarkerPoint(snap, float(xp), tid, ttype, raw))
 

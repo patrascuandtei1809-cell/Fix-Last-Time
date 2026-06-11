@@ -27,3 +27,4 @@
 - [Active-symbols ceiling vs open caps](alphatrade-active-symbols-ceiling.md) — two independent ceilings (MAX_ACTIVE_SYMBOLS vs open-trades caps); raise both together or the symbol plan silently truncates.
 - [Live settings DB overrides defaults](live-settings-db-overrides-defaults.md) — DipLiveEngine reads the PG-persisted live_settings row, not dataclass defaults; enforce rule invariants by force-snapping + save_settings at cold start so the droplet self-heals.
 - [Dual-path observability + wallet separation](alphatrade-dual-path-observability.md) — V2 strategy_mode vs Market Low dip_mode must mirror logging/UI (V2 cycle once logged nothing); Binance & MEXC wallets never merged.
+- [Chart marker out-of-range vs error](chart-marker-out-of-range.md) — unmatched markers split benign off-screen (older than fetched candles) from genuine data errors; warn ONLY on errors; normalize every trade ts via astimezone(utc) (writes are naive-local).

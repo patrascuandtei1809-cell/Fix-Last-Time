@@ -212,3 +212,51 @@ def test_no_trades_is_empty_result():
     assert res.trades_found == 0
     assert res.buy_drawn == 0 and res.sell_drawn == 0
     assert res.unmatched_count == 0
+
+
+# ── out-of-range (benign) vs error (genuine) separation ─────────────────────
+def test_out_of_range_is_flagged_not_error():
+    """A trade older than the fetched candles must be flagged out_of_range
+    (benign) — it goes in `out_of_range`, NOT `errors`, so the dashboard does
+    not raise a scary warning for it."""
+    candles = _candles(start="2026-06-06 10:00:00")
+    t = _trade(open_time="2026-06-06T03:00:00+00:00", status="open")  # 04:00 London — before
+    res = build_trade_markers([t], "BTCUSDT", candles)
+    assert res.unmatched_count == 1
+    assert res.out_of_range_count == 1
+    assert res.error_count == 0
+    assert res.unmatched[0].out_of_range is True
+    assert res.out_of_range[0].kind == "BUY"
+
+
+def test_missing_price_is_error_not_out_of_range():
+    """Missing/zero entry_price is a genuine data problem -> error (warned),
+    NOT out_of_range."""
+    candles = _candles()
+    t = _trade(open_time="2026-06-06T11:30:00+00:00", entry_price=0, status="open")
+    res = build_trade_markers([t], "BTCUSDT", candles)
+    assert res.error_count == 1
+    assert res.out_of_range_count == 0
+    assert res.errors[0].out_of_range is False
+
+
+def test_no_candle_data_is_out_of_range_not_error():
+    """No candles yet (chart loading) is benign -> out_of_range, not error."""
+    t = _trade(open_time="2026-06-06T11:30:00+00:00", status="open")
+    res = build_trade_markers([t], "BTCUSDT", [])
+    assert res.out_of_range_count == 1
+    assert res.error_count == 0
+    assert res.out_of_range[0].out_of_range is True
+
+
+def test_naive_and_aware_match_same_candle():
+    """The same instant expressed naive-UTC vs aware-UTC must land on the SAME
+    candle — proves the offset-naive/offset-aware path is unified (test env
+    clock is UTC, so naive == UTC here)."""
+    candles = _candles()
+    aware = _trade(id="a", open_time="2026-06-06T11:30:00+00:00", status="open")
+    naive = _trade(id="n", open_time="2026-06-06T11:30:00", status="open")
+    ra = build_trade_markers([aware], "BTCUSDT", candles)
+    rn = build_trade_markers([naive], "BTCUSDT", candles)
+    assert ra.buy_drawn == 1 and rn.buy_drawn == 1
+    assert ra.buy[0].x == rn.buy[0].x == pd.Timestamp("2026-06-06 12:30:00")

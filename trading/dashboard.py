@@ -4363,8 +4363,13 @@ with st.container():
                 "trades_found":  _markers.trades_found,
                 "buy_drawn":     _markers.buy_drawn,
                 "sell_drawn":    _markers.sell_drawn,
-                "unmatched":     [(u.trade_id, u.kind, u.reason)
+                # (trade_id, kind, reason, out_of_range) — out_of_range markers
+                # are benign (trade simply older than the fetched candles) and
+                # must NOT raise the scary warning; only genuine data problems do.
+                "unmatched":     [(u.trade_id, u.kind, u.reason, u.out_of_range)
                                   for u in _markers.unmatched],
+                "errors":        _markers.error_count,
+                "out_of_range":  _markers.out_of_range_count,
             }
 
             # GREEN BUY markers (up-arrow + "BUY" label) on the OPEN candle, and
@@ -4611,32 +4616,45 @@ with st.container():
             # "markers missing" report is diagnosable at a glance instead of a
             # silent drop.
             _ms = st.session_state.get("_chart_marker_stats", {})
-            if _ms.get("unmatched"):
+            _errs = int(_ms.get("errors", 0))
+            _oor  = int(_ms.get("out_of_range", 0))
+            # ONLY genuine data problems (missing price / unparseable time) warn.
+            # Trades that simply fall outside the fetched candle window are
+            # expected — they're listed calmly in the panel, never warned about.
+            if _errs:
                 st.warning(
-                    f"⚠️ Trade found but chart timestamp not matched — "
-                    f"{len(_ms['unmatched'])} marker(s) could not be placed for "
-                    f"{_ms.get('symbol','?')}. Zoom out or widen the window; see "
-                    f"the Chart markers panel for details.")
+                    f"⚠️ {_errs} marker(s) could not be placed for "
+                    f"{_ms.get('symbol','?')} due to a data problem (missing price "
+                    f"or unparseable time). See the Chart markers panel for details.")
+            elif _oor:
+                st.caption(
+                    f"ℹ️ {_oor} past trade(s) for {_ms.get('symbol','?')} are "
+                    f"outside the current chart window — scroll/zoom back to view "
+                    f"them, or see the Chart markers panel below.")
             with st.expander(
                     f"🔍 Chart markers — {_ms.get('buy_drawn',0)} BUY · "
                     f"{_ms.get('sell_drawn',0)} SELL"
-                    + (f" · {len(_ms.get('unmatched',[]))} unmatched"
-                       if _ms.get('unmatched') else ""),
+                    + (f" · {_oor} off-screen" if _oor else "")
+                    + (f" · {_errs} error" if _errs else ""),
                     expanded=False):
                 _dm1, _dm2, _dm3, _dm4 = st.columns(4)
                 _dm1.metric("Trades found", _ms.get("trades_found", 0))
                 _dm2.metric("BUY markers drawn", _ms.get("buy_drawn", 0))
                 _dm3.metric("SELL markers drawn", _ms.get("sell_drawn", 0))
-                _dm4.metric("Unmatched trades", len(_ms.get("unmatched", [])))
+                _dm4.metric("Off-screen / errors", f"{_oor} / {_errs}")
                 st.caption(
                     f"Symbol {_ms.get('symbol','?')} · BUY anchored on `open_time`/"
                     f"`entry_price`, SELL on `close_time`/`exit_price`, each snapped "
-                    f"to the nearest candle. Source: data/trades/*.json.")
+                    f"to the nearest candle within one interval. Timestamps are "
+                    f"normalized to UTC before matching. 'Off-screen' = trade older "
+                    f"than the fetched candles (benign). Source: data/trades/*.json.")
                 if _ms.get("unmatched"):
-                    st.dataframe(
-                        pd.DataFrame(_ms["unmatched"],
-                                     columns=["trade id", "marker", "reason"]),
-                        width="stretch", hide_index=True)
+                    _udf = pd.DataFrame(
+                        [(tid, kind, reason,
+                          "off-screen" if oor else "error")
+                         for (tid, kind, reason, oor) in _ms["unmatched"]],
+                        columns=["trade id", "marker", "reason", "type"])
+                    st.dataframe(_udf, width="stretch", hide_index=True)
         else:
             with st.spinner("Loading chart data from Binance…"):
                 st.info("Chart will appear here once data loads. No API key required.")
