@@ -6,7 +6,7 @@
     "SOLUSDT"
   ],
   "bot_was_running": true,
-  "exchange_mode": "mexc",
+  "exchange_mode": "multi",
   "mexc_live_orders": false,
   "use_scanner_symbols": true,
   "strategy": "Market Low",

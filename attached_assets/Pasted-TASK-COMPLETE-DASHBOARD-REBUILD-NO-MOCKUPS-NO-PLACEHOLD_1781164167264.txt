@@ -1,0 +1,267 @@
+TASK: COMPLETE DASHBOARD REBUILD (NO MOCKUPS, NO PLACEHOLDERS)
+
+You previously added mockups, placeholder sections and duplicate layouts. I do NOT want that.
+
+GOAL
+Rebuild the dashboard into two completely separated exchanges:
+
+🟡 BINANCE DASHBOARD
+Binance must manage ONLY:
+
+BTCUSDT
+
+ETHUSDT
+
+SOLUSDT
+
+Everything else is LEGACY.
+
+Binance Section Structure
+1. Wallet Overview
+Show:
+
+Total Balance USDT
+
+Total Equity
+
+Available Cash
+
+Daily PnL
+
+Total PnL
+
+Active Trades Count
+
+Use REAL DATA only.
+
+No placeholders.
+
+2. Core Markets
+Table:
+
+Coin	Price	Market-Low %	Volume	Trend	AI Status
+BTCUSDT					
+ETHUSDT					
+SOLUSDT					
+AI Status examples:
+
+BUY READY
+
+WAIT
+
+BLOCKED
+
+All values must come from the real engine.
+
+3. Binance Chart Area
+Large chart.
+
+Selectable:
+
+BTCUSDT
+
+ETHUSDT
+
+SOLUSDT
+
+Use existing real chart system.
+
+Do NOT replace with HTML placeholders.
+
+Do NOT remove candlestick chart.
+
+Show:
+
+Entry markers
+
+Exit markers
+
+Stop markers
+
+4. Active Trades
+Table:
+
+| Coin | Entry | Current | PnL | Target | Stop |
+
+Real data only.
+
+5. Legacy Holdings
+Everything that is NOT:
+
+BTC
+
+ETH
+
+SOL
+
+USDT
+
+USDC
+
+FDUSD
+
+BUSD
+
+Show:
+
+| Coin | Qty | Value | PnL | Status |
+
+Status:
+
+LEGACY HOLD
+
+LEGACY EXIT CANDIDATE
+
+WAIT CONFIRMATION
+
+6. AI Decisions
+Example:
+
+BTCUSDT BUY
+
+Market-Low = -0.07%
+
+Trend = UP
+
+Volume = HIGH
+
+Cooldown = OK
+
+or
+
+ETHUSDT REJECTED
+
+Market-Low = -0.02%
+
+Below BUY threshold (-0.05%)
+
+🔵 MEXC DASHBOARD
+Completely separate section.
+
+No Binance information here.
+
+1. Wallet Overview
+Show:
+
+Balance
+
+Equity
+
+Daily PnL
+
+Total PnL
+
+Active Trades
+
+Slots Used / 15
+
+Real data only.
+
+2. Live Scanner
+Table:
+
+| Coin | Volatility | Volume | Trend | Score |
+
+Sort:
+
+Score DESC
+
+Volume DESC
+
+Use real scanner output.
+
+3. Scanner Coin Chart
+Selectable scanner coin.
+
+Use real chart.
+
+No placeholders.
+
+Show:
+
+Market-Low %
+
+Volume
+
+Trend
+
+4. Active Trades
+Table:
+
+| Coin | Entry | Current | PnL | Target | Stop |
+
+Maximum 15 positions.
+
+5. AI Decisions
+Examples:
+
+PEPEUSDT BUY
+
+Market-Low = -0.11%
+
+Trend = UP
+
+Volume = HIGH
+
+DOGEUSDT SELL
+
+Target +0.60% reached
+
+WIFUSDT STOP LOSS
+
+-0.30% reached
+
+6. Rotation Engine
+Removed:
+
+| Coin | Reason |
+
+Added:
+
+| Coin | Reason |
+
+Examples:
+
+FLOKI — low volume
+
+BONK — trend lost
+
+WIF — breakout
+
+PEPE — volume spike
+
+UNIVERSAL RULES (TOP OF PAGE)
+Display permanently:
+
+BUY <= -0.05%
+
+SELL +0.60%
+
+STOP -0.30%
+
+Cooldown 60s
+
+Trend ON
+
+Volume ON
+
+CRITICAL REQUIREMENTS
+DO NOT create mockups.
+
+DO NOT create fake data.
+
+DO NOT create placeholders such as "CHART AREA".
+
+DO NOT remove existing real charts.
+
+DO NOT duplicate dashboard sections.
+
+DO NOT overlay HTML over the current dashboard.
+
+REUSE existing real data sources.
+
+REUSE existing chart system.
+
+ONLY reorganize layout and presentation.
+
+The result must look like a professional trading terminal, with Binance and MEXC clearly separated and easy to understand at a glance.
