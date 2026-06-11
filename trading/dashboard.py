@@ -1105,6 +1105,26 @@ def _cl():
         st.session_state.client = c
     return c
 
+def _mexc_ex():
+    """Return a MexcExchange for manual closes, or None if MEXC keys are missing.
+
+    Mirrors the wallet/bot construction: an authenticated MexcClient is required
+    to send a real counter-order. ``live_orders`` follows the operator's
+    ``mexc_live_orders`` switch, so a DRY-RUN close simulates the fill exactly
+    like a DRY-RUN entry (no order hits api.mexc.com)."""
+    try:
+        from exchanges.mexc import (
+            MexcExchange as _MX, MexcClient as _MXC,
+            load_mexc_credentials as _load_mx_creds,
+        )
+    except Exception:  # noqa: BLE001
+        return None
+    _creds = _load_mx_creds()
+    if not _creds:
+        return None
+    return _MX(client=_MXC(*_creds),
+               live_orders=bool(st.session_state.get("mexc_live_orders", False)))
+
 def _fmt_p(v, d=4): return f"${v:,.{d}f}" if v is not None else "—"
 
 @st.cache_data(ttl=30, show_spinner=False)
@@ -3410,8 +3430,78 @@ def _render_positions(venue: str):
 </div>
 """
         if venue != "binance":
-            st.markdown(_card, unsafe_allow_html=True)
-            st.caption("🤖 Managed by the bot on MEXC (SL/TP) — close on the MEXC app.")
+            _mexc_live = bool(st.session_state.get("mexc_live_orders", False))
+            mc1, mc2 = st.columns([9, 1])
+            with mc1:
+                st.markdown(_card, unsafe_allow_html=True)
+            with mc2:
+                _mx_confirm = st.checkbox(
+                    "Confirm", key=f"mxcl_ok_{ot.get('id')}", value=False,
+                    help=("Route a real MEXC counter-order through your MEXC "
+                          "wallet" if _mexc_live else
+                          "DRY-RUN: simulates the close (no order sent)"))
+                if st.button("✕ Close", key=f"mxcl_{ot.get('id')}",
+                             width="stretch", disabled=not _mx_confirm):
+                    _coin = ot["coin"]
+                    _qty = float(ot.get("quantity") or 0)
+                    _side = ot.get("side", "BUY")
+                    _mx = _mexc_ex()
+                    if _mexc_live and _mx is None:
+                        st.error("❌ Save MEXC API keys first — a LIVE close "
+                                 "needs a real MEXC counter-order.")
+                    elif _qty <= 0:
+                        st.error("❌ Position has zero quantity — cannot place "
+                                 "counter-order.")
+                    else:
+                        if _mx is None:
+                            # DRY-RUN with no creds: simulate via a keyless adapter.
+                            from exchanges.mexc import MexcExchange as _MX
+                            _mx = _MX(client=None, live_orders=False)
+                        _counter_side = "SELL" if _side == "BUY" else "BUY"
+                        try:
+                            if _counter_side == "SELL":
+                                _res = _mx.place_sell_order(_coin, _qty)
+                            else:
+                                _res = _mx.place_buy_order_qty(_coin, _qty)
+                        except Exception as _e:  # noqa: BLE001
+                            st.error(f"❌ MEXC close order failed (NOT recorded): {_e}")
+                            log_activity("ERROR",
+                                f"👤 Close {ot['id']} FAILED on MEXC: {_e}")
+                            st.stop()
+                        if not _res.get("ok"):
+                            st.error(f"❌ MEXC close refused (NOT recorded): "
+                                     f"{_res.get('error', 'unknown')}")
+                            log_activity("ERROR",
+                                f"👤 Close {ot['id']} refused on MEXC: "
+                                f"{_res.get('error', 'unknown')}")
+                            st.stop()
+                        _exec_q = float(_res.get("qty") or 0)
+                        xp = float(_res.get("price") or 0)
+                        _exit_fee = float(_res.get("fee") or 0.0)
+                        _dry = bool(_res.get("dry_run"))
+                        if xp <= 0 or _exec_q <= 0:
+                            st.error("❌ MEXC close response missing execution "
+                                     "data — trade NOT closed.")
+                            log_activity("ERROR",
+                                f"👤 Close {ot['id']} aborted on MEXC — invalid "
+                                f"execution data (qty={_exec_q}, price={xp}).")
+                            st.stop()
+                        _tag = "DRY-RUN" if _dry else "LIVE"
+                        _closed = close_trade(
+                            ot["id"], xp,
+                            f"Manual close via dashboard ({_tag} MEXC)", _exit_fee)
+                        if not _closed:
+                            st.error("❌ Counter-order filled but persistence "
+                                     "failed — manual reconciliation required.")
+                            log_activity("ERROR",
+                                f"👤 Close {ot['id']} — MEXC filled {_counter_side} "
+                                f"{_exec_q} @ ${xp:.4f} but close_trade returned "
+                                f"no record.")
+                            st.stop()
+                        log_activity("ORDER",
+                            f"👤 Closed {ot['id']} | {_tag} MEXC {_counter_side} "
+                            f"{_exec_q:.6f} {_coin} @ ${xp:.4f}")
+                        st.rerun()
             continue
         pc1, pc2 = st.columns([9, 1])
         with pc1:
