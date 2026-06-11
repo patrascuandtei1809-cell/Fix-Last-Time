@@ -612,3 +612,34 @@ live bot/dashboard were NOT modified.
   symbol-scoped to **ETH only**: the gate returns True for ETH V2 @4h and False
   for BTC/SOL and for any symbol-less query
   (`test_live_allowlist_snapshot_is_eth_v2_only`).
+
+## TWO-VENUE DASHBOARD LAYOUT (June 2026)
+
+`dashboard.py` main render area is now two vertically-stacked, fully-separated
+venue sections (never side-by-side), matching the operator's target layout.
+All rendering moved into module-level helpers (`_render_*`) defined before the
+main `with st.container()`; the old inline legacy-holdings and MEXC-wallet
+blocks were deleted and now live verbatim in those helpers.
+
+- **Permanent GLOBAL RULES bar** (`_render_global_rules_bar`) at the very top —
+  applies to BOTH venues (BUY/SELL-TP/STOP/cooldown/trend/volume from `_dip_rules()`).
+- **🟡 BINANCE DASHBOARD** (`#f0b90b`): wallet cards · spending meter · equity
+  sparkline · Core Markets (`_render_core_markets`, real BTC/ETH/SOL engine data)
+  · on-chart BTC/ETH/SOL selector · big chart · active trades (`_render_positions
+  ("binance")`, with close button) · legacy holdings (`_render_binance_legacy`) ·
+  AI decisions (`_render_ai_decisions`, majors).
+- **🔵 MEXC DASHBOARD** (`#3b82f6`): wallet (`_render_mexc_wallet`) · live scanner
+  table (`_render_scanner_table`) · scanner mini-charts (`_render_scanner_charts`)
+  · active trades (`_render_positions("mexc")`, **display-only — no close button**)
+  · AI decisions · rotation engine (`_render_rotation_engine`).
+- **Chart symbol control moved on-chart.** The Binance section's BTC/ETH/SOL
+  `segmented_control` (fallback `radio`) is now the SOLE writer of
+  `st.session_state.symbol`. The sidebar `View symbol` selectbox was removed;
+  the sidebar now only coerces any non-major symbol back to `BTCUSDT`.
+- `_acts` (real `live_engine` activity) and `_mexc_syms` (live MEXC workers,
+  fallback open MEXC trades) are computed once at the top of `col_main` and
+  reused across both sections. All helpers reuse REAL data — no mock/fake data.
+- **Deviation:** MEXC positions are display-only (no close button). This fixes a
+  latent bug where the old shared close path sent a Binance counter-order for
+  every venue. Slot labels show N/3 (Binance) and N/15 (MEXC) for display only —
+  live MEXC concurrency cap was NOT silently raised.

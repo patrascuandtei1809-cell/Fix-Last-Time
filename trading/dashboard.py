@@ -2332,14 +2332,11 @@ with st.sidebar:
         st.caption("⚠️ At least one symbol required — defaulted to BTCUSDT")
     st.session_state.active_symbols = act_sel
 
-    # Currently-viewed symbol — drives chart, manual trade, force buttons
-    _view_default = st.session_state.symbol if st.session_state.symbol in act_sel else act_sel[0]
-    sym_sel = st.selectbox(
-        "View symbol", act_sel,
-        index=act_sel.index(_view_default),
-        help="Symbol shown in the main chart + manual-trade buttons.",
-    )
-    st.session_state.symbol = sym_sel
+    # Big Binance chart symbol is chosen on-chart (BTC/ETH/SOL selector in the
+    # Binance section). Here we only coerce a stale/non-major value back to a
+    # major so the chart always has a valid pinned symbol on the next run.
+    if st.session_state.symbol not in ("BTCUSDT", "ETHUSDT", "SOLUSDT"):
+        st.session_state.symbol = "BTCUSDT"
 
     intv_sel = st.selectbox("Interval", INTERVALS,
                              index=INTERVALS.index(st.session_state.interval)
@@ -3056,11 +3053,571 @@ with st.sidebar:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# TWO-SECTION DASHBOARD HELPERS — Binance & MEXC fully separated venues
+# (operator spec June 2026 + attached layout). Each venue renders its OWN
+# wallet / markets / chart / active-trades / AI-decisions block, stacked
+# vertically and never side-by-side. Nothing is mocked: every panel reads REAL
+# engine activity, scanner output, and live exchange klines/balances.
+# ─────────────────────────────────────────────────────────────────────────────
+_BIN_MAJORS = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+_BIN_SLOTS  = 3       # one open trade per pinned major (display denominator)
+_MEXC_SLOTS = 15      # max concurrent MEXC scanner trades (display denominator)
+
+
+def _dip_rules() -> dict:
+    """The ONE Market-Low rule both venues obey — from persisted live_settings."""
+    _s = st.session_state.get("live_settings")
+
+    def _g(name, default):
+        try:
+            v = getattr(_s, name)
+            return v if v is not None else default
+        except Exception:  # noqa: BLE001
+            return default
+    return {
+        "buy":      float(_g("buy_threshold_pct", -0.05)),
+        "tp":       float(_g("take_profit_pct", 0.60)),
+        "sl":       float(_g("stop_loss_pct", -0.30)),
+        "cooldown": int(_g("reentry_cooldown_sec", 60)),
+        "trend":    bool(_g("trend_filter_on", True)),
+        "vol":      bool(_g("volume_filter_on", True)),
+    }
+
+
+def _acts_map() -> dict:
+    """Map FULL symbol → latest live-engine activity record (real engine output)."""
+    out = {}
+    try:
+        for _a in live_engine.get_all_activity():
+            _s = getattr(_a, "symbol", None)
+            if _s:
+                out[str(_s).upper()] = _a
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
+def _sec(title: str):
+    st.markdown(f'<div class="sec-lbl">{title}</div>', unsafe_allow_html=True)
+
+
+def _venue_header(title: str, sub: str, color: str, bg: str):
+    st.markdown(
+        f'<div style="background:{bg};border:1px solid {color}55;'
+        f'border-left:4px solid {color};border-radius:10px;'
+        f'padding:12px 18px;margin:18px 0 14px;">'
+        f'<div style="font-size:18px;font-weight:800;color:{color};'
+        f'letter-spacing:.05em;">{title}</div>'
+        f'<div style="font-size:11px;color:#8b949e;margin-top:2px;">{sub}</div>'
+        f'</div>', unsafe_allow_html=True)
+
+
+def _render_global_rules_bar():
+    """Permanent top bar — the single Market-Low rule applied across both venues."""
+    _r = _dip_rules()
+
+    def _pill(lbl, val_html):
+        return (f'<div style="display:flex;flex-direction:column;gap:1px;">'
+                f'<span style="font-size:9px;letter-spacing:.08em;color:#6e7681;'
+                f'font-weight:700;">{lbl}</span>'
+                f'<span style="font-size:13px;font-weight:800;'
+                f'font-family:JetBrains Mono,monospace;">{val_html}</span></div>')
+    _on = lambda b: ('<span style="color:#26a69a;">ON</span>' if b
+                     else '<span style="color:#6e7681;">OFF</span>')
+    st.markdown(
+        '<div style="background:linear-gradient(90deg,#10151f,#0d1117);'
+        'border:1px solid #2b3340;border-left:3px solid #f0b90b;border-radius:8px;'
+        'padding:10px 16px;margin:0 0 6px;display:flex;gap:26px;flex-wrap:wrap;'
+        'align-items:center;">'
+        '<span style="font-size:11px;font-weight:800;color:#f0b90b;'
+        'letter-spacing:.1em;">⚙️ GLOBAL RULES</span>'
+        + _pill("BUY", f'<span style="color:#26a69a;">≤ {_r["buy"]:.2f}%</span>')
+        + _pill("SELL / TP", f'<span style="color:#26a69a;">+{_r["tp"]:.2f}%</span>')
+        + _pill("STOP", f'<span style="color:#ef5350;">{_r["sl"]:.2f}%</span>')
+        + _pill("COOLDOWN", f'<span style="color:#c9d1d9;">{_r["cooldown"]}s</span>')
+        + _pill("TREND", _on(_r["trend"]))
+        + _pill("VOLUME", _on(_r["vol"]))
+        + '</div>', unsafe_allow_html=True)
+    st.caption("One rule, both venues — Binance majors + MEXC scanner alts trade "
+               "the same Market-Low logic. Max 3 Binance + up to 15 MEXC positions.")
+
+
+def _render_core_markets(acts: dict):
+    """BTC/ETH/SOL — the pinned Binance auto-trade universe (real engine data)."""
+    _sec("📊 Core Markets · BTC · ETH · SOL")
+    cols = st.columns(3)
+    for i, sym in enumerate(_BIN_MAJORS):
+        rec = acts.get(sym)
+        px = _cur_price_for(sym)
+        px_txt = f"${px:,.2f}" if px else "—"
+        chg = getattr(rec, "change_pct", None) if rec else None
+        chg_cls = "up" if (chg is not None and chg >= 0) else "dn"
+        chg_txt = f"{chg:+.3f}%" if chg is not None else "—"
+        dec = (getattr(rec, "decision", None) or "—") if rec else "—"
+        dc = {"BUY": "#26a69a", "SELL": "#ef5350", "HOLD": "#6e7681",
+              "SKIP": "#6e7681", "STOP_LOSS": "#ef5350"}.get(
+                  str(dec).upper(), "#484f58")
+        tok = getattr(rec, "trend_ok", None) if rec else None
+        trend = ("✓" if tok else "✗") if tok is not None else "—"
+        vr = getattr(rec, "volume_ratio", None) if rec else None
+        vol = f"{vr:.2f}×" if vr is not None else "—"
+        with cols[i]:
+            st.markdown(
+                f'<div class="card">'
+                f'<div class="c-lbl">{sym.replace("USDT", "")}'
+                f'<span style="color:#484f58;">/USDT</span></div>'
+                f'<div class="c-val">{px_txt}</div>'
+                f'<div style="font-size:11px;color:#8b949e;">'
+                f'20m <b class="{chg_cls}">{chg_txt}</b> · vol {vol} · trend {trend}'
+                f'<br>AI <b style="color:{dc};">{dec}</b></div></div>',
+                unsafe_allow_html=True)
+
+
+def _render_binance_legacy():
+    """LEGACY BINANCE HOLDINGS (display/reconciliation) + close-to-USDT (confirmed)."""
+    st.markdown('<div style="font-size:11px;font-weight:800;color:#f0b90b;'
+                'letter-spacing:.08em;margin:12px 0 4px;">🟡 LEGACY BINANCE '
+                'HOLDINGS <span style="color:#6e7681;font-weight:600;">· '
+                'display / reconciliation only — not auto-traded</span></div>',
+                unsafe_allow_html=True)
+    if account_holdings:
+        _pnl_by_coin = {}
+        for _t in open_trades:
+            if (_t.get("exchange") or "binance") != "binance":
+                continue
+            _c = (_t.get("coin") or "").upper()
+            if _c:
+                _pnl_by_coin[_c] = (_pnl_by_coin.get(_c, 0.0)
+                                    + float(_t.get("_unrealized") or 0.0))
+        _hrows = []
+        for _h in account_holdings:
+            _a = _h["asset"]
+            _pnl = _pnl_by_coin.get(_a)
+            _hrows.append({
+                "Symbol":     _a,
+                "Free":       f"{_h.get('free', _h['amount']):,.8g}",
+                "Locked":     f"{_h.get('locked', 0.0):,.8g}",
+                "USDT Value": f"${_h['value']:,.2f}",
+                "PnL (USDT)": (f"{_pnl:+,.2f}" if _pnl is not None else "—"),
+            })
+        st.dataframe(pd.DataFrame(_hrows), width="stretch", hide_index=True,
+                     height=min(40 + 36 * len(_hrows), 320))
+        st.caption("💼 Money held in coins isn't lost — it's just not USDT. "
+                   "PnL shown only for coins with an OPEN bot/manual position.")
+    else:
+        st.caption("No priced Binance holdings yet "
+                   "(connect to Binance, or no coins currently held).")
+    if account_unpriced:
+        _ub = ", ".join(f"{_u['amount']:,.6g} {_u['asset']}" for _u in account_unpriced[:6])
+        st.warning(f"⚠️ Couldn't get a live price for: {_ub}. These are NOT "
+                   f"counted in Account Value above, so your real total may "
+                   f"be a little higher than shown.")
+    try:
+        import bot as _bm_majors
+        _MAJOR_SET = set(_bm_majors.BINANCE_MAJORS)
+    except Exception:  # noqa: BLE001
+        _MAJOR_SET = {"BTCUSDT", "ETHUSDT", "SOLUSDT"}
+    _sellable = []
+    for _h in (account_holdings or []):
+        _a = str(_h.get("asset", "")).upper()
+        if not _a or _a in _FEE_STABLES or f"{_a}USDT" in _MAJOR_SET:
+            continue
+        if float(_h.get("free", _h.get("amount", 0)) or 0) <= 0:
+            continue
+        _sellable.append(_h)
+    if _sellable:
+        with st.expander("🧹 Convert a legacy coin to USDT", expanded=False):
+            st.caption("Sell a non-major Binance holding back to USDT. Only "
+                       "coins whose value clears Binance's minimum order size "
+                       "can be sold — tiny dust below the minimum can't be "
+                       "converted (Binance rejects it). The 3 auto-traded "
+                       "majors and stablecoins are not listed here.")
+            _opts = {f"{_h['asset']} · ${_h.get('value', 0):,.2f}": _h
+                     for _h in _sellable}
+            _pick = st.selectbox("Coin to sell", list(_opts.keys()),
+                                 key="legacy_sell_pick")
+            _sel = _opts.get(_pick)
+            if _sel:
+                _asset = str(_sel["asset"]).upper()
+                _sym = f"{_asset}USDT"
+                _free = float(_sel.get("free", _sel.get("amount", 0)) or 0)
+                _val = float(_sel.get("value", 0) or 0)
+                _c = _cl()
+                _min_notional = None
+                if _c is not None:
+                    try:
+                        _min_notional = float(_c.get_min_notional(_sym))
+                    except Exception:  # noqa: BLE001
+                        _min_notional = None
+                _mn_txt = (f"${_min_notional:,.2f}" if _min_notional
+                           else "≈$10 (default)")
+                st.markdown(f"**{_asset}** — free `{_free:,.8g}` · value "
+                            f"**${_val:,.2f}** · Binance min order {_mn_txt}")
+                _floor = _min_notional if _min_notional else 10.0
+                _below = _val < _floor
+                if _below:
+                    st.warning(f"⚠️ ${_val:,.2f} is below the minimum order "
+                               f"size ({_mn_txt}) — Binance won't let you sell "
+                               f"this dust. Nothing will be sent.")
+                _confirm = st.checkbox(
+                    f"✅ Confirm: sell ALL {_asset} to USDT (real LIVE order)",
+                    key="legacy_sell_confirm", value=False)
+                if st.button(f"💱 Sell {_asset} → USDT", key="legacy_sell_btn",
+                             width="stretch",
+                             disabled=bool(_below or not _confirm)):
+                    if _c is None:
+                        st.error("❌ Connect to Binance first — sells require a "
+                                 "real order.")
+                    else:
+                        try:
+                            _q_rnd = _c.round_quantity(_sym, _free)
+                        except Exception:  # noqa: BLE001
+                            _q_rnd = round(_free, 6)
+                        if _q_rnd <= 0:
+                            st.error("❌ Rounded quantity is zero — can't sell.")
+                        else:
+                            from binance_client import extract_fill as _ef
+                            try:
+                                _order = _c.place_market_order(_sym, "SELL", _q_rnd)
+                                _exec_q, _xp = _ef(_order)
+                            except Exception as _e:  # noqa: BLE001
+                                st.error(f"❌ LIVE sell failed (nothing sold): {_e}")
+                                log_activity("ERROR",
+                                    f"🧹 Legacy sell {_asset} FAILED on Binance: {_e}")
+                                st.stop()
+                            if _xp <= 0 or _exec_q <= 0:
+                                st.error("❌ Sell response missing execution "
+                                         "data — coin NOT sold.")
+                                st.stop()
+                            _proceeds = _exec_q * _xp
+                            log_activity("INFO",
+                                f"🧹 Sold legacy {_exec_q:,.8g} {_asset} → "
+                                f"≈${_proceeds:,.2f} USDT @ ${_xp:,.6g} "
+                                f"(manual, confirmed).")
+                            st.success(f"✅ Sold {_exec_q:,.8g} {_asset} for "
+                                       f"≈${_proceeds:,.2f} USDT.")
+                            st.rerun()
+
+
+def _render_mexc_wallet():
+    """MEXC (MCD) wallet — separate from Binance, real balance via MexcExchange."""
+    _mexc_live = bool(st.session_state.get("mexc_live_orders", False))
+    _mexc_tag = "⚠️ LIVE" if _mexc_live else "🔒 DRY-RUN"
+    st.markdown(f'<div style="font-size:11px;font-weight:800;color:#3b82f6;'
+                f'letter-spacing:.08em;margin:4px 0 4px;">🔵 MEXC (MCD) '
+                f'WALLET · {_mexc_tag} — separate wallet</div>',
+                unsafe_allow_html=True)
+    try:
+        from exchanges.mexc import (
+            MexcExchange as _MX, MexcClient as _MXC,
+            load_mexc_credentials as _load_mx_creds,
+        )
+        _mx_creds = _load_mx_creds()
+        if not _mx_creds:
+            st.caption("🔵 MEXC: no MEXC keys saved — wallet not connected "
+                       "(save `data/.mexc_creds.json` to show balance). "
+                       "Binance trading is unaffected.")
+        else:
+            _mx = _MX(client=_MXC(*_mx_creds), live_orders=_mexc_live)
+            _mxb = _mx.get_balance("USDT")
+            _mx_total = float(_mxb.get("total", 0.0))
+            _mx_free = float(_mxb.get("free", 0.0))
+            _mx_lock = float(_mxb.get("locked", 0.0))
+            st.markdown(f"""
+<div style="background:#0a1020;border:1px solid #3b82f644;border-radius:8px;padding:10px 12px;margin-bottom:6px;">
+  <div style="font-size:9px;color:#3b82f6;font-weight:700;letter-spacing:.1em;margin-bottom:4px;">MEXC WALLET · {_mexc_tag}</div>
+  <div style="font-size:18px;font-weight:700;color:#f0f6fc;font-family:'JetBrains Mono',monospace;">${_mx_total:,.2f} <span style="font-size:11px;color:#6e7681;">USDT total</span></div>
+  <div style="font-size:10px;color:#8b949e;margin-top:4px;font-family:'JetBrains Mono',monospace;">free ${_mx_free:,.2f} · locked ${_mx_lock:,.2f}</div>
+</div>""", unsafe_allow_html=True)
+    except Exception as _mxe:  # noqa: BLE001
+        st.caption(f"🔵 MEXC ({_mexc_tag}) — balance unavailable: {_mxe}")
+
+
+def _render_positions(venue: str):
+    """Active trades for ONE venue. Binance positions get a LIVE close button
+    (real Binance counter-order); MEXC positions are display-only (the bot
+    manages SL/TP on MEXC — a Binance counter-order would be wrong)."""
+    rows = [t for t in open_trades if (t.get("exchange") or "binance") == venue]
+    cap = _BIN_SLOTS if venue == "binance" else _MEXC_SLOTS
+    _sec(f"💼 Active Trades · {len(rows)}/{cap}")
+    if not rows:
+        st.caption("No open positions on this venue yet.")
+        return
+    for ot in rows:
+        ep = ot.get("entry_price", 0)
+        sl = ot.get("stop_loss") or st.session_state.risk_manager.stop_loss_price(ep, ot.get("side", "BUY"))
+        tp = ot.get("take_profit") or st.session_state.risk_manager.take_profit_price(ep, ot.get("side", "BUY"))
+        side = ot.get("side", "BUY")
+        pos_cls = "pos-buy" if side == "BUY" else "pos-sell"
+        upnl_html = ""
+        _u_cached = ot.get("_unrealized")
+        _cp_cached = ot.get("_cur_price")
+        if _u_cached is not None and _cp_cached:
+            uc = "#26a69a" if _u_cached >= 0 else "#ef5350"
+            _u_pct = (_u_cached / (ot.get("invested") or 1)) * 100
+            upnl_html = (f'<span style="color:{uc};font-weight:700;">{_fmt_pnl(_u_cached)}</span> '
+                         f'<span style="color:{uc};font-size:10px;opacity:.75;">({_u_pct:+.2f}%)</span>')
+        elif venue == "binance" and live_price and ep:
+            inv = ot.get("invested", 0) or 0
+            upnl = (live_price - ep) / ep * inv if side == "BUY" else (ep - live_price) / ep * inv
+            uc = "#26a69a" if upnl >= 0 else "#ef5350"
+            upnl_html = f'<span style="color:{uc};font-weight:700;">{_fmt_pnl(upnl)}</span>'
+        _card = f"""
+<div class="pos-card {pos_cls}">
+  <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
+    <span style="color:#f0f6fc;font-weight:700;">{ot.get('coin','?')}</span>
+    <span style="color:#{'26a69a' if side=='BUY' else 'ef5350'};font-weight:600;">{side}</span>
+    <span style="color:#6e7681;">{'🤖 Bot' if ot.get('type')=='bot' else '👤 Manual'}</span>
+    <span style="color:#484f58;">ID:{ot.get('id','?')}</span>
+    <span style="color:#6e7681;font-size:10px;">{(ot.get('open_time') or '')[:16].replace('T',' ')}</span>
+  </div>
+  <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;">
+    <div><div style="font-size:9px;color:#484f58;">ENTRY</div>${ep:.4f}</div>
+    <div><div style="font-size:9px;color:#484f58;">SL</div><span style="color:#ef5350;">${sl:.4f}</span></div>
+    <div><div style="font-size:9px;color:#484f58;">TP</div><span style="color:#26a69a;">${tp:.4f}</span></div>
+    <div><div style="font-size:9px;color:#484f58;">UNREALIZED</div>{upnl_html}</div>
+    <div><div style="font-size:9px;color:#484f58;">INVESTED</div>${ot.get('invested',0):.2f}</div>
+  </div>
+</div>
+"""
+        if venue != "binance":
+            st.markdown(_card, unsafe_allow_html=True)
+            st.caption("🤖 Managed by the bot on MEXC (SL/TP) — close on the MEXC app.")
+            continue
+        pc1, pc2 = st.columns([9, 1])
+        with pc1:
+            st.markdown(_card, unsafe_allow_html=True)
+        with pc2:
+            if st.button("✕ Close", key=f"cl_{ot.get('id')}", width="stretch"):
+                c = _cl()
+                if c is None:
+                    st.error("❌ Connect to Binance first — closes require a real counter-order.")
+                else:
+                    _coin = ot["coin"]
+                    _qty = float(ot.get("quantity") or 0)
+                    _side = ot.get("side", "BUY")
+                    if _qty <= 0:
+                        st.error("❌ Position has zero quantity — cannot place counter-order.")
+                    else:
+                        try:
+                            _q_rnd = c.round_quantity(_coin, _qty)
+                        except Exception:
+                            _q_rnd = round(_qty, 6)
+                        from binance_client import extract_fill as _extract_fill
+                        try:
+                            _counter_side = "SELL" if _side == "BUY" else "BUY"
+                            _order = c.place_market_order(_coin, _counter_side, _q_rnd)
+                            _exec_q, xp = _extract_fill(_order)
+                            _exit_fee = _order_fee_usdt(_order, _coin, xp)
+                        except Exception as _e:
+                            st.error(f"❌ LIVE close order failed (NOT recorded): {_e}")
+                            log_activity("ERROR", f"👤 Close {ot['id']} FAILED on Binance: {_e}")
+                            st.stop()
+                        if xp <= 0 or _exec_q <= 0:
+                            st.error("❌ Close response missing execution data — trade NOT closed.")
+                            log_activity("ERROR",
+                                f"👤 Close {ot['id']} aborted — invalid execution data "
+                                f"(qty={_exec_q}, price={xp}).")
+                            st.stop()
+                        _dev = abs(_exec_q - _q_rnd) / _q_rnd if _q_rnd > 0 else 1.0
+                        if _dev > 0.05:
+                            st.error(
+                                f"❌ Fill size mismatch — intended {_q_rnd}, "
+                                f"filled {_exec_q} (Δ {_dev*100:.2f}%). Trade "
+                                f"left OPEN for manual reconciliation.")
+                            log_activity("ERROR",
+                                f"👤 Close {ot['id']} qty mismatch — intended {_q_rnd}, "
+                                f"filled {_exec_q} (Δ {_dev*100:.2f}%). Trade OPEN.")
+                            st.stop()
+                        _closed = close_trade(ot["id"], xp, "Manual close via dashboard (LIVE)", _exit_fee)
+                        if not _closed:
+                            st.error("❌ Counter-order filled but persistence failed — manual reconciliation required.")
+                            log_activity("ERROR",
+                                f"👤 Close {ot['id']} — Binance filled {_counter_side} "
+                                f"{_exec_q} @ ${xp:.4f} but close_trade returned no record.")
+                            st.stop()
+                        log_activity("ORDER",
+                            f"👤 Closed {ot['id']} | LIVE {_counter_side} {_exec_q:.6f} "
+                            f"{_coin} @ ${xp:.4f}")
+                        st.rerun()
+
+
+def _render_ai_decisions(symbols, acts: dict, accent: str):
+    """Per-symbol live AI/engine decisions for ONE venue (real activity store)."""
+    _sec("🧠 AI Decisions")
+    syms = [s for s in (symbols or []) if s]
+    if not syms:
+        st.caption("No symbols on this venue yet.")
+        return
+    cols = st.columns(min(len(syms), 3))
+    for i, sym in enumerate(syms):
+        rec = acts.get(str(sym).upper())
+        if rec is not None:
+            dec = (getattr(rec, "decision", "HOLD") or "HOLD").upper()
+            rsn = (getattr(rec, "reason", "") or "—")
+            px = (f"${rec.price:,.6g}" if getattr(rec, "price", None) else "—")
+            try:
+                when = _fmt_london(rec.at)
+            except Exception:
+                when = "—"
+        else:
+            dec, rsn, px, when = "—", "waiting for first scan…", "—", "—"
+        dc = {"BUY": "#26a69a", "SELL": "#ef5350", "HOLD": "#6e7681",
+              "SKIP": "#6e7681", "STOP_LOSS": "#ef5350"}.get(dec, "#484f58")
+        with cols[i % len(cols)]:
+            st.markdown(
+                f'<div class="card" style="border-left:3px solid {accent};">'
+                f'<div class="c-lbl">{str(sym).replace("USDT", "")}'
+                f'<span style="color:#484f58;">/USDT</span></div>'
+                f'<div class="c-val" style="color:{dc};">{dec}</div>'
+                f'<div style="font-size:11px;color:#8b949e;">'
+                f'price {px}<br>last scan <b>{when}</b><br>'
+                f'reason {rsn[:160]}</div></div>',
+                unsafe_allow_html=True)
+
+
+def _render_scanner_table():
+    """MEXC live scanner — real ranked opportunities. Returns top symbols."""
+    _sec("🛰️ Live Scanner · MEXC volatile alts")
+    try:
+        import scanner as _sc
+        opps = _sc.load_opportunities()
+    except Exception:  # noqa: BLE001
+        opps = []
+    mexc = [o for o in opps
+            if o.get("exchange") == "mexc"
+            and o.get("symbol") and o.get("symbol") not in _BIN_MAJORS]
+    if not mexc:
+        st.caption("Scanner has no MEXC opportunities yet — press "
+                   "“🔄 Refresh scan now” in the sidebar to populate it.")
+        return []
+    rows = [{
+        "Coin":  o.get("symbol", "—").replace("USDT", ""),
+        "Price": f"${o.get('price', 0):,.6g}",
+        "Vol%":  f"{o.get('volatility', 0):.1f}",
+        "24h%":  f"{o.get('change', 0):+.1f}",
+        "Liq $": f"${o.get('volume', 0):,.0f}",
+        "Score": int(o.get("score", 0)),
+    } for o in mexc[:15]]
+    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True,
+                 height=min(40 + 36 * len(rows), 420))
+    return [o.get("symbol") for o in mexc[:4]]
+
+
+def _mini_candle_fig(symbol: str, venue: str, interval: str = "5m",
+                     limit: int = 60):
+    try:
+        if venue == "mexc":
+            from exchanges.mexc import public_klines as _mk
+            df = _mk(symbol, interval, limit=limit)
+        else:
+            df = public_klines(symbol, interval, limit=limit)
+    except Exception:  # noqa: BLE001
+        return None
+    if df is None or len(df) == 0 or "open_time" not in df:
+        return None
+    fig = go.Figure(go.Candlestick(
+        x=df["open_time"], open=df["open"], high=df["high"],
+        low=df["low"], close=df["close"],
+        increasing_line_color="#26a69a", decreasing_line_color="#ef5350",
+        showlegend=False))
+    fig.update_layout(
+        height=170, margin=dict(l=4, r=4, t=4, b=4),
+        paper_bgcolor="#0d1117", plot_bgcolor="#0d1117",
+        xaxis=dict(visible=False, rangeslider=dict(visible=False)),
+        yaxis=dict(visible=False))
+    return fig
+
+
+def _render_scanner_charts(symbols, interval: str = "5m"):
+    """Row of compact REAL MEXC candlestick charts for the top scanner coins."""
+    _sec("📈 Scanner Coin Charts · live MEXC candles")
+    syms = [s for s in (symbols or []) if s][:4]
+    if not syms:
+        st.caption("No scanner coins to chart yet.")
+        return
+    cols = st.columns(len(syms))
+    for i, sym in enumerate(syms):
+        with cols[i]:
+            st.markdown(f'<div style="font-size:11px;font-weight:700;'
+                        f'color:#3b82f6;margin-bottom:2px;">'
+                        f'{sym.replace("USDT", "")}'
+                        f'<span style="color:#484f58;">/USDT</span></div>',
+                        unsafe_allow_html=True)
+            fig = _mini_candle_fig(sym, "mexc", interval)
+            if fig is not None:
+                st.plotly_chart(fig, use_container_width=True,
+                                key=f"mini_{sym}",
+                                config={"displayModeBar": False})
+            else:
+                st.caption("chart unavailable")
+
+
+def _render_rotation_engine(mexc_syms):
+    """MEXC scanner rotation status + recent [ROTATE] events (real activity log)."""
+    _sec("🔁 Rotation Engine · MEXC scanner")
+    b = bot_module.get_bot()
+    pinned = ", ".join(s.replace("USDT", "") for s in _BIN_MAJORS)
+    interval = int(getattr(b, "_rotation_interval_sec", 120)) if b else 120
+    top_n = int(getattr(b, "_scanner_top_n", 3)) if b else 3
+    on = bool(getattr(b, "_scanner_rotation_on", False)) if b else False
+    cur = ", ".join(s.replace("USDT", "") for s in (mexc_syms or [])) or "—"
+    st.markdown(
+        f'<div class="card"><div style="font-size:11px;color:#8b949e;">'
+        f'status <b style="color:{"#26a69a" if on else "#6e7681"};">'
+        f'{"ROTATING" if on else "STATIC"}</b> · pinned majors <b>{pinned}</b> '
+        f'(never rotated) · MEXC top-{top_n}, re-ranked every {interval}s<br>'
+        f'current MEXC workers: <b>{cur}</b></div></div>',
+        unsafe_allow_html=True)
+    try:
+        acts = load_activity()
+    except Exception:  # noqa: BLE001
+        acts = []
+    rot = [a for a in acts if "[ROTATE]" in (a.get("message") or "")][-8:]
+    if rot:
+        lines = []
+        for a in reversed(rot):
+            ts = _fmt_london(a.get("time"), "%H:%M:%S")
+            msg = (a.get("message", "").replace("&", "&amp;")
+                   .replace("<", "&lt;").replace(">", "&gt;"))
+            lines.append(f'<div class="log-line"><span class="l-ts">{ts}</span>'
+                         f'<span class="l-msg lINFO">{msg}</span></div>')
+        st.markdown('<div class="log-wrap">' + "".join(lines) + '</div>',
+                    unsafe_allow_html=True)
+    else:
+        st.caption("No rotations logged yet — the engine swaps idle MEXC picks "
+                   "as the scan re-ranks (open positions & majors are never dropped).")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # MAIN — fund cards
 # ─────────────────────────────────────────────────────────────────────────────
 with st.container():
     _, col_main, _ = st.columns([0.005, 99.99, 0.005])
     with col_main:
+
+        # Real engine activity + current MEXC workers, computed once for the
+        # two-venue layout below (Core Markets / AI Decisions / Rotation).
+        _acts = _acts_map()
+        _b_now = bot_module.get_bot()
+        _mexc_syms = []
+        if _b_now is not None:
+            try:
+                _mexc_syms = sorted({w.symbol for w in _b_now.workers.values()
+                                     if getattr(w.exchange, "name", "") == "mexc"})
+            except Exception:  # noqa: BLE001
+                _mexc_syms = []
+        if not _mexc_syms:
+            _mexc_syms = sorted({t.get("coin") for t in open_trades
+                                 if (t.get("exchange") == "mexc") and t.get("coin")})
+
+        # Permanent GLOBAL RULES bar (applies to BOTH venues), then the Binance
+        # venue section header. The MEXC section header is rendered further down.
+        _render_global_rules_bar()
+        _venue_header("🟡 BINANCE DASHBOARD",
+                      "Pinned majors BTC · ETH · SOL · Market-Low rule · "
+                      "never rotated · max 3 positions",
+                      "#f0b90b", "#1a1505")
 
         roi_cls  = "up" if roi >= 0  else "dn"
         dpnl_cls = "up" if daily_pnl >= 0 else "dn"
@@ -3122,173 +3679,6 @@ with st.container():
   </div>
 </div>
 """, unsafe_allow_html=True)
-
-        # ── BINANCE PORTFOLIO — per-coin holdings (kept SEPARATE from MEXC) ─────
-        # req: show every coin held with symbol / free / locked / USDT value / PnL,
-        # and never mix Binance and MEXC balances.
-        st.markdown('<div style="font-size:11px;font-weight:800;color:#f0b90b;'
-                    'letter-spacing:.08em;margin:12px 0 4px;">🟡 LEGACY BINANCE '
-                    'HOLDINGS <span style="color:#6e7681;font-weight:600;">· '
-                    'display / reconciliation only — not auto-traded</span></div>',
-                    unsafe_allow_html=True)
-        if account_holdings:
-            # Per-coin open unrealized PnL (USDT) from OPEN Binance positions only.
-            _pnl_by_coin = {}
-            for _t in open_trades:
-                if (_t.get("exchange") or "binance") != "binance":
-                    continue
-                _c = (_t.get("coin") or "").upper()
-                if _c:
-                    _pnl_by_coin[_c] = (_pnl_by_coin.get(_c, 0.0)
-                                        + float(_t.get("_unrealized") or 0.0))
-            _hrows = []
-            for _h in account_holdings:
-                _a   = _h["asset"]
-                _pnl = _pnl_by_coin.get(_a)
-                _hrows.append({
-                    "Symbol":     _a,
-                    "Free":       f"{_h.get('free', _h['amount']):,.8g}",
-                    "Locked":     f"{_h.get('locked', 0.0):,.8g}",
-                    "USDT Value": f"${_h['value']:,.2f}",
-                    "PnL (USDT)": (f"{_pnl:+,.2f}" if _pnl is not None else "—"),
-                })
-            st.dataframe(pd.DataFrame(_hrows), width="stretch", hide_index=True,
-                         height=min(40 + 36 * len(_hrows), 320))
-            st.caption("💼 Money held in coins isn't lost — it's just not USDT. "
-                       "PnL shown only for coins with an OPEN bot/manual position.")
-        else:
-            st.caption("No priced Binance holdings yet "
-                       "(connect to Binance, or no coins currently held).")
-        if account_unpriced:
-            _ub = ", ".join(f"{_u['amount']:,.6g} {_u['asset']}" for _u in account_unpriced[:6])
-            st.warning(f"⚠️ Couldn't get a live price for: {_ub}. These are NOT "
-                       f"counted in Account Value above, so your real total may "
-                       f"be a little higher than shown.")
-
-        # ── Close legacy/dust Binance coins → USDT (manual, confirmed) ──────────
-        # Operator spec (June 2026): every non-major Binance coin is legacy/dust
-        # and must be sellable BACK to USDT — but ONLY when Binance min-notional
-        # allows AND with an explicit confirmation. Majors (the 3 auto-traded
-        # coins) and stablecoins are excluded. Nothing is hidden; nothing is sold
-        # without the operator ticking the confirm box.
-        try:
-            import bot as _bm_majors
-            _MAJOR_SET = set(_bm_majors.BINANCE_MAJORS)
-        except Exception:  # noqa: BLE001
-            _MAJOR_SET = {"BTCUSDT", "ETHUSDT", "SOLUSDT"}
-        _sellable = []
-        for _h in (account_holdings or []):
-            _a = str(_h.get("asset", "")).upper()
-            if not _a or _a in _FEE_STABLES or f"{_a}USDT" in _MAJOR_SET:
-                continue
-            if float(_h.get("free", _h.get("amount", 0)) or 0) <= 0:
-                continue
-            _sellable.append(_h)
-        if _sellable:
-            with st.expander("🧹 Convert a legacy coin to USDT", expanded=False):
-                st.caption("Sell a non-major Binance holding back to USDT. Only "
-                           "coins whose value clears Binance's minimum order size "
-                           "can be sold — tiny dust below the minimum can't be "
-                           "converted (Binance rejects it). The 3 auto-traded "
-                           "majors and stablecoins are not listed here.")
-                _opts = {f"{_h['asset']} · ${_h.get('value', 0):,.2f}": _h
-                         for _h in _sellable}
-                _pick = st.selectbox("Coin to sell", list(_opts.keys()),
-                                     key="legacy_sell_pick")
-                _sel = _opts.get(_pick)
-                if _sel:
-                    _asset = str(_sel["asset"]).upper()
-                    _sym   = f"{_asset}USDT"
-                    _free  = float(_sel.get("free", _sel.get("amount", 0)) or 0)
-                    _val   = float(_sel.get("value", 0) or 0)
-                    _c     = _cl()
-                    _min_notional = None
-                    if _c is not None:
-                        try:
-                            _min_notional = float(_c.get_min_notional(_sym))
-                        except Exception:  # noqa: BLE001
-                            _min_notional = None
-                    _mn_txt = (f"${_min_notional:,.2f}" if _min_notional
-                               else "≈$10 (default)")
-                    st.markdown(f"**{_asset}** — free `{_free:,.8g}` · value "
-                                f"**${_val:,.2f}** · Binance min order {_mn_txt}")
-                    _floor  = _min_notional if _min_notional else 10.0
-                    _below  = _val < _floor
-                    if _below:
-                        st.warning(f"⚠️ ${_val:,.2f} is below the minimum order "
-                                   f"size ({_mn_txt}) — Binance won't let you sell "
-                                   f"this dust. Nothing will be sent.")
-                    _confirm = st.checkbox(
-                        f"✅ Confirm: sell ALL {_asset} to USDT (real LIVE order)",
-                        key="legacy_sell_confirm", value=False)
-                    if st.button(f"💱 Sell {_asset} → USDT", key="legacy_sell_btn",
-                                 width="stretch",
-                                 disabled=bool(_below or not _confirm)):
-                        if _c is None:
-                            st.error("❌ Connect to Binance first — sells require a "
-                                     "real order.")
-                        else:
-                            try:
-                                _q_rnd = _c.round_quantity(_sym, _free)
-                            except Exception:  # noqa: BLE001
-                                _q_rnd = round(_free, 6)
-                            if _q_rnd <= 0:
-                                st.error("❌ Rounded quantity is zero — can't sell.")
-                            else:
-                                from binance_client import extract_fill as _ef
-                                try:
-                                    _order = _c.place_market_order(_sym, "SELL", _q_rnd)
-                                    _exec_q, _xp = _ef(_order)
-                                except Exception as _e:  # noqa: BLE001
-                                    st.error(f"❌ LIVE sell failed (nothing sold): {_e}")
-                                    log_activity("ERROR",
-                                        f"🧹 Legacy sell {_asset} FAILED on Binance: {_e}")
-                                    st.stop()
-                                if _xp <= 0 or _exec_q <= 0:
-                                    st.error("❌ Sell response missing execution "
-                                             "data — coin NOT sold.")
-                                    st.stop()
-                                _proceeds = _exec_q * _xp
-                                log_activity("INFO",
-                                    f"🧹 Sold legacy {_exec_q:,.8g} {_asset} → "
-                                    f"≈${_proceeds:,.2f} USDT @ ${_xp:,.6g} "
-                                    f"(manual, confirmed).")
-                                st.success(f"✅ Sold {_exec_q:,.8g} {_asset} for "
-                                           f"≈${_proceeds:,.2f} USDT.")
-                                st.rerun()
-
-        # ── MEXC (MCD) PORTFOLIO — ALWAYS shown, in its OWN section ─────────────
-        # req: show the MEXC wallet separately and never mix it with Binance.
-        _mexc_live = bool(st.session_state.get("mexc_live_orders", False))
-        _mexc_tag  = "⚠️ LIVE" if _mexc_live else "🔒 DRY-RUN"
-        st.markdown(f'<div style="font-size:11px;font-weight:800;color:#3b82f6;'
-                    f'letter-spacing:.08em;margin:14px 0 4px;">🔵 MEXC (MCD) '
-                    f'PORTFOLIO · {_mexc_tag} — separate wallet</div>',
-                    unsafe_allow_html=True)
-        try:
-            from exchanges.mexc import (
-                MexcExchange as _MX, MexcClient as _MXC,
-                load_mexc_credentials as _load_mx_creds,
-            )
-            _mx_creds = _load_mx_creds()
-            if not _mx_creds:
-                st.caption("🔵 MEXC: no MEXC keys saved — wallet not connected "
-                           "(save `data/.mexc_creds.json` to show balance). "
-                           "Binance trading is unaffected.")
-            else:
-                _mx   = _MX(client=_MXC(*_mx_creds), live_orders=_mexc_live)
-                _mxb  = _mx.get_balance("USDT")
-                _mx_total = float(_mxb.get("total", 0.0))
-                _mx_free  = float(_mxb.get("free", 0.0))
-                _mx_lock  = float(_mxb.get("locked", 0.0))
-                st.markdown(f"""
-<div style="background:#0a1020;border:1px solid #3b82f644;border-radius:8px;padding:10px 12px;margin-bottom:6px;">
-  <div style="font-size:9px;color:#3b82f6;font-weight:700;letter-spacing:.1em;margin-bottom:4px;">MEXC WALLET · {_mexc_tag}</div>
-  <div style="font-size:18px;font-weight:700;color:#f0f6fc;font-family:'JetBrains Mono',monospace;">${_mx_total:,.2f} <span style="font-size:11px;color:#6e7681;">USDT total</span></div>
-  <div style="font-size:10px;color:#8b949e;margin-top:4px;font-family:'JetBrains Mono',monospace;">free ${_mx_free:,.2f} · locked ${_mx_lock:,.2f}</div>
-</div>""", unsafe_allow_html=True)
-        except Exception as _mxe:
-            st.caption(f"🔵 MEXC ({_mexc_tag}) — balance unavailable: {_mxe}")
 
         # ── Bot spending limit meter: how much of YOUR money is in play ─────────
         _bot_limit   = float(getattr(st.session_state.global_risk,
@@ -3383,6 +3773,30 @@ with st.container():
         )
         st.plotly_chart(_sfig, width="stretch", key="equity_spark_chart",
                         config={"displayModeBar": False, "staticPlot": False})
+
+        # ── Core markets + Binance chart symbol selector ───────────────────────
+        # Core Markets shows the 3 pinned Binance majors (real engine data); the
+        # selector below is the SOLE control for which major the big chart shows.
+        _render_core_markets(_acts)
+        _bmaj = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+        _bcur = st.session_state.symbol if st.session_state.symbol in _bmaj else "BTCUSDT"
+        st.markdown('<div class="sec-lbl" style="margin-top:12px;">📈 Binance Chart</div>',
+                    unsafe_allow_html=True)
+        if hasattr(st, "segmented_control"):
+            _bpick = st.segmented_control(
+                "Binance chart symbol", _bmaj, default=_bcur,
+                key="bin_chart_pick",
+                format_func=lambda s: s.replace("USDT", ""),
+                label_visibility="collapsed")
+        else:
+            _bpick = st.radio(
+                "Binance chart symbol", _bmaj, index=_bmaj.index(_bcur),
+                horizontal=True, key="bin_chart_pick",
+                format_func=lambda s: s.replace("USDT", ""),
+                label_visibility="collapsed")
+        if _bpick and _bpick != st.session_state.symbol:
+            st.session_state.symbol = _bpick
+            st.rerun()
 
         # ── Chart toolbar ─────────────────────────────────────────────────────
         # Manual BUY/SELL controls were removed — the Market Low bot is the
@@ -4107,114 +4521,25 @@ with st.container():
             with st.spinner("Loading chart data from Binance…"):
                 st.info("Chart will appear here once data loads. No API key required.")
 
-        # ── Open Positions ────────────────────────────────────────────────────
-        if open_trades:
-            st.markdown('<div class="sec-lbl">Open Positions</div>', unsafe_allow_html=True)
-            for ot in open_trades:
-                ep   = ot.get("entry_price", 0)
-                sl   = ot.get("stop_loss")   or st.session_state.risk_manager.stop_loss_price(ep, ot.get("side","BUY"))
-                tp   = ot.get("take_profit") or st.session_state.risk_manager.take_profit_price(ep, ot.get("side","BUY"))
-                side = ot.get("side", "BUY")
-                pos_cls = "pos-buy" if side == "BUY" else "pos-sell"
+        # ── Binance active trades + legacy holdings + AI decisions ─────────────
+        _render_positions("binance")
+        _render_binance_legacy()
+        _render_ai_decisions(_BIN_MAJORS, _acts, "#f0b90b")
 
-                upnl_html = ""
-                # Prefer cached per-position unrealized (uses correct symbol's price)
-                _u_cached = ot.get("_unrealized")
-                _cp_cached = ot.get("_cur_price")
-                if _u_cached is not None and _cp_cached:
-                    uc = "#26a69a" if _u_cached >= 0 else "#ef5350"
-                    _u_pct = (_u_cached / (ot.get("invested") or 1)) * 100
-                    upnl_html = (f'<span style="color:{uc};font-weight:700;">{_fmt_pnl(_u_cached)}</span> '
-                                 f'<span style="color:{uc};font-size:10px;opacity:.75;">({_u_pct:+.2f}%)</span>')
-                elif live_price and ep:
-                    inv  = ot.get("invested", 0) or 0
-                    upnl = (live_price - ep) / ep * inv if side == "BUY" else (ep - live_price) / ep * inv
-                    uc   = "#26a69a" if upnl >= 0 else "#ef5350"
-                    upnl_html = f'<span style="color:{uc};font-weight:700;">{_fmt_pnl(upnl)}</span>'
-
-                pc1, pc2 = st.columns([9, 1])
-                with pc1:
-                    st.markdown(f"""
-<div class="pos-card {pos_cls}">
-  <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
-    <span style="color:#f0f6fc;font-weight:700;">{ot.get('coin','?')}</span>
-    <span style="color:#{'26a69a' if side=='BUY' else 'ef5350'};font-weight:600;">{side}</span>
-    <span style="color:#6e7681;">{'🤖 Bot' if ot.get('type')=='bot' else '👤 Manual'}</span>
-    <span style="color:#484f58;">ID:{ot.get('id','?')}</span>
-    <span style="color:#6e7681;font-size:10px;">{(ot.get('open_time') or '')[:16].replace('T',' ')}</span>
-  </div>
-  <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;">
-    <div><div style="font-size:9px;color:#484f58;">ENTRY</div>${ep:.4f}</div>
-    <div><div style="font-size:9px;color:#484f58;">SL</div><span style="color:#ef5350;">${sl:.4f}</span></div>
-    <div><div style="font-size:9px;color:#484f58;">TP</div><span style="color:#26a69a;">${tp:.4f}</span></div>
-    <div><div style="font-size:9px;color:#484f58;">UNREALIZED</div>{upnl_html}</div>
-    <div><div style="font-size:9px;color:#484f58;">INVESTED</div>${ot.get('invested',0):.2f}</div>
-  </div>
-</div>
-""", unsafe_allow_html=True)
-                with pc2:
-                    if st.button(f"✕ Close", key=f"cl_{ot.get('id')}",
-                                 width="stretch"):
-                        c = _cl()
-                        if c is None:
-                            st.error("❌ Connect to Binance first — closes require a real counter-order.")
-                        else:
-                            _coin = ot["coin"]
-                            _qty  = float(ot.get("quantity") or 0)
-                            _side = ot.get("side", "BUY")
-                            if _qty <= 0:
-                                st.error("❌ Position has zero quantity — cannot place counter-order.")
-                            else:
-                                try:
-                                    _q_rnd = c.round_quantity(_coin, _qty)
-                                except Exception:
-                                    _q_rnd = round(_qty, 6)
-                                # Counter-order: long → SELL, short → BUY.
-                                # Recorded close MUST come from Binance execution
-                                # (extract_fill raises if Binance didn't fill) — never
-                                # fall back to ticker. Fill-size guard mirrors
-                                # SymbolWorker._close_position: >5% qty deviation
-                                # leaves the trade OPEN for manual reconciliation.
-                                from binance_client import extract_fill as _extract_fill
-                                try:
-                                    _counter_side = "SELL" if _side == "BUY" else "BUY"
-                                    _order = c.place_market_order(_coin, _counter_side, _q_rnd)
-                                    _exec_q, xp = _extract_fill(_order)
-                                    # P2 REAL PnL — convert the real exit commission to
-                                    # USDT via the shared helper (same logic the manual
-                                    # OPEN paths use, so entry/exit fees stay consistent).
-                                    _exit_fee = _order_fee_usdt(_order, _coin, xp)
-                                except Exception as _e:
-                                    st.error(f"❌ LIVE close order failed (NOT recorded): {_e}")
-                                    log_activity("ERROR", f"👤 Close {ot['id']} FAILED on Binance: {_e}")
-                                    st.stop()
-                                if xp <= 0 or _exec_q <= 0:
-                                    st.error(f"❌ Close response missing execution data — trade NOT closed.")
-                                    log_activity("ERROR",
-                                        f"👤 Close {ot['id']} aborted — invalid execution data "
-                                        f"(qty={_exec_q}, price={xp}).")
-                                    st.stop()
-                                _dev = abs(_exec_q - _q_rnd) / _q_rnd if _q_rnd > 0 else 1.0
-                                if _dev > 0.05:
-                                    st.error(
-                                        f"❌ Fill size mismatch — intended {_q_rnd}, "
-                                        f"filled {_exec_q} (Δ {_dev*100:.2f}%). Trade "
-                                        f"left OPEN for manual reconciliation.")
-                                    log_activity("ERROR",
-                                        f"👤 Close {ot['id']} qty mismatch — intended {_q_rnd}, "
-                                        f"filled {_exec_q} (Δ {_dev*100:.2f}%). Trade OPEN.")
-                                    st.stop()
-                                _closed = close_trade(ot["id"], xp, "Manual close via dashboard (LIVE)", _exit_fee)
-                                if not _closed:
-                                    st.error("❌ Counter-order filled but persistence failed — manual reconciliation required.")
-                                    log_activity("ERROR",
-                                        f"👤 Close {ot['id']} — Binance filled {_counter_side} "
-                                        f"{_exec_q} @ ${xp:.4f} but close_trade returned no record.")
-                                    st.stop()
-                                log_activity("ORDER",
-                                    f"👤 Closed {ot['id']} | LIVE {_counter_side} {_exec_q:.6f} "
-                                    f"{_coin} @ ${xp:.4f}")
-                                st.rerun()
+        # ══════════════════════════════════════════════════════════════════════
+        # MEXC DASHBOARD — fully separate venue (own wallet / scanner / charts /
+        # active trades / AI / rotation). Never side-by-side with Binance.
+        # ══════════════════════════════════════════════════════════════════════
+        _venue_header("🔵 MEXC DASHBOARD",
+                      "Scanner-selected volatile alts (excl. majors) · Market-Low "
+                      "rule · rotated as they go quiet · max 15 positions",
+                      "#3b82f6", "#0a1020")
+        _render_mexc_wallet()
+        _mexc_top = _render_scanner_table()
+        _render_scanner_charts(_mexc_top or _mexc_syms)
+        _render_positions("mexc")
+        _render_ai_decisions((_mexc_syms or _mexc_top), _acts, "#3b82f6")
+        _render_rotation_engine(_mexc_syms)
 
         # ── Tabs: History + Activity ──────────────────────────────────────────
         tab_h, tab_a, tab_s = st.tabs(["📋  Trade History", "📟  Activity Log", "📊  Stats"])
