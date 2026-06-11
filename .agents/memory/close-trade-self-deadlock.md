@@ -17,7 +17,7 @@ close can freeze the calling thread AFTER the trade file is already saved
 thread hangs.
 
 **Why it matters:** could silently freeze the bot daemon thread on the first
-SL/TP close. Discovered during the UTC-timestamp task (#48); NOT fixed there
+SL/TP close. Discovered during the UTC-timestamp work; NOT fixed there
 to stay in scope.
 
 **FIXED (June 2026):** `close_trade()` now captures the closed dict + the

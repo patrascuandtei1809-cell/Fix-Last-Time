@@ -3117,6 +3117,40 @@ def _acts_map() -> dict:
     return out
 
 
+def _scanner_scores() -> dict:
+    """Map FULL symbol → latest scanner score (real ranked opportunities)."""
+    out = {}
+    try:
+        import scanner as _sc
+        for o in _sc.load_opportunities():
+            s = o.get("symbol")
+            if s:
+                out[str(s).upper()] = int(o.get("score", 0) or 0)
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
+def _decision_state(rec):
+    """Map a live-engine ActivityRecord → (label, color) for the decisions table.
+
+    The engine's own semantics drive the mapping so the table shows exactly what
+    the bot will do next: BUY → BUY READY, SELL → SELL, STOP_LOSS → STOP LOSS,
+    SKIP (hard block: cooldown / caps / risk gate / balance / sizing) → BLOCKED,
+    HOLD (waiting for a dip / trend / volume, or holding an open position) → WAIT.
+    """
+    d = (getattr(rec, "decision", "") or "HOLD").upper().replace("-", "_").replace(" ", "_")
+    if d == "BUY":
+        return "BUY READY", "#26a69a"
+    if d in ("SELL", "TAKE_PROFIT"):
+        return "SELL", "#3b82f6"
+    if d == "STOP_LOSS":
+        return "STOP LOSS", "#ef5350"
+    if d == "SKIP":
+        return "BLOCKED", "#d29922"
+    return "WAIT", "#8b949e"
+
+
 def _sec(title: str):
     st.markdown(f'<div class="sec-lbl">{title}</div>', unsafe_allow_html=True)
 
@@ -3576,37 +3610,86 @@ def _render_positions(venue: str):
 
 
 def _render_ai_decisions(symbols, acts: dict, accent: str):
-    """Per-symbol live AI/engine decisions for ONE venue (real activity store)."""
-    _sec("🧠 AI Decisions")
+    """ACTIONABLE per-symbol decision table for ONE venue — shows exactly what
+    the bot will do next and why (real live-engine ActivityRecord output).
+
+    Columns: Coin · Market-Low % · Trend · Volume · Score · Decision · Reason.
+    Decision states: BUY READY / WAIT / BLOCKED / SELL / STOP LOSS. Symbols the
+    engine has not evaluated yet are omitted — no empty placeholder cards."""
+    _sec("🧠 AI Decisions · what the bot will do next & why")
     syms = [s for s in (symbols or []) if s]
-    if not syms:
-        st.caption("No symbols on this venue yet.")
-        return
-    cols = st.columns(min(len(syms), 3))
-    for i, sym in enumerate(syms):
+    scores = _scanner_scores()
+    rows = []
+    for sym in syms:
         rec = acts.get(str(sym).upper())
-        if rec is not None:
-            dec = (getattr(rec, "decision", "HOLD") or "HOLD").upper()
-            rsn = (getattr(rec, "reason", "") or "—")
-            px = (f"${rec.price:,.6g}" if getattr(rec, "price", None) else "—")
-            try:
-                when = _fmt_london(rec.at)
-            except Exception:
-                when = "—"
+        if rec is None:
+            continue  # no empty "waiting for first scan" cards
+        state, scol = _decision_state(rec)
+        # Market-Low % — the 20m change; ≤ buy threshold = dip/entry candidate.
+        chg = getattr(rec, "change_pct", None)
+        buy_thr = getattr(rec, "buy_threshold", None)
+        if chg is None:
+            ml = '<span style="color:#484f58;">—</span>'
         else:
-            dec, rsn, px, when = "—", "waiting for first scan…", "—", "—"
-        dc = {"BUY": "#26a69a", "SELL": "#ef5350", "HOLD": "#6e7681",
-              "SKIP": "#6e7681", "STOP_LOSS": "#ef5350"}.get(dec, "#484f58")
-        with cols[i % len(cols)]:
-            st.markdown(
-                f'<div class="card" style="border-left:3px solid {accent};">'
-                f'<div class="c-lbl">{str(sym).replace("USDT", "")}'
-                f'<span style="color:#484f58;">/USDT</span></div>'
-                f'<div class="c-val" style="color:{dc};">{dec}</div>'
-                f'<div style="font-size:11px;color:#8b949e;">'
-                f'price {px}<br>last scan <b>{when}</b><br>'
-                f'reason {rsn[:160]}</div></div>',
-                unsafe_allow_html=True)
+            _c = ("#26a69a" if (buy_thr is not None and chg <= buy_thr)
+                  else "#ef5350" if chg < 0 else "#8b949e")
+            ml = f'<span style="color:{_c};">{chg:+.2f}%</span>'
+        # Trend gate
+        t_on = getattr(rec, "trend_filter_on", True)
+        t_ok = getattr(rec, "trend_ok", None)
+        if not t_on:
+            tr = '<span style="color:#6e7681;">off</span>'
+        elif t_ok is True:
+            tr = '<span style="color:#26a69a;">&#8593; up</span>'
+        elif t_ok is False:
+            tr = '<span style="color:#d29922;">flat</span>'
+        else:
+            tr = '<span style="color:#484f58;">—</span>'
+        # Volume gate (ratio vs required multiple)
+        vr = getattr(rec, "volume_ratio", None)
+        v_on = getattr(rec, "volume_filter_on", False)
+        v_min = getattr(rec, "min_volume_multiple", 1.5)
+        if vr is None:
+            vol = '<span style="color:#484f58;">—</span>'
+        else:
+            _c = "#ef5350" if (v_on and v_min > 0 and vr < v_min) else "#c9d1d9"
+            vol = f'<span style="color:{_c};">{vr:.2f}&#215;</span>'
+        # Scanner score (majors are pinned, not scanner-ranked → —)
+        sc = scores.get(str(sym).upper())
+        if sc is None:
+            sco = '<span style="color:#484f58;">—</span>'
+        else:
+            _c = "#26a69a" if sc >= 70 else "#d29922" if sc >= 45 else "#8b949e"
+            sco = f'<span style="color:{_c};font-weight:700;">{sc}</span>'
+        rsn = (getattr(rec, "reason", "") or "—")
+        rsn = (rsn.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+        coin = str(sym).replace("USDT", "")
+        rows.append(
+            f'<tr><td style="font-weight:700;">{coin}'
+            f'<span style="color:#484f58;font-weight:400;">/USDT</span></td>'
+            f'<td>{ml}</td><td>{tr}</td><td>{vol}</td><td>{sco}</td>'
+            f'<td><span style="background:{scol}22;color:{scol};'
+            f'border:1px solid {scol}66;border-radius:6px;padding:2px 8px;'
+            f'font-weight:800;font-size:11px;white-space:nowrap;">{state}</span></td>'
+            f'<td style="color:#8b949e;font-size:11px;">{rsn[:120]}</td></tr>')
+    if not rows:
+        st.caption("No live engine decisions yet — start the bot to see what it "
+                   "will do next per coin.")
+        return
+    head = ("Coin", "Market-Low %", "Trend", "Volume", "Score", "Decision", "Reason")
+    thead = "".join(f"<th>{h}</th>" for h in head)
+    st.markdown(
+        "<style>.dec-tbl{width:100%;border-collapse:collapse;font-size:12px;"
+        "font-family:JetBrains Mono,monospace;}"
+        ".dec-tbl th{text-align:left;color:#6e7681;font-size:10px;font-weight:700;"
+        "letter-spacing:.04em;padding:5px 10px;border-bottom:1px solid #21262d;}"
+        ".dec-tbl td{padding:5px 10px;border-bottom:1px solid #161b22;"
+        "vertical-align:middle;}</style>"
+        f'<div style="border-left:3px solid {accent};border-radius:8px;'
+        f'overflow-x:auto;background:#0d111733;">'
+        f'<table class="dec-tbl"><thead><tr>{thead}</tr></thead>'
+        f'<tbody>{"".join(rows)}</tbody></table></div>',
+        unsafe_allow_html=True)
 
 
 def _render_scanner_table():
@@ -3638,7 +3721,7 @@ def _render_scanner_table():
 
 
 def _mini_candle_fig(symbol: str, venue: str, interval: str = "5m",
-                     limit: int = 60):
+                     limit: int = 60, trades=None):
     try:
         if venue == "mexc":
             from exchanges.mexc import public_klines as _mk
@@ -3654,6 +3737,46 @@ def _mini_candle_fig(symbol: str, venue: str, interval: str = "5m",
         low=df["low"], close=df["close"],
         increasing_line_color="#26a69a", decreasing_line_color="#ef5350",
         showlegend=False))
+    # Real BUY / SELL / STOP markers, snapped to the nearest candle. Sells are
+    # split into take-profit (SELL ▼) vs stop-loss (STOP ✕) by realized PnL.
+    if trades:
+        try:
+            _m = build_trade_markers(trades, symbol, df["open_time"])
+            _by_id = {str(t.get("id"))[:8]: t for t in trades}
+            if _m.buy:
+                fig.add_trace(go.Scatter(
+                    x=[p.x for p in _m.buy], y=[p.y for p in _m.buy],
+                    mode="markers", showlegend=False,
+                    marker=dict(symbol="triangle-up", color="#26a69a",
+                                size=9, line=dict(color="#0d1117", width=1)),
+                    hovertemplate="BUY %{y:.6g}<extra></extra>"))
+            _sell, _stop = [], []
+            for p in _m.sell:
+                _t = _by_id.get(p.trade_id)
+                _is_stop = False
+                if _t is not None:
+                    _pl = _t.get("profit_loss")
+                    if _pl is not None:
+                        _is_stop = float(_pl) < 0
+                    elif _t.get("entry_price"):
+                        _is_stop = p.y < float(_t["entry_price"])
+                (_stop if _is_stop else _sell).append(p)
+            if _sell:
+                fig.add_trace(go.Scatter(
+                    x=[p.x for p in _sell], y=[p.y for p in _sell],
+                    mode="markers", showlegend=False,
+                    marker=dict(symbol="triangle-down", color="#3b82f6",
+                                size=9, line=dict(color="#0d1117", width=1)),
+                    hovertemplate="SELL %{y:.6g}<extra></extra>"))
+            if _stop:
+                fig.add_trace(go.Scatter(
+                    x=[p.x for p in _stop], y=[p.y for p in _stop],
+                    mode="markers", showlegend=False,
+                    marker=dict(symbol="x", color="#ef5350",
+                                size=10, line=dict(color="#0d1117", width=1)),
+                    hovertemplate="STOP %{y:.6g}<extra></extra>"))
+        except Exception:  # noqa: BLE001
+            pass
     fig.update_layout(
         height=170, margin=dict(l=4, r=4, t=4, b=4),
         paper_bgcolor="#0d1117", plot_bgcolor="#0d1117",
@@ -3663,12 +3786,18 @@ def _mini_candle_fig(symbol: str, venue: str, interval: str = "5m",
 
 
 def _render_scanner_charts(symbols, interval: str = "5m"):
-    """Row of compact REAL MEXC candlestick charts for the top scanner coins."""
-    _sec("📈 Scanner Coin Charts · live MEXC candles")
+    """Row of compact REAL MEXC candlestick charts for the top scanner coins,
+    each overlaid with BUY (▲) / SELL (▼) / STOP (✕) markers from real trades."""
+    _sec("📈 Scanner Coin Charts · live MEXC candles · "
+         "BUY \u25b2 / SELL \u25bc / STOP \u2715")
     syms = [s for s in (symbols or []) if s][:4]
     if not syms:
         st.caption("No scanner coins to chart yet.")
         return
+    try:
+        _all_trades = load_trades()
+    except Exception:  # noqa: BLE001
+        _all_trades = []
     cols = st.columns(len(syms))
     for i, sym in enumerate(syms):
         with cols[i]:
@@ -3677,7 +3806,7 @@ def _render_scanner_charts(symbols, interval: str = "5m"):
                         f'{sym.replace("USDT", "")}'
                         f'<span style="color:#484f58;">/USDT</span></div>',
                         unsafe_allow_html=True)
-            fig = _mini_candle_fig(sym, "mexc", interval)
+            fig = _mini_candle_fig(sym, "mexc", interval, trades=_all_trades)
             if fig is not None:
                 st.plotly_chart(fig, use_container_width=True,
                                 key=f"mini_{sym}",

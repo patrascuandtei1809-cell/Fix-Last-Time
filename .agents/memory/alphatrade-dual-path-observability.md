@@ -32,3 +32,14 @@ section (DRY-RUN by default; `mexc_live_orders` flag). Pull MEXC via
 ({total,free,locked}). Never sum MEXC into the Binance equity/holdings math.
 **Why:** operator explicitly needs to trust each exchange's number independently; a merged
 total hides where real money actually is.
+
+# The two live paths emit DIFFERENT decision verbs
+
+Any code mapping `ActivityRecord.decision` to a UI label/state must cover BOTH
+vocabularies. DipLiveEngine emits only BUY / SELL / STOP_LOSS / HOLD / SKIP;
+StrategyLiveEngine (V2) emits **TAKE_PROFIT** on a profitable exit (never "SELL").
+**Why:** a mapper written against just the dip verbs silently renders a V2
+TAKE_PROFIT exit as the catch-all state (e.g. WAIT/HOLD) — a profitable sell
+looks like inactivity. The dashboard decision-state mapper hit exactly this.
+**How to apply:** treat TAKE_PROFIT as an exit/SELL; grep `rec.decision =` across
+BOTH engine classes in live_engine.py before relying on a fixed verb set.
