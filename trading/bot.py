@@ -18,7 +18,7 @@ import json
 import os
 import uuid
 import glob
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict
 
 from risk import (RiskManager, RiskSettings, GlobalRiskManager,
@@ -411,7 +411,7 @@ def close_trade(trade_id: str, exit_price: float, reason: str,
                     t["net_pnl"]         = net
                     t["net_pnl_pct"]     = net_pct
                     t["exit_price"]   = exit_price
-                    t["close_time"]   = datetime.now().isoformat()
+                    t["close_time"]   = datetime.now(timezone.utc).isoformat()
                     t["close_reason"] = reason
                     t["status"]       = "closed"
                     _save_trade_file(fp, trades)

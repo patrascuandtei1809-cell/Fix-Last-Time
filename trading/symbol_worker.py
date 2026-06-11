@@ -3,7 +3,7 @@
 Every BUY/SELL goes through Exchange.place_*_order, which talks directly to
 api.binance.com. No paper. No testnet. No simulated fills.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, List, Callable
 
 from exchanges.base import Exchange
@@ -795,7 +795,7 @@ class SymbolWorker:
             "profit_loss":     None,
             "profit_loss_pct": None,
             "entry_fee":       float(resp.get("fee") or 0.0),  # REAL Binance commission (USDT)
-            "open_time":       datetime.now().isoformat(),
+            "open_time":       datetime.now(timezone.utc).isoformat(),
             "close_time":      None,
             "reason":          reason,
             "close_reason":    None,
