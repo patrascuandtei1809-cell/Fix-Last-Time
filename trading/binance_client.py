@@ -14,7 +14,43 @@ if not log.handlers:
     log.setLevel(logging.INFO)
 
 # ── Public Binance REST (no auth needed) — LIVE Mainnet ONLY ──────────────────
-_PUBLIC_BASE = "https://api.binance.com/api/v3"
+# api.binance.com is the canonical LIVE host, but it is geo-blocked (HTTP 451)
+# from some regions/hosts (e.g. this dev environment). data-api.binance.vision is
+# Binance's OFFICIAL public market-data mirror — identical klines/prices, no auth
+# — and stays reachable where the main host is blocked. ONLY read-only public
+# market data uses this fallback; authenticated/order calls always go straight to
+# api.binance.com via the python-binance Client (LIVE Mainnet only, no testnet).
+_PUBLIC_BASES = [
+    "https://api.binance.com/api/v3",
+    "https://data-api.binance.vision/api/v3",
+]
+_PUBLIC_BASE = _PUBLIC_BASES[0]  # back-compat; primary LIVE host
+_active_public_base: str | None = None
+
+
+def _public_get(path: str, params: dict, timeout: int = 10):
+    """GET a no-auth Binance market-data endpoint, failing over across mirrors.
+
+    Tries the last-known-good base first, then the rest, and caches the winning
+    base so a geo-blocked host isn't retried on every call. Raises RuntimeError
+    only if EVERY mirror fails.
+    """
+    global _active_public_base
+    bases = list(_PUBLIC_BASES)
+    if _active_public_base and _active_public_base in bases:
+        bases.remove(_active_public_base)
+        bases.insert(0, _active_public_base)
+    last_err = None
+    for base in bases:
+        try:
+            r = requests.get(f"{base}{path}", params=params, timeout=timeout)
+            r.raise_for_status()
+            _active_public_base = base
+            return r.json()
+        except Exception as e:
+            last_err = e
+            continue
+    raise RuntimeError(f"public GET {path} failed on all Binance mirrors: {last_err}")
 
 
 def extract_fill(order: dict) -> tuple[float, float]:
@@ -117,9 +153,7 @@ def public_klines(symbol: str, interval: str = "5m", limit: int = 200) -> pd.Dat
             params = {"symbol": symbol, "interval": interval, "limit": chunk}
             if end_time is not None:
                 params["endTime"] = end_time
-            r = requests.get(f"{_PUBLIC_BASE}/klines", params=params, timeout=10)
-            r.raise_for_status()
-            batch = r.json()
+            batch = _public_get("/klines", params, timeout=10)
             if not batch:
                 break
             rows = batch + rows  # prepend older candles
@@ -138,10 +172,8 @@ def public_klines(symbol: str, interval: str = "5m", limit: int = 200) -> pd.Dat
 def public_price(symbol: str) -> float:
     """Get current ticker price — no API key required."""
     try:
-        r = requests.get(f"{_PUBLIC_BASE}/ticker/price",
-                         params={"symbol": symbol}, timeout=8)
-        r.raise_for_status()
-        return float(r.json()["price"])
+        data = _public_get("/ticker/price", {"symbol": symbol}, timeout=8)
+        return float(data["price"])
     except Exception as e:
         raise RuntimeError(f"Public price fetch failed: {e}")
 
@@ -149,10 +181,7 @@ def public_price(symbol: str) -> float:
 def public_24h(symbol: str) -> dict:
     """24-hour stats (% change, high, low, volume) — no auth needed."""
     try:
-        r = requests.get(f"{_PUBLIC_BASE}/ticker/24hr",
-                         params={"symbol": symbol}, timeout=8)
-        r.raise_for_status()
-        d = r.json()
+        d = _public_get("/ticker/24hr", {"symbol": symbol}, timeout=8)
         return {
             "price":        float(d.get("lastPrice", 0)),
             "change_pct":   float(d.get("priceChangePercent", 0)),

@@ -1192,7 +1192,13 @@ CHART_CANDLES = 2000
 @st.cache_data(ttl=10, show_spinner=False)
 def _deep_chart_df(sym: str, interval: str, use_auth: bool, limit: int):
     if use_auth and _cl():
-        raw = _cl().get_klines(sym, interval, limit=limit)
+        try:
+            raw = _cl().get_klines(sym, interval, limit=limit)
+        except Exception:
+            # The authenticated host may be geo-blocked (HTTP 451) even with
+            # valid keys. Klines are public data, so fall back to the public
+            # mirror so the chart still renders real candles.
+            raw = public_klines(sym, interval, limit=limit)
     else:
         raw = public_klines(sym, interval, limit=limit)
     return get_indicators(raw)
