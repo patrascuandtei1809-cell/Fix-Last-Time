@@ -3200,46 +3200,90 @@ def _render_binance_legacy():
                 'HOLDINGS <span style="color:#6e7681;font-weight:600;">· '
                 'display / reconciliation only — not auto-traded</span></div>',
                 unsafe_allow_html=True)
-    if account_holdings:
-        _pnl_by_coin = {}
-        for _t in open_trades:
-            if (_t.get("exchange") or "binance") != "binance":
-                continue
-            _c = (_t.get("coin") or "").upper()
-            if _c:
-                _pnl_by_coin[_c] = (_pnl_by_coin.get(_c, 0.0)
-                                    + float(_t.get("_unrealized") or 0.0))
-        _hrows = []
-        for _h in account_holdings:
-            _a = _h["asset"]
-            _pnl = _pnl_by_coin.get(_a)
-            _hrows.append({
-                "Symbol":     _a,
-                "Free":       f"{_h.get('free', _h['amount']):,.8g}",
-                "Locked":     f"{_h.get('locked', 0.0):,.8g}",
-                "USDT Value": f"${_h['value']:,.2f}",
-                "PnL (USDT)": (f"{_pnl:+,.2f}" if _pnl is not None else "—"),
-            })
-        st.dataframe(pd.DataFrame(_hrows), width="stretch", hide_index=True,
-                     height=min(40 + 36 * len(_hrows), 320))
-        st.caption("💼 Money held in coins isn't lost — it's just not USDT. "
-                   "PnL shown only for coins with an OPEN bot/manual position.")
-    else:
-        st.caption("No priced Binance holdings yet "
-                   "(connect to Binance, or no coins currently held).")
-    if account_unpriced:
-        _ub = ", ".join(f"{_u['amount']:,.6g} {_u['asset']}" for _u in account_unpriced)
-        st.info(f"ℹ️ Also held (no live USDT price feed, so not added to Account "
-                f"Value above — nothing hidden): {_ub}.")
+    # _MAJOR_SET = the auto-traded core symbols (BTC/ETH/SOL). Every Binance coin
+    # that is NOT a core market and NOT a stablecoin is a LEGACY holding: shown
+    # and monitorable, but NEVER auto-bought by the bot.
     try:
         import bot as _bm_majors
         _MAJOR_SET = set(_bm_majors.BINANCE_MAJORS)
     except Exception:  # noqa: BLE001
         _MAJOR_SET = {"BTCUSDT", "ETHUSDT", "SOLUSDT"}
+
+    def _is_legacy(_asset: str) -> bool:
+        _a = str(_asset or "").upper()
+        if not _a or _a in _FEE_STABLES:
+            return False
+        return f"{_a}USDT" not in _MAJOR_SET
+
+    # PnL only exists for a coin with an OPEN bot/manual Binance position.
+    _pnl_by_coin = {}
+    for _t in open_trades:
+        if (_t.get("exchange") or "binance") != "binance":
+            continue
+        _c = (_t.get("coin") or "").upper()
+        if _c:
+            _pnl_by_coin[_c] = (_pnl_by_coin.get(_c, 0.0)
+                                + float(_t.get("_unrealized") or 0.0))
+
+    # LEGACY table = every non-core, non-stablecoin coin — priced AND unpriced.
+    # Priced rows first (largest value first), then coins with no live USDT feed
+    # so NOTHING is hidden. Columns: Coin · Qty · Value · PnL · Status.
+    _legacy_rows = []
+    for _h in (account_holdings or []):
+        _a = str(_h.get("asset", "")).upper()
+        if not _is_legacy(_a):
+            continue
+        _amt = float(_h.get("amount", 0) or 0)
+        _val = float(_h.get("value", 0) or 0)
+        _pnl = _pnl_by_coin.get(f"{_a}USDT")          # trades key by full symbol
+        if f"{_a}USDT" in _pnl_by_coin:
+            _status = "📈 Open position"
+        elif _val < 10.0:
+            _status = "🪙 Dust (below ~$10 min)"
+        else:
+            _status = "💼 Holding"
+        _legacy_rows.append({
+            "Coin":   _a,
+            "Qty":    f"{_amt:,.8g}",
+            "Value":  f"${_val:,.2f}",
+            "PnL":    (f"{_pnl:+,.2f}" if _pnl is not None else "—"),
+            "Status": _status,
+        })
+    for _u in (account_unpriced or []):
+        _a = str(_u.get("asset", "")).upper()
+        if not _is_legacy(_a):
+            continue
+        _amt = float(_u.get("amount", 0) or 0)
+        _pnl = _pnl_by_coin.get(f"{_a}USDT")          # trades key by full symbol
+        _legacy_rows.append({
+            "Coin":   _a,
+            "Qty":    f"{_amt:,.8g}",
+            "Value":  "—",
+            "PnL":    (f"{_pnl:+,.2f}" if _pnl is not None else "—"),
+            "Status": "⚠️ No price feed",
+        })
+
+    if _legacy_rows:
+        st.dataframe(pd.DataFrame(_legacy_rows), width="stretch", hide_index=True,
+                     height=min(40 + 36 * len(_legacy_rows), 480))
+        st.caption("Every Binance coin you hold that is NOT a core market "
+                   "(BTC/ETH/SOL) or a stablecoin. Monitored only — the bot "
+                   "NEVER auto-buys these. PnL shows only for coins with an OPEN "
+                   "bot/manual position; '⚠️ No price feed' coins have no live "
+                   "USDT pair so they aren't added to Account Value above "
+                   "(nothing hidden). Use Convert to USDT below to exit manually.")
+    elif _binance_connected:
+        st.caption("No legacy holdings — every Binance coin you hold is a core "
+                   "market (BTC/ETH/SOL) or a stablecoin.")
+    else:
+        st.caption("Connect to Binance to see your legacy holdings.")
+
+    # Sellable = legacy coins with a positive FREE balance. (Dust below the
+    # exchange minimum is still listed above but can't actually be converted.)
     _sellable = []
     for _h in (account_holdings or []):
         _a = str(_h.get("asset", "")).upper()
-        if not _a or _a in _FEE_STABLES or f"{_a}USDT" in _MAJOR_SET:
+        if not _is_legacy(_a):
             continue
         if float(_h.get("free", _h.get("amount", 0)) or 0) <= 0:
             continue
