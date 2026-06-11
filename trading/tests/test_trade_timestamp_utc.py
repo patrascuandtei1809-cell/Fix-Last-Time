@@ -72,13 +72,17 @@ def test_bot_open_time_is_tz_aware_utc():
 
 
 def test_close_time_is_tz_aware_utc(tmp_path, monkeypatch):
-    """bot.close_trade stamps close_time as tz-aware UTC."""
+    """bot.close_trade stamps close_time as tz-aware UTC.
+
+    Exercises the REAL log_activity end-to-end (no monkeypatch): close_trade
+    used to self-deadlock because it called log_activity (which re-acquires the
+    non-reentrant _file_lock) from inside its own `with _file_lock:` block. The
+    activity log is redirected into tmp_path so the close + its OPEN→CLOSED
+    state log run for real without hanging.
+    """
     monkeypatch.setattr(bot_module, "TRADES_DIR", str(tmp_path))
-    # Isolate the unrelated activity-log side effect: close_trade calls
-    # log_activity while holding _file_lock, so exercising the real logger here
-    # would couple this timestamp test to that dependency. No-op keeps it
-    # hermetic and focused on the close_time write.
-    monkeypatch.setattr(bot_module, "log_activity", lambda *a, **k: None)
+    monkeypatch.setattr(
+        bot_module, "ACTIVITY_FILE", str(tmp_path / "activity.json"))
     trade = {
         "id": "t1", "coin": "BTCUSDT", "exchange": "binance", "type": "bot",
         "side": "BUY", "entry_price": 60000.0, "quantity": 0.001,

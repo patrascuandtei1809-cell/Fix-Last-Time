@@ -373,9 +373,12 @@ def close_trade(trade_id: str, exit_price: float, reason: str,
     entry commission was stamped on the trade at open time (`entry_fee`); the
     exit commission is passed in here from the live close order.
     """
+    closed: Optional[Dict] = None
+    state_log: Optional[str] = None
     with _file_lock:
         for fp in sorted(glob.glob(os.path.join(TRADES_DIR, "*.json"))):
             trades = _load_trade_file(fp)
+            found = False
             for t in trades:
                 if t.get("id") == trade_id and t.get("status") == "open":
                     invested = t.get("invested") or 0
@@ -415,17 +418,25 @@ def close_trade(trade_id: str, exit_price: float, reason: str,
                     t["close_reason"] = reason
                     t["status"]       = "closed"
                     _save_trade_file(fp, trades)
+                    closed = t
                     # P1 SYNC — explicit OPEN→CLOSED state-transition log.
-                    try:
-                        log_activity("INFO",
-                            f"🔄 STATE {t.get('coin','?')} {side} id={trade_id} "
-                            f"OPEN→CLOSED @ ${exit_price:.4f} | net ${net:+.2f} "
-                            f"(gross ${gross:+.2f} − fees ${total_fees:.4f}) | "
-                            f"{(reason or '')[:60]}")
-                    except Exception:
-                        pass
-                    return t
-    return None
+                    state_log = (
+                        f"🔄 STATE {t.get('coin','?')} {side} id={trade_id} "
+                        f"OPEN→CLOSED @ ${exit_price:.4f} | net ${net:+.2f} "
+                        f"(gross ${gross:+.2f} − fees ${total_fees:.4f}) | "
+                        f"{(reason or '')[:60]}")
+                    found = True
+                    break
+            if found:
+                break
+    # NOTE: log_activity() re-acquires the non-reentrant _file_lock, so it MUST
+    # run AFTER the lock above is released — otherwise close_trade self-deadlocks.
+    if closed is not None and state_log is not None:
+        try:
+            log_activity("INFO", state_log)
+        except Exception:
+            pass
+    return closed
 
 
 # ── Activity log (global) ───────────────────────────────────────────────────

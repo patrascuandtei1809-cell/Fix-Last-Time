@@ -20,8 +20,13 @@ thread hangs.
 SL/TP close. Discovered during the UTC-timestamp task (#48); NOT fixed there
 to stay in scope.
 
-**How to apply / fix options:** make `_file_lock` an `RLock`, OR move the
-`log_activity(...)` call outside the `with _file_lock:` block (after it
-releases). Any test that exercises close_trade must monkeypatch
-`bot.log_activity` to a no-op until this is fixed (see
-tests/test_trade_timestamp_utc.py).
+**FIXED (June 2026):** `close_trade()` now captures the closed dict + the
+state-log string inside the lock, breaks out, and calls `log_activity()` only
+AFTER `with _file_lock:` releases. `add_trade()` already logged outside its
+lock; no other lock-held path calls `log_activity`. Tests may now drive the
+REAL `close_trade` (redirect `bot.ACTIVITY_FILE` into tmp_path) without
+needing the old `log_activity` no-op monkeypatch.
+
+**Rule:** never call `log_activity()`/`_append_activity()` (or anything that
+re-takes `_file_lock`) from inside a `with _file_lock:` block — `_file_lock`
+is a plain non-reentrant `threading.Lock`. Collect the message, release, log.
