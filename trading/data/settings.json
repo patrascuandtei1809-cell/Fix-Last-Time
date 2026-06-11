@@ -11,7 +11,7 @@
   "use_scanner_symbols": true,
   "strategy": "Market Low",
   "interval": "1m",
-  "check_every": 8,
+  "check_every": 15,
   "threshold": 0.01,
   "initial_balance": 1000.0,
   "manual_amount": 100.0,
@@ -31,7 +31,9 @@
   "global_risk": {
     "max_total_exposure_usdt": 300.0,
     "max_exposure_per_symbol_pct": 100,
-    "max_open_trades_total": 3,
+    "max_open_trades_total": 18,
+    "max_open_trades_binance": 3,
+    "max_open_trades_mexc": 15,
     "max_daily_loss_pct": 5.0,
     "manage_manual_trades": true
   },
@@ -42,7 +44,7 @@
     "stop_loss_pct": 0.4,
     "take_profit_pct": 0.6,
     "max_open_trades": 30,
-    "cooldown_seconds": 15,
+    "cooldown_seconds": 30,
     "max_daily_loss_pct": 5.0,
     "max_trades_per_session": 0
   }

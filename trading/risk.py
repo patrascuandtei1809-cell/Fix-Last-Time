@@ -171,9 +171,22 @@ class GlobalRiskSettings:
     max_total_exposure_usdt:    float = 1000.0  # sum of all open invested USDT
     max_exposure_per_symbol_pct: float = 100.0  # 100 = disabled (no concentration cap)
     max_daily_loss_pct:         float = 5.0     # auto-halt if today P&L ≤ -X% of initial balance
-    max_open_trades_total:      int   = 3       # global cap on concurrent open trades (scanner-driven redesign)
+    max_open_trades_total:      int   = 18      # OVERALL ceiling across BOTH venues (= binance + mexc caps)
+    max_open_trades_binance:    int   = 3       # per-venue cap: pinned majors BTC/ETH/SOL (never rotated)
+    max_open_trades_mexc:       int   = 15      # per-venue cap: MEXC scanner volatile alts
     emergency_stop:             bool  = False   # GLOBAL kill switch
     manage_manual_trades:       bool  = True    # ON = bot manages (TP/SL/exit) existing manual trades too
+
+    def cap_for_venue(self, venue: str) -> int:
+        """Concurrent open-trade cap for ONE venue (Binance majors vs MEXC alts)."""
+        return (self.max_open_trades_mexc
+                if str(venue).lower() == "mexc"
+                else self.max_open_trades_binance)
+
+
+def _venue_of(trade: dict) -> str:
+    """Normalize a trade's venue. Missing/unknown exchange ⇒ 'binance'."""
+    return "mexc" if str(trade.get("exchange") or "").lower() == "mexc" else "binance"
 
 
 class GlobalRiskManager:
@@ -193,6 +206,7 @@ class GlobalRiskManager:
         new_invest_usdt: float,
         new_symbol:      str,
         daily_loss_pct:  float = 0.0,
+        new_venue:       str = "",
     ) -> Tuple[bool, str]:
         s = self.settings
 
@@ -203,8 +217,19 @@ class GlobalRiskManager:
             return False, (f"🛑 Daily loss limit hit ({daily_loss_pct:+.2f}% ≤ "
                            f"−{s.max_daily_loss_pct}%) — bot auto-stops")
 
+        # Per-VENUE concurrent open-trade cap (Binance majors max 3, MEXC alts
+        # max 15 by default). The venue is taken from the candidate; when not
+        # supplied we fall back to 'binance' (manual/legacy paths).
+        venue       = "mexc" if str(new_venue).lower() == "mexc" else "binance"
+        venue_cap   = s.cap_for_venue(venue)
+        venue_open  = sum(1 for t in all_open_trades if _venue_of(t) == venue)
+        if venue_cap > 0 and venue_open >= venue_cap:
+            return False, (f"{venue.upper()} open-trade cap reached "
+                           f"({venue_open}/{venue_cap})")
+
+        # Overall ceiling across BOTH venues (backstop; 0 ⇒ no overall cap).
         n_open = len(all_open_trades)
-        if n_open >= s.max_open_trades_total:
+        if s.max_open_trades_total > 0 and n_open >= s.max_open_trades_total:
             return False, (f"Global open-trade cap reached "
                            f"({n_open}/{s.max_open_trades_total})")
 
@@ -244,5 +269,9 @@ class GlobalRiskManager:
             "per_symbol_exposure":    per_sym,
             "open_trades_count":      len(all_open_trades),
             "max_open_trades_total":  self.settings.max_open_trades_total,
+            "max_open_trades_binance": self.settings.max_open_trades_binance,
+            "max_open_trades_mexc":   self.settings.max_open_trades_mexc,
+            "open_binance":           sum(1 for t in all_open_trades if _venue_of(t) == "binance"),
+            "open_mexc":              sum(1 for t in all_open_trades if _venue_of(t) == "mexc"),
             "emergency_stop":         self.settings.emergency_stop,
         }

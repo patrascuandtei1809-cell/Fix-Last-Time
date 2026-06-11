@@ -21,7 +21,8 @@ import glob
 from datetime import datetime
 from typing import Optional, List, Dict
 
-from risk import RiskManager, RiskSettings, GlobalRiskManager, GlobalRiskSettings
+from risk import (RiskManager, RiskSettings, GlobalRiskManager,
+                  GlobalRiskSettings, _venue_of)
 from exchanges.base import Exchange
 from exchanges.binance import BinanceExchange
 from exchanges import registry as ex_registry
@@ -50,9 +51,10 @@ _bot: Optional["TradingBot"] = None
 _bot_lock = threading.Lock()
 
 # Upper bound on simultaneously-scanned symbols. Scanner-driven dynamic symbol
-# sets (top 10-15 across Binance+MEXC) must fit; real concurrency is still
-# bounded by the global open-trades cap + per-symbol risk gates.
-MAX_ACTIVE_SYMBOLS = 15
+# sets must fit the full split-routing plan: 3 pinned Binance majors PLUS up to
+# the MEXC open-trades cap (15) of scanner alts = 18 active workers. Real
+# concurrency is still bounded by the per-venue open-trades caps + risk gates.
+MAX_ACTIVE_SYMBOLS = 18
 
 # ── Venue routing (operator spec, June 2026) ────────────────────────────────
 # Binance may auto-trade ONLY these three majors (same Market-Low rule). Every
@@ -620,13 +622,15 @@ class TradingBot:
             emergency = bool(self.global_risk.settings.emergency_stop
                              or getattr(worker.risk.settings, "emergency_stop", False))
 
+            _venue = getattr(worker.exchange, "name", "binance")
             def global_gate(invest: float, sym: str,
-                            _all=all_open, _dp=daily_pct):
+                            _all=all_open, _dp=daily_pct, _v=_venue):
                 return self.global_risk.check_global(
                     all_open_trades = _all,
                     new_invest_usdt = invest,
                     new_symbol      = sym,
                     daily_loss_pct  = _dp,
+                    new_venue       = _v,
                 )
             try:
                 rec = self._dip_engine_for(worker).evaluate(
@@ -740,13 +744,15 @@ class TradingBot:
             emergency = bool(self.global_risk.settings.emergency_stop
                              or getattr(worker.risk.settings, "emergency_stop", False))
 
+            _venue = getattr(worker.exchange, "name", "binance")
             def global_gate(invest: float, sym: str,
-                            _all=all_open, _dp=daily_pct):
+                            _all=all_open, _dp=daily_pct, _v=_venue):
                 return self.global_risk.check_global(
                     all_open_trades = _all,
                     new_invest_usdt = invest,
                     new_symbol      = sym,
                     daily_loss_pct  = _dp,
+                    new_venue       = _v,
                 )
             try:
                 rec = self._strategy_engine_for(worker).evaluate(
@@ -1103,13 +1109,15 @@ class TradingBot:
                 # closed in a previous worker's manage-positions phase).
                 all_open, daily_pct = _refresh_global_state()
 
+                _venue = getattr(worker.exchange, "name", "binance")
                 def global_gate(invest: float, sym: str,
-                                _all=all_open, _dp=daily_pct):
+                                _all=all_open, _dp=daily_pct, _v=_venue):
                     return self.global_risk.check_global(
                         all_open_trades = _all,
                         new_invest_usdt = invest,
                         new_symbol      = sym,
                         daily_loss_pct  = _dp,
+                        new_venue       = _v,
                     )
                 try:
                     worker.tick(all_open_trades=all_open,
@@ -1234,6 +1242,10 @@ class TradingBot:
             secs_since    = now_ts - (self._last_global_trade_at or 0)
             throttle_left = max(0, self.global_throttle_sec - int(secs_since))
             cap           = self.global_risk.settings.max_open_trades_total
+            # Per-venue cap for the would-be winner (Binance 3 / MEXC 15).
+            _win_venue    = (winner or {}).get("exchange") or "binance"
+            _venue_cap    = self.global_risk.settings.cap_for_venue(_win_venue)
+            _venue_open   = sum(1 for t in all_open if _venue_of(t) == _win_venue)
 
             if not cands:
                 print(f"[RANK] (no candidates yet) threshold={self.score_threshold} "
@@ -1246,9 +1258,10 @@ class TradingBot:
                 print(f"[RANK] {_rank_bits} → HOLD ({_why}) "
                       f"throttle={throttle_left}s open={len(all_open)}/{cap}",
                       flush=True)
-            elif len(all_open) >= cap:
+            elif _venue_open >= _venue_cap:
                 print(f"[RANK] {_rank_bits} → SKIP "
-                      f"(max_open {len(all_open)}/{cap}) winner={winner['symbol']}",
+                      f"({_win_venue} cap {_venue_open}/{_venue_cap}) "
+                      f"winner={winner['symbol']}",
                       flush=True)
             elif throttle_left > 0:
                 print(f"[RANK] {_rank_bits} → THROTTLED "
@@ -1261,13 +1274,15 @@ class TradingBot:
                       flush=True)
                 # Re-snapshot once more before the actual order.
                 all_open, daily_pct = _refresh_global_state()
+                _venue = winner.get("exchange") or "binance"
                 def global_gate(invest: float, sym: str,
-                                _all=all_open, _dp=daily_pct):
+                                _all=all_open, _dp=daily_pct, _v=_venue):
                     return self.global_risk.check_global(
                         all_open_trades = _all,
                         new_invest_usdt = invest,
                         new_symbol      = sym,
                         daily_loss_pct  = _dp,
+                        new_venue       = _v,
                     )
                 key = f"{winner.get('exchange','')}:{winner['symbol']}"
                 w   = self.workers.get(key)
@@ -1702,7 +1717,7 @@ def create_bot(
             log_activity("INFO",
                 "🛰️ Scanner-driven scalper path ON — trading scanner picks "
                 f"across {', '.join(sorted(_venue_exchanges)) or 'binance'} "
-                "(ungated; max 3 concurrent)")
+                "(ungated; Binance max 3 + MEXC max 15 concurrent)")
         elif strategy == V2_STRATEGY_NAME:
             _bot.strategy_mode        = True
             _bot.dip_mode             = False

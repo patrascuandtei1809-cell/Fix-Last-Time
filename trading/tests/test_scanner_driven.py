@@ -102,5 +102,45 @@ def test_mexc_live_orders_without_creds_still_raises():
         m.get_balance("USDT")
 
 
-def test_global_cap_default_is_three():
-    assert GlobalRiskSettings().max_open_trades_total == 3
+def test_active_symbols_cap_fits_full_split_plan():
+    """Task #44 — the worker cap must fit 3 pinned Binance + 15 MEXC = 18, so the
+    full split-routing plan is never truncated below the MEXC cap."""
+    assert bot.MAX_ACTIVE_SYMBOLS >= 18
+
+
+def test_per_venue_cap_defaults():
+    """Task #44 — per-venue caps: Binance 3, MEXC 15, overall ceiling 18."""
+    s = GlobalRiskSettings()
+    assert s.max_open_trades_binance == 3
+    assert s.max_open_trades_mexc == 15
+    assert s.max_open_trades_total == 18
+    assert s.cap_for_venue("binance") == 3
+    assert s.cap_for_venue("mexc") == 15
+    assert s.cap_for_venue("") == 3          # unknown ⇒ binance
+
+
+def test_per_venue_cap_enforced_independently():
+    """Binance fills at 3 while MEXC keeps accepting up to 15 — and vice versa."""
+    from risk import GlobalRiskManager
+
+    grm = GlobalRiskManager(GlobalRiskSettings())
+
+    # 3 open Binance majors → a 4th Binance entry is blocked …
+    bin_open = [{"invested": 10, "coin": s, "exchange": "binance"}
+                for s in ("BTCUSDT", "ETHUSDT", "SOLUSDT")]
+    ok, why = grm.check_global(bin_open, 10.0, "AVAXUSDT", new_venue="binance")
+    assert ok is False and "BINANCE" in why
+
+    # … but a MEXC entry with those same 3 Binance trades open still passes.
+    ok, _ = grm.check_global(bin_open, 10.0, "WLDUSDT", new_venue="mexc")
+    assert ok is True
+
+    # 15 open MEXC alts → a 16th MEXC entry is blocked …
+    mexc_open = [{"invested": 5, "coin": f"ALT{i}USDT", "exchange": "mexc"}
+                 for i in range(15)]
+    ok, why = grm.check_global(mexc_open, 5.0, "PEPEUSDT", new_venue="mexc")
+    assert ok is False and "MEXC" in why
+
+    # … but a Binance entry alongside 15 MEXC trades still passes.
+    ok, _ = grm.check_global(mexc_open, 10.0, "BTCUSDT", new_venue="binance")
+    assert ok is True

@@ -706,6 +706,22 @@ except Exception as _sce:  # noqa: BLE001
     print(f"[SCANNER] daemon start failed: {_sce}", flush=True)
 
 
+def _mexc_cap() -> int:
+    """Enforced MEXC concurrent open-trade cap (drives scanner top-N + display)."""
+    try:
+        return int(getattr(st.session_state.global_risk, "max_open_trades_mexc", 15))
+    except Exception:
+        return 15
+
+
+def _binance_cap() -> int:
+    """Enforced Binance concurrent open-trade cap (pinned majors)."""
+    try:
+        return int(getattr(st.session_state.global_risk, "max_open_trades_binance", 3))
+    except Exception:
+        return 3
+
+
 def _effective_bot_plan(fallback):
     """Resolve (symbols, venue_map, scanner_driven) for the bot.
 
@@ -714,7 +730,7 @@ def _effective_bot_plan(fallback):
 
       • BTC/ETH/SOL are PINNED to the **binance** venue (always traded there,
         never rotated).
-      • Up to 3 volatile alts come from the **mexc** scanner (EXCLUDING the 3
+      • Up to 15 volatile alts come from the **mexc** scanner (EXCLUDING the 3
         majors), and are rotated as they go quiet (handled in the orchestrator).
 
     Returns the majors even before the first scan completes, so the Binance side
@@ -725,7 +741,7 @@ def _effective_bot_plan(fallback):
         return fallback, {}, False
     try:
         import bot as _bm
-        plan = _bm.resolve_live_plan(top_n_mexc=3)
+        plan = _bm.resolve_live_plan(top_n_mexc=_mexc_cap())
     except Exception as _e:  # noqa: BLE001
         print(f"[BOT] live plan resolution failed: {_e}", flush=True)
         plan = []
@@ -839,6 +855,7 @@ def _maybe_resume_bot():
             symbol_venues     = _venues,
             scanner_driven    = _scan_driven,
             rotate_scanner    = _scan_driven,
+            scanner_top_n     = _mexc_cap(),          # MEXC alts up to the enforced cap
             manage_manual_trades = bool(getattr(st.session_state.global_risk,
                                                 "manage_manual_trades", False)),
         )
@@ -898,13 +915,15 @@ if not st.session_state.get("_settings_loaded"):
                 setattr(_gr, _gk, _gv)
         _gr.emergency_stop = False
         st.session_state.global_risk = _gr
-    # HARD CAP (scanner-driven redesign): never allow more than 3 concurrent open
-    # trades, regardless of a persisted/legacy settings.json that may carry an
-    # older value (e.g. 30). Clamp BEFORE the bot auto-resumes so the gate runs
-    # with the enforced ceiling.
+    # PER-VENUE CAPS (Task #44): Binance majors max 3 open, MEXC scanner alts
+    # max 15 open. Migrate any legacy persisted single `max_open_trades_total`
+    # and keep the overall ceiling = binance + mexc. Clamp BEFORE the bot
+    # auto-resumes so the gate runs with the enforced caps.
     try:
-        if int(st.session_state.global_risk.max_open_trades_total) > 3:
-            st.session_state.global_risk.max_open_trades_total = 3
+        _g0 = st.session_state.global_risk
+        _g0.max_open_trades_binance = max(1, min(3, int(getattr(_g0, "max_open_trades_binance", 3) or 3)))
+        _g0.max_open_trades_mexc    = max(1, min(15, int(getattr(_g0, "max_open_trades_mexc", 15) or 15)))
+        _g0.max_open_trades_total   = _g0.max_open_trades_binance + _g0.max_open_trades_mexc
     except Exception:
         pass
     # Per-symbol overrides
@@ -1040,12 +1059,13 @@ if not st.session_state.get("_settings_loaded"):
     # FIX FINAL (May 29 2026): surface the effective max-open caps at startup so
     # the operator can confirm settings.json was loaded BEFORE the bot starts.
     try:
+        _gr_s = st.session_state.global_risk
         print(f"[SETTINGS] max_open_trades (per-symbol)="
               f"{st.session_state.risk.max_open_trades} | "
-              f"max_open_trades_total (global)="
-              f"{st.session_state.global_risk.max_open_trades_total} | "
-              f"manage_manual_trades="
-              f"{st.session_state.global_risk.manage_manual_trades}", flush=True)
+              f"open caps → binance={getattr(_gr_s, 'max_open_trades_binance', 3)} "
+              f"mexc={getattr(_gr_s, 'max_open_trades_mexc', 15)} "
+              f"total={_gr_s.max_open_trades_total} | "
+              f"manage_manual_trades={_gr_s.manage_manual_trades}", flush=True)
     except Exception:
         pass
     tg.configure(
@@ -2354,7 +2374,7 @@ with st.sidebar:
         '🛰️ SCANNER MARKET-LOW STRATEGY ON MEXC'
         '<div style="font-size:10px;font-weight:600;color:#79c0ff;'
         'margin-top:4px;letter-spacing:0.5px;">'
-        'Scanner ranks the MEXC spot universe · feeds max 3 into the Market-Low rule'
+        'Scanner ranks the MEXC spot universe · feeds up to 15 into the Market-Low rule'
         '</div></div>',
         unsafe_allow_html=True,
     )
@@ -2413,6 +2433,7 @@ with st.sidebar:
                     symbol_venues=_eff_venues,
                     scanner_driven=_eff_scan,
                     rotate_scanner=_eff_scan,
+                    scanner_top_n=_mexc_cap(),        # MEXC alts up to the enforced cap
                     manage_manual_trades=bool(getattr(st.session_state.global_risk,
                                                       "manage_manual_trades", False)),
                 )
@@ -2837,13 +2858,21 @@ with st.sidebar:
             10, 100, int(g.max_exposure_per_symbol_pct), 5,
             help="No single symbol can exceed this % of total open exposure.",
         )
-        g.max_open_trades_total = st.slider(
-            "Max open trades (total, all symbols)",
-            1, 3, min(3, int(g.max_open_trades_total)), 1,
-            help="Hard cap on simultaneous open positions across all symbols "
-                 "(scanner-driven redesign caps this at 3). "
+        g.max_open_trades_binance = st.slider(
+            "Max open trades · Binance majors",
+            1, 3, max(1, min(3, int(getattr(g, "max_open_trades_binance", 3)))), 1,
+            help="Hard cap on simultaneous Binance positions (BTC/ETH/SOL). "
                  "Saved automatically and kept across refresh/restart.",
         )
+        g.max_open_trades_mexc = st.slider(
+            "Max open trades · MEXC scanner alts",
+            1, 15, max(1, min(15, int(getattr(g, "max_open_trades_mexc", 15)))), 1,
+            help="Hard cap on simultaneous MEXC scanner positions (volatile alts). "
+                 "Saved automatically and kept across refresh/restart.",
+        )
+        g.max_open_trades_total = g.max_open_trades_binance + g.max_open_trades_mexc
+        st.caption(f"Overall ceiling: **{g.max_open_trades_total}** open "
+                   f"(Binance {g.max_open_trades_binance} + MEXC {g.max_open_trades_mexc}).")
         g.max_daily_loss_pct = st.slider(
             "Global max daily loss %",
             1.0, 30.0, float(g.max_daily_loss_pct), 0.5,
@@ -3338,7 +3367,7 @@ def _render_positions(venue: str):
     (real Binance counter-order); MEXC positions are display-only (the bot
     manages SL/TP on MEXC — a Binance counter-order would be wrong)."""
     rows = [t for t in open_trades if (t.get("exchange") or "binance") == venue]
-    cap = _BIN_SLOTS if venue == "binance" else _MEXC_SLOTS
+    cap = _binance_cap() if venue == "binance" else _mexc_cap()
     _sec(f"💼 Active Trades · {len(rows)}/{cap}")
     if not rows:
         st.caption("No open positions on this venue yet.")
@@ -3616,7 +3645,7 @@ with st.container():
         _render_global_rules_bar()
         _venue_header("🟡 BINANCE DASHBOARD",
                       "Pinned majors BTC · ETH · SOL · Market-Low rule · "
-                      "never rotated · max 3 positions",
+                      "never rotated · max 3 open positions",
                       "#f0b90b", "#1a1505")
 
         roi_cls  = "up" if roi >= 0  else "dn"
@@ -3873,6 +3902,7 @@ with st.container():
                             symbol_venues=_eff_venues2,
                             scanner_driven=_eff_scan2,
                             rotate_scanner=_eff_scan2,
+                            scanner_top_n=_mexc_cap(),  # MEXC alts up to the enforced cap
                             manage_manual_trades=bool(getattr(st.session_state.global_risk,
                                                               "manage_manual_trades", False)),
                         )
@@ -5027,6 +5057,8 @@ def _collect_settings_snapshot() -> dict:
             "max_total_exposure_usdt":     _gr.max_total_exposure_usdt,
             "max_exposure_per_symbol_pct": _gr.max_exposure_per_symbol_pct,
             "max_open_trades_total":       _gr.max_open_trades_total,
+            "max_open_trades_binance":     getattr(_gr, "max_open_trades_binance", 3),
+            "max_open_trades_mexc":        getattr(_gr, "max_open_trades_mexc", 15),
             "max_daily_loss_pct":          _gr.max_daily_loss_pct,
             "manage_manual_trades":        bool(getattr(_gr, "manage_manual_trades", False)),
         },
