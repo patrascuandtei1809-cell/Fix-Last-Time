@@ -3302,7 +3302,13 @@ def _render_binance_legacy():
         _val = float(_h.get("value", 0) or 0)
         _pnl = _pnl_by_coin.get(f"{_a}USDT")          # trades key by full symbol
         if f"{_a}USDT" in _pnl_by_coin:
-            _status = "📈 Open position"
+            # A recorded entry exists → unrealized PnL is computable, so we can
+            # HONESTLY flag a safe exit chance (≥ breakeven, i.e. "without bad
+            # loss"). Orphan coins with NO recorded basis can't be judged that
+            # way, so they stay neutral (💼 Holding) and are exited manually.
+            _status = ("✅ Exit candidate (≥ breakeven)"
+                       if (_pnl is not None and _pnl >= 0)
+                       else "📈 Open position (below entry)")
         elif _val < 10.0:
             _status = "🪙 Dust (below ~$10 min)"
         else:
@@ -3334,9 +3340,12 @@ def _render_binance_legacy():
         st.caption("Every Binance coin you hold that is NOT a core market "
                    "(BTC/ETH/SOL) or a stablecoin. Monitored only — the bot "
                    "NEVER auto-buys these. PnL shows only for coins with an OPEN "
-                   "bot/manual position; '⚠️ No price feed' coins have no live "
-                   "USDT pair so they aren't added to Account Value above "
-                   "(nothing hidden). Use Convert to USDT below to exit manually.")
+                   "bot/manual position; for those we flag '✅ Exit candidate' "
+                   "when they're at/above breakeven (a safe exit chance). "
+                   "'⚠️ No price feed' coins have no live USDT pair so they "
+                   "aren't added to Account Value above (nothing hidden). The "
+                   "actual sell is always operator-confirmed — use Convert to "
+                   "USDT below to exit.")
     elif _binance_connected:
         st.caption("No legacy holdings — every Binance coin you hold is a core "
                    "market (BTC/ETH/SOL) or a stablecoin.")

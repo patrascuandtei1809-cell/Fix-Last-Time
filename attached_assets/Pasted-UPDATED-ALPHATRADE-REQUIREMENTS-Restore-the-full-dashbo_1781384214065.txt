@@ -1,0 +1,145 @@
+UPDATED ALPHATRADE REQUIREMENTS
+
+Restore the full dashboard layout first. The dashboard must appear back where it belongs, with the full professional Binance + MEXC layout.
+
+BINANCE
+
+* Binance must trade ONLY:
+
+  * BTCUSDT
+  * ETHUSDT
+  * SOLUSDT
+
+* Binance must not auto-buy any other coin.
+
+* Legacy Binance coins are old dust from past trades.
+
+* They must be displayed clearly as LEGACY.
+
+* They are display-only for normal trading, BUT the system must detect safe exit chances.
+
+* When there is a good chance to close them without bad loss or when manually confirmed, they should be closed and disappear from holdings.
+
+Binance must show:
+
+* Real wallet
+* Available USDT
+* Locked USDT
+* Amount left to trade
+* Real open trades
+* Real closed trades
+* Previous historical trades
+* Chart with BUY / SELL / SL / TP markers
+* AI decisions
+* Entry reason
+* Exit reason
+* Hold reason
+
+MEXC
+
+* MEXC scanner must access up to 1000 available coins.
+* Scanner must choose up to 15 coins to trade.
+* Scanner must rotate/reallocate coins when:
+
+  * volatility changes
+  * volume changes
+  * trend weakens
+  * another coin becomes more profitable
+
+MEXC must show:
+
+* Real wallet
+* Available USDT
+* Locked USDT
+* Amount left to trade
+* Live scanner
+* Scanner score
+* Volatility
+* Volume
+* Trend
+* Open trades
+* Closed trades
+* Previous historical trades
+* Rotation engine
+* Chart with BUY / SELL / SL / TP markers
+* AI decisions
+* Entry reason
+* Exit reason
+* Hold reason
+
+GLOBAL STRATEGY
+
+The bot must respect Market-Low strategy:
+
+BUY      <= -0.05%
+SELL     +0.60%
+STOP     -0.30%
+
+Cooldown = 60s
+Trend = ON
+Volume = ON
+
+AI / INDICATORS
+
+AI must work like a MACD-style decision assistant for both exchanges.
+
+It must explain:
+
+* why it buys
+* why it sells
+* why it holds
+* why it blocks a trade
+* why it rotates a coin
+* why it closes a legacy coin
+
+REAL-TIME REQUIREMENTS
+
+Both Binance and MEXC need real-time chart updates.
+
+Charts must show:
+
+* live candles
+* real executed BUY markers
+* real executed SELL markers
+* Stop Loss
+* Take Profit
+* open trade markers
+* closed trade markers
+
+TRADING CAPITAL
+
+The bot must show the real wallet balance and the amount left to trade.
+
+The bot should be able to use available capital according to configured risk mode, including 100% deploy mode if selected by the operator.
+
+Do not fake balances.
+Do not use mock trades.
+Do not hide old trades.
+
+CRITICAL BUGS TO FIX
+
+1. Restore full dashboard UI.
+2. Fix blank/broken dashboard rendering.
+3. Fix diagnostics error:
+   can't subtract offset-naive and offset-aware datetimes
+4. Stop mixing MEXC backend with BTC/ETH/SOL-only UI.
+5. Show correct exchange sections:
+
+   * Binance section
+   * MEXC section
+6. Preserve live trading logic.
+7. Preserve BEATUSDT trade history.
+8. Preserve previous Binance trades and legacy holdings.
+
+CURRENT CONFIRMED RESULT
+
+BEATUSDT history exists:
+
+Trades: 53
+Wins: 24
+Losses: 29
+Winrate: 45.28%
+Total PnL: +10.23%
+Average PnL: +0.19%
+
+This must be displayed in MEXC historical trades.
