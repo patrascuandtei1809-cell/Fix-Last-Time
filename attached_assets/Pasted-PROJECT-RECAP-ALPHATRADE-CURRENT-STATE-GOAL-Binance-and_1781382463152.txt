@@ -1,0 +1,246 @@
+PROJECT RECAP – ALPHATRADE (CURRENT STATE)
+
+GOAL
+
+* Binance and MEXC separated logically.
+* Binance trades ONLY:
+
+  * BTCUSDT
+  * ETHUSDT
+  * SOLUSDT
+* MEXC trades volatile scanner coins.
+* Same Market-Low strategy everywhere.
+
+GLOBAL RULES
+BUY      <= -0.05%
+SELL     +0.60%
+STOP     -0.30%
+
+Cooldown = 60s
+Trend Filter = ON
+Volume Filter = ON
+
+BINANCE DESIGN
+
+* Fixed majors only:
+
+  * BTCUSDT
+  * ETHUSDT
+  * SOLUSDT
+* No other Binance coin may be auto-bought.
+* Existing non-major Binance holdings must appear as:
+
+  * LEGACY HOLD
+  * LEGACY EXIT CANDIDATE
+  * WAIT CONFIRMATION
+* Legacy coins are display-only unless manually approved for exit.
+
+MEXC DESIGN
+
+* Scanner-driven.
+* Rotates volatile coins.
+* Up to 15 simultaneous positions.
+* Same Market-Low logic.
+* Rotation based on:
+
+  * volatility
+  * volume
+  * trend
+  * score
+
+WHAT HAPPENED
+
+1. MEXC scanner initially returned 0 opportunities.
+   Reason:
+
+* exchange comparison was case-sensitive.
+* opportunities file contained:
+  "MEXC"
+* code expected:
+  "mexc"
+
+Patch applied:
+(exchange).lower() comparison.
+
+2. After patch:
+   multi_exchange_opportunities.json contained MEXC coins correctly.
+
+Examples:
+
+* BEATUSDT
+* SKYAIUSDT
+* LABUSDT
+* VELVETUSDT
+
+3. Autostart logic problems.
+   Dashboard cold-start logic forced:
+
+st.session_state.exchange_mode = "multi"
+
+and also restored:
+
+["BTCUSDT","ETHUSDT","SOLUSDT"]
+
+even when settings.json contained:
+
+exchange_mode = "mexc"
+active_symbols = ["BEATUSDT"]
+
+This caused the bot to keep returning to BTC/ETH/SOL.
+
+4. MEXC-only testing.
+   settings.json was forced to:
+
+exchange_mode = "mexc"
+active_symbols = ["BEATUSDT"]
+mexc_live_orders = true
+use_scanner_symbols = false
+bot_was_running = true
+
+Result:
+
+[BOT] venue=mexc
+[BOT] Auto-started ACTIVE SCALPER bot — symbols=['BEATUSDT']
+
+confirmed.
+
+5. BEATUSDT investigation.
+
+Found file:
+
+trading/data/trades/mexc_BEATUSDT.json
+
+Statistics:
+
+Trades: 53
+Wins: 24
+Losses: 29
+Winrate: 45.28%
+Total PnL: +10.23%
+Average trade: +0.19%
+
+Best recent trade:
+
+Entry: 8.38
+Exit : 9.1011
+
+PnL ≈ +8.60%
+
+Therefore:
+BEATUSDT has historically been profitable.
+
+6. Why BEAT was not buying.
+
+activity.json repeatedly showed:
+
+decision=HOLD
+block=Volume too low
+
+Examples:
+0.27x volume
+0.56x volume
+0.65x volume
+0.86x volume
+
+Volume filter requires:
+
+volume >= 1.0x average
+
+Therefore entries were correctly blocked.
+
+7. Current UI problems.
+
+Current dashboard is inconsistent:
+
+Top banner:
+"Scanner Market-Low on MEXC @ 1m"
+
+But widgets still show:
+
+BTC
+ETH
+SOL
+
+and:
+
+BTCUSDT HOLD
+ETHUSDT HOLD
+SOLUSDT HOLD
+
+This means:
+Backend state and frontend layout are no longer synchronized.
+
+8. Diagnostics error currently visible.
+
+Dashboard shows:
+
+Diagnostics panel unavailable:
+can't subtract offset-naive and offset-aware datetimes
+
+There is a datetime bug somewhere comparing:
+
+datetime.now()
+
+with
+
+timezone-aware datetime
+
+This currently breaks diagnostics rendering.
+
+9. Current confirmed status.
+
+Backend:
+
+* Running
+* Streamlit active
+* MEXC credentials active
+* BEATUSDT mode tested
+* Historical BEAT profitability confirmed
+
+UI:
+
+* Partially broken
+* Some Binance widgets still hardcoded
+* Diagnostics panel failing
+* MEXC/BEAT layout not fully reflected
+
+FINAL TARGET UI
+
+BINANCE SECTION
+
+* Wallet Overview
+* BTCUSDT
+* ETHUSDT
+* SOLUSDT
+* Active Trades
+* Legacy Holdings
+* AI Decisions
+* TradingView chart
+
+MEXC SECTION
+
+* Wallet Overview
+* Live Scanner
+* Scanner Coin Charts
+* Active Trades
+* Rotation Engine
+* AI Decisions
+* Up to 15 simultaneous positions
+
+Permanent Global Rules Panel:
+
+BUY      <= -0.05%
+SELL     +0.60%
+STOP     -0.30%
+
+Cooldown 60s
+Trend ON
+Volume ON
+
+Current priority:
+
+1. Fix datetime diagnostics crash.
+2. Remove hardcoded BTC/ETH/SOL widgets when running MEXC-only.
+3. Restore full dashboard rendering.
+4. Preserve BEATUSDT/MEXC functionality.
+5. Then build final Binance + MEXC split layout.

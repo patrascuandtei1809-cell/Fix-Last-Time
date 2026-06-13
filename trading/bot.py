@@ -1542,6 +1542,32 @@ def resolve_live_plan(top_n_mexc: int = 3) -> List[Dict]:
     return out
 
 
+def resolve_plan_for_mode(exchange_mode: str = "multi",
+                          top_n_mexc: int = MAX_ACTIVE_SYMBOLS) -> List[Dict]:
+    """Venue-scoped live routing plan for the active execution mode.
+
+    - ``"mexc"``    → MEXC scanner alts ONLY (never pins the Binance majors).
+    - ``"binance"`` → the 3 pinned Binance majors (Market-Low, never rotated).
+    - ``"multi"``   → Binance majors + MEXC scanner alts (``resolve_live_plan``).
+
+    This is the single source of truth for "which symbols on which venue" so the
+    UI venue selector and the bot agree. CRITICAL safety guarantee: a single-venue
+    mode NEVER emits an opportunity on the other exchange. Binance is LIVE-only,
+    so a stray Binance worker leaking into MEXC-only mode would place REAL orders
+    the operator never selected.
+
+    Returns ``[{"symbol","exchange"}]`` ordered for worker creation. May be empty
+    for ``"mexc"`` when no scan exists yet → the caller falls back to its static
+    symbol list (still routed to MEXC by ``create_bot`` via ``exchange_mode``).
+    """
+    mode = (exchange_mode or "multi").lower()
+    if mode == "mexc":
+        return resolve_scanner_opportunities("mexc", top_n=top_n_mexc)
+    if mode == "binance":
+        return [{"symbol": s, "exchange": "binance"} for s in BINANCE_MAJORS]
+    return resolve_live_plan(top_n_mexc=top_n_mexc)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Builder — accepts BOTH new multi-symbol signature AND legacy single-symbol.
 # ─────────────────────────────────────────────────────────────────────────────

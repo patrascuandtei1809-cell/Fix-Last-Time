@@ -292,14 +292,22 @@ def _parse_dt(s) -> Optional[datetime]:
     if not s:
         return None
     if isinstance(s, datetime):
-        return s
-    try:
-        return datetime.fromisoformat(str(s))
-    except Exception:
+        dt = s
+    else:
         try:
-            return datetime.strptime(str(s)[:19], "%Y-%m-%d %H:%M:%S")
+            dt = datetime.fromisoformat(str(s))
         except Exception:
-            return None
+            try:
+                dt = datetime.strptime(str(s)[:19], "%Y-%m-%d %H:%M:%S")
+            except Exception:
+                return None
+    # Normalize to NAIVE local time. Stored timestamps may be tz-aware (e.g.
+    # "...+00:00") or naive depending on the writer; callers subtract these from
+    # datetime.now() (naive), so a tz-aware value would raise "can't subtract
+    # offset-naive and offset-aware datetimes" and break the diagnostics panel.
+    if dt.tzinfo is not None:
+        dt = dt.astimezone().replace(tzinfo=None)
+    return dt
 
 
 def trade_frequency_stats() -> Dict:

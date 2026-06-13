@@ -726,22 +726,25 @@ def _effective_bot_plan(fallback):
     """Resolve (symbols, venue_map, scanner_driven) for the bot.
 
     Operator spec (June 2026): when `use_scanner_symbols` is ON the bot runs the
-    ungated scalper (Market-Low) path with a fixed routing split:
+    ungated scalper (Market-Low) path with a routing split SCOPED TO THE ACTIVE
+    venue selector (`exchange_mode`):
 
-      • BTC/ETH/SOL are PINNED to the **binance** venue (always traded there,
-        never rotated).
-      • Up to 15 volatile alts come from the **mexc** scanner (EXCLUDING the 3
-        majors), and are rotated as they go quiet (handled in the orchestrator).
+      • "multi"   → BTC/ETH/SOL PINNED to **binance** + up to N volatile alts
+        from the **mexc** scanner (rotated as they go quiet).
+      • "mexc"    → MEXC scanner alts ONLY — the Binance majors are NEVER pinned
+        (so MEXC-only mode can't spin up LIVE Binance workers).
+      • "binance" → the 3 pinned Binance majors only.
 
-    Returns the majors even before the first scan completes, so the Binance side
-    never starts empty. When the toggle is OFF, fall back to the static set on
-    the default venue (no scanner path).
+    When the toggle is OFF, fall back to the static set with an empty venue map —
+    `create_bot` then routes every worker by `exchange_mode`, so a single-venue
+    selection still trades on the right exchange.
     """
+    mode = st.session_state.get("exchange_mode", "multi")
     if not st.session_state.get("use_scanner_symbols", False):
         return fallback, {}, False
     try:
         import bot as _bm
-        plan = _bm.resolve_live_plan(top_n_mexc=_mexc_cap())
+        plan = _bm.resolve_plan_for_mode(mode, top_n_mexc=_mexc_cap())
     except Exception as _e:  # noqa: BLE001
         print(f"[BOT] live plan resolution failed: {_e}", flush=True)
         plan = []
@@ -749,7 +752,9 @@ def _effective_bot_plan(fallback):
         syms   = [p["symbol"] for p in plan]
         venues = {p["symbol"]: p["exchange"] for p in plan}
         return syms, venues, True
-    # Resolution failed entirely → ungated path on the static fallback set.
+    # No scan yet (mexc mode before first scan) → ungated path on the static
+    # fallback. Empty venue map lets create_bot route by exchange_mode, so the
+    # fallback symbols still trade on MEXC (never a stray Binance worker).
     return fallback, {}, True
 
 
@@ -951,20 +956,28 @@ if not st.session_state.get("_settings_loaded"):
     # legacy strategy/interval is force-snapped back to Market Low @ 1m.
     st.session_state.strategy           = "Market Low"
     st.session_state.interval           = "1m"
-    # SPLIT ROUTING (operator spec, June 2026): Binance auto-trades ONLY the 3
-    # majors (BTC/ETH/SOL, Market-Low, pinned), MEXC scanner auto-trades the
-    # volatile alts. Force-snap exchange_mode to "multi" on every cold start so
-    # the combined plan (resolve_live_plan) routes majors→binance and the
-    # scanner alts→mexc. The combined plan is what enforces "no OTHER Binance
-    # coin is ever auto-bought" — every non-major Binance holding is legacy/dust.
-    st.session_state.exchange_mode      = "multi"
+    # SPLIT ROUTING (operator spec, June 2026): "multi" runs the combined plan —
+    # Binance auto-trades ONLY the 3 majors (BTC/ETH/SOL, Market-Low, pinned) and
+    # the MEXC scanner auto-trades the volatile alts. The combined plan enforces
+    # "no OTHER Binance coin is ever auto-bought" — every non-major Binance
+    # holding is legacy/dust.
+    #
+    # RESPECT a persisted single-venue choice. If the operator selected MEXC-only
+    # (or Binance-only) — e.g. for testing — honor it; do NOT clobber
+    # exchange_mode back to "multi" on every cold start. That force-snap was the
+    # documented "bot keeps returning to BTC/ETH/SOL" desync bug.
+    if st.session_state.get("exchange_mode") not in ("binance", "mexc", "multi"):
+        st.session_state.exchange_mode  = "multi"
     st.session_state.check_every        = 2
     st.session_state.threshold          = 0.01
     st.session_state.ai_assist          = True
     st.session_state.ai_aggressiveness  = "Active Scalper"
-    # Symbols: re-instate BTC+ETH+SOL if persisted file dropped to one.
+    # Symbols: re-instate BTC+ETH+SOL ONLY when the active venue trades majors
+    # (binance/multi) and the persisted list dropped below 2. In MEXC-only mode
+    # NEVER force majors — keep the persisted scanner symbols, and let an empty
+    # MEXC list be repopulated by the scanner at runtime (resolve_scanner_symbols).
     _syms_persist = st.session_state.get("active_symbols") or []
-    if len(_syms_persist) < 2:
+    if st.session_state.exchange_mode in ("binance", "multi") and len(_syms_persist) < 2:
         st.session_state.active_symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
     # ── Risk numbers PERSIST — no force-snap. ────────────────────────────────
     # The operator now controls SL/TP/max-open/cooldown/exposure from the
@@ -2516,6 +2529,8 @@ with st.sidebar:
         _last_tick = get_shared_last_tick(symbol=st.session_state.symbol)
         if _last_tick:
             from datetime import datetime as _dt
+            if getattr(_last_tick, "tzinfo", None) is not None:
+                _last_tick = _last_tick.astimezone().replace(tzinfo=None)
             _elapsed  = (_dt.now() - _last_tick).total_seconds()
             _chk_ev   = st.session_state.check_every
             _remain   = max(0.0, _chk_ev - (_elapsed % _chk_ev))
@@ -2899,18 +2914,28 @@ with st.sidebar:
                    "OTHER Binance coin is legacy/dust — shown but never "
                    "auto-bought. MEXC stays in DRY-RUN until you enable live "
                    "MEXC orders.")
-        # SPLIT ROUTING (operator spec): majors→binance, scanner alts→mexc.
-        # "multi" lets the combined plan route per-symbol; no other Binance coin
-        # is ever auto-bought (the combined plan only ever lists the 3 majors on
-        # the Binance venue).
-        st.session_state.exchange_mode = "multi"
-        st.markdown(
-            '<div style="background:#102132;border:1px solid #1f6feb;border-radius:6px;'
-            'padding:6px 10px;margin:2px 0 6px;color:#79b0ff;font-weight:700;'
-            'font-size:12px;">🔵 Split routing: BTC/ETH/SOL → Binance '
-            '<span style="color:#6e7681;font-weight:600;">· scanner alts → MEXC '
-            '· no other Binance coin is auto-traded</span></div>',
-            unsafe_allow_html=True,
+        # VENUE MODE (persisted). Replaces the old unconditional force to "multi"
+        # which kept reverting MEXC-only / Binance-only testing back to the
+        # combined plan. The selector drives BOTH auto-trading AND which dashboard
+        # sections render (see _show_binance / _show_mexc in the main layout).
+        _venue_modes = ["multi", "binance", "mexc"]
+        _venue_cur = st.session_state.get("exchange_mode", "multi")
+        if _venue_cur not in _venue_modes:
+            _venue_cur = "multi"
+        _venue_lbl = {
+            "multi":   "Both — split routing (BTC/ETH/SOL → Binance · alts → MEXC)",
+            "binance": "Binance only (BTC/ETH/SOL majors)",
+            "mexc":    "MEXC only (scanner volatile alts)",
+        }
+        st.session_state.exchange_mode = st.radio(
+            "Execution venue",
+            _venue_modes,
+            index=_venue_modes.index(_venue_cur),
+            format_func=lambda m: _venue_lbl[m],
+            key="rb_exchange_mode",
+            help="Which venue(s) the bot auto-trades AND which dashboard sections "
+                 "show. 'Both' runs the split plan; single-venue modes hide the "
+                 "other venue's panels and trade only that exchange.",
         )
         st.session_state.mexc_live_orders = st.checkbox(
             "⚠️ Enable LIVE MEXC orders (max 2 USDT/trade)",
@@ -3882,952 +3907,956 @@ with st.container():
         # Permanent GLOBAL RULES bar (applies to BOTH venues), then the Binance
         # venue section header. The MEXC section header is rendered further down.
         _render_global_rules_bar()
-        _venue_header("🟡 BINANCE DASHBOARD",
-                      "Pinned majors BTC · ETH · SOL · Market-Low rule · "
-                      "never rotated · max 3 open positions",
-                      "#f0b90b", "#1a1505")
+        _show_binance = st.session_state.get("exchange_mode", "multi") in ("binance", "multi")
+        _show_mexc    = st.session_state.get("exchange_mode", "multi") in ("mexc", "multi")
+        if _show_binance:
+            _venue_header("🟡 BINANCE DASHBOARD",
+                          "Pinned majors BTC · ETH · SOL · Market-Low rule · "
+                          "never rotated · max 3 open positions",
+                          "#f0b90b", "#1a1505")
 
-        roi_cls  = "up" if roi >= 0  else "dn"
-        dpnl_cls = "up" if daily_pnl >= 0 else "dn"
+            roi_cls  = "up" if roi >= 0  else "dn"
+            dpnl_cls = "up" if daily_pnl >= 0 else "dn"
 
-        _u_cls = "up" if unrealized_pnl >= 0 else "dn"
-        _r_cls = "up" if realized_pnl   >= 0 else "dn"
-        _bin_card_style = 'border-color:#26a69a55;' if _binance_connected else 'opacity:.55;'
+            _u_cls = "up" if unrealized_pnl >= 0 else "dn"
+            _r_cls = "up" if realized_pnl   >= 0 else "dn"
+            _bin_card_style = 'border-color:#26a69a55;' if _binance_connected else 'opacity:.55;'
 
-        if binance_balance_err:
-            st.error(f"❌ Binance balance API failed: {binance_balance_err} — check API key permissions / IP whitelist / system clock")
-        _bin_total_disp = "ERR"  if binance_balance_err else f"${binance_total_usdt:,.2f}"
-        _bin_free_disp  = "ERR"  if binance_balance_err else f"${binance_free_usdt:,.2f}"
-        _bin_sub_total  = ("⚠️ API ERROR" if binance_balance_err
-                           else ('🟢 Live · free + locked' if _binance_connected else 'Not connected'))
-        # Account Value card = TRUE total (USDT + coins). Falls back to USDT-only
-        # if the per-coin valuation failed, so the card is never blank.
-        _acct_disp = ("ERR" if account_value_err
-                      else (f"${account_value_usdt:,.2f}" if account_value_usdt is not None
-                            else _bin_total_disp))
-        _acct_sub  = ("⚠️ price feed error" if account_value_err
-                      else ("🟢 USDT + coins (live)" if account_value_usdt is not None
-                            else _bin_sub_total))
-        _bin_sub_free   = ("⚠️ API ERROR" if binance_balance_err
-                           else ('Free for new orders' if _binance_connected else 'Connect API key'))
-        if binance_balance_err:
-            _bin_card_style = 'border-color:#ef535088;background:#2a0f0f;'
+            if binance_balance_err:
+                st.error(f"❌ Binance balance API failed: {binance_balance_err} — check API key permissions / IP whitelist / system clock")
+            _bin_total_disp = "ERR"  if binance_balance_err else f"${binance_total_usdt:,.2f}"
+            _bin_free_disp  = "ERR"  if binance_balance_err else f"${binance_free_usdt:,.2f}"
+            _bin_sub_total  = ("⚠️ API ERROR" if binance_balance_err
+                               else ('🟢 Live · free + locked' if _binance_connected else 'Not connected'))
+            # Account Value card = TRUE total (USDT + coins). Falls back to USDT-only
+            # if the per-coin valuation failed, so the card is never blank.
+            _acct_disp = ("ERR" if account_value_err
+                          else (f"${account_value_usdt:,.2f}" if account_value_usdt is not None
+                                else _bin_total_disp))
+            _acct_sub  = ("⚠️ price feed error" if account_value_err
+                          else ("🟢 USDT + coins (live)" if account_value_usdt is not None
+                                else _bin_sub_total))
+            _bin_sub_free   = ("⚠️ API ERROR" if binance_balance_err
+                               else ('Free for new orders' if _binance_connected else 'Connect API key'))
+            if binance_balance_err:
+                _bin_card_style = 'border-color:#ef535088;background:#2a0f0f;'
 
-        _sec("💰 Wallet Overview")
-        st.markdown(f"""
-<div class="cards">
-  <div class="card" style="{_bin_card_style}">
-    <div class="c-lbl">Account Value</div>
-    <div class="c-val">{_acct_disp}</div>
-    <div class="c-sub">{_acct_sub}</div>
-  </div>
-  <div class="card" style="{_bin_card_style}">
-    <div class="c-lbl">Available (USDT)</div>
-    <div class="c-val">{_bin_free_disp}</div>
-    <div class="c-sub">{_bin_sub_free}</div>
-  </div>
-  <div class="card">
-    <div class="c-lbl">Locked (USDT)</div>
-    <div class="c-val">{f"${binance_locked_usdt:,.2f}" if _binance_connected else "—"}</div>
-    <div class="c-sub">{f"In open orders · {len(open_trades)} positions" if _binance_connected else "Connect to Binance"}</div>
-  </div>
-  <div class="card">
-    <div class="c-lbl">Realized PnL</div>
-    <div class="c-val {_r_cls}">{_fmt_pnl(realized_pnl)}</div>
-    <div class="c-sub">{len(closed_trades)} closed · Win {win_rate:.1f}%</div>
-  </div>
-  <div class="card">
-    <div class="c-lbl">Unrealized PnL</div>
-    <div class="c-val {_u_cls}">{_fmt_pnl(unrealized_pnl)}</div>
-    <div class="c-sub">Exposure {(sum((t.get('invested') or 0) for t in open_trades)/equity*100 if equity else 0):.1f}% · ROI {roi:+.2f}%</div>
-  </div>
-  <div class="card">
-    <div class="c-lbl">Daily P&L</div>
-    <div class="c-val {dpnl_cls}">{_fmt_pnl(daily_pnl)}</div>
-    <div class="c-sub">R {_fmt_pnl(daily_realized)} · {len([t for t in closed_trades if (t.get('close_time') or '').startswith(today_str)])} today</div>
-  </div>
-</div>
-""", unsafe_allow_html=True)
-
-        # ── Bot spending limit meter: how much of YOUR money is in play ─────────
-        _bot_limit   = float(getattr(st.session_state.global_risk,
-                                     "max_total_exposure_usdt", 0) or 0)
-        _bot_in_play = sum((t.get("invested") or 0) for t in open_trades)
-        if _bot_limit > 0:
-            _bot_avail = max(0.0, _bot_limit - _bot_in_play)
-            _bot_frac  = min(1.0, _bot_in_play / _bot_limit) if _bot_limit else 0.0
-            st.markdown(
-                f'<div style="display:flex;align-items:center;gap:10px;margin:4px 0 2px;flex-wrap:wrap;">'
-                f'<span style="font-size:10px;color:#6e7681;text-transform:uppercase;letter-spacing:.1em;font-weight:600;">💰 Bot Spending Limit</span>'
-                f'<span style="font-size:13px;font-weight:700;font-family:\'JetBrains Mono\',monospace;color:#f0f6fc;">${_bot_in_play:,.2f} in play</span>'
-                f'<span style="font-size:11px;color:#6e7681;">of ${_bot_limit:,.2f} limit · ${_bot_avail:,.2f} still free for the bot</span>'
-                f'</div>',
-                unsafe_allow_html=True)
-            st.progress(_bot_frac)
-        else:
-            st.caption("💸 Bot spending limit: OFF — the bot can use all your "
-                       "available USDT. Set a $ limit in the sidebar (Risk "
-                       "Management) to cap how much it uses.")
-
-        # ── Equity Curve Sparkline ─────────────────────────────────────────────
-        _cum       = 0.0
-        _spark_trades = sorted(
-            [t for t in closed_trades if t.get("close_time")],
-            key=lambda t: t["close_time"],
-        )
-        # Anchor point: first trade open time, or today's start if no trades yet
-        if _spark_trades:
-            _t0 = _to_london(_spark_trades[0].get("open_time") or _spark_trades[0]["close_time"])
-        else:
-            _t0 = datetime.now(_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
-        _eq_times  = [_t0]
-        _eq_vals   = [0.0]
-        if _spark_trades:
-            for _t in _spark_trades:
-                _cum += _t.get("profit_loss") or 0
-                _eq_times.append(_to_london(_t["close_time"]))
-                _eq_vals.append(round(_cum, 4))
-            # Extend to now with current unrealized P&L. REUSE unrealized_pnl
-            # (computed above), which prices EACH open position with ITS OWN
-            # coin's live price via _cur_price_for(). The old code here multiplied
-            # EVERY open position by the single selected-symbol `live_price`, so
-            # one open SOL/ETH trade priced as if it were BTC produced thousands
-            # of dollars of fake "profit" (the bogus +$8,941 equity number).
-            _eq_times.append(datetime.now(_TZ))
-            _eq_vals.append(round(_cum + unrealized_pnl, 4))
-
-        _spark_color = "#26a69a" if _eq_vals[-1] >= 0 else "#ef5350"
-        _spark_fill  = "rgba(38,166,154,0.08)" if _eq_vals[-1] >= 0 else "rgba(239,83,80,0.08)"
-
-        _sfig = go.Figure()
-        _sfig.add_trace(go.Scatter(
-            x=_eq_times, y=_eq_vals,
-            mode="lines",
-            line=dict(color=_spark_color, width=2),
-            fill="tozeroy", fillcolor=_spark_fill,
-            hovertemplate="$%{y:+.4f}<br>%{x|%H:%M %b %d}<extra></extra>",
-        ))
-        # zero baseline
-        _sfig.add_hline(y=0, line=dict(color="#30363d", width=1))
-        # current dot
-        _sfig.add_trace(go.Scatter(
-            x=[_eq_times[-1]], y=[_eq_vals[-1]],
-            mode="markers",
-            marker=dict(color=_spark_color, size=7,
-                        line=dict(color="#0a0c10", width=2)),
-            showlegend=False,
-            hovertemplate=f"Now: ${_eq_vals[-1]:+.4f}<extra></extra>",
-        ))
-        _sfig.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            height=72,
-            margin=dict(l=0, r=0, t=0, b=0),
-            showlegend=False,
-            xaxis=dict(visible=False),
-            yaxis=dict(visible=False, zeroline=False),
-            hovermode="x unified",
-            hoverlabel=dict(bgcolor="#161b22", bordercolor="#30363d",
-                            font_color="#c9d1d9", font_size=11),
-            uirevision="alphatrade-spark",
-        )
-
-        _sp_lbl = f'<span style="font-size:10px;color:#6e7681;text-transform:uppercase;letter-spacing:.1em;font-weight:600;">Cumulative P&amp;L (real)</span>'
-        _sp_val = f'<span style="font-size:13px;font-weight:700;font-family:\'JetBrains Mono\',monospace;color:{_spark_color};">{"+" if _eq_vals[-1]>=0 else ""}${_eq_vals[-1]:,.4f}</span>'
-        _sp_cnt = f'<span style="font-size:10px;color:#484f58;">{len(_spark_trades)} closed trade{"s" if len(_spark_trades)!=1 else ""}</span>'
-        st.markdown(
-            f'<div style="display:flex;align-items:center;gap:12px;margin-bottom:2px;">'
-            f'{_sp_lbl}&nbsp;&nbsp;{_sp_val}&nbsp;&nbsp;{_sp_cnt}</div>',
-            unsafe_allow_html=True,
-        )
-        st.plotly_chart(_sfig, width="stretch", key="equity_spark_chart",
-                        config={"displayModeBar": False, "staticPlot": False})
-
-        # ── Core markets + Binance chart symbol selector ───────────────────────
-        # Core Markets shows the 3 pinned Binance majors (real engine data); the
-        # selector below is the SOLE control for which major the big chart shows.
-        _render_core_markets(_acts)
-        _bmaj = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
-        _bcur = st.session_state.symbol if st.session_state.symbol in _bmaj else "BTCUSDT"
-        st.markdown('<div class="sec-lbl" style="margin-top:12px;">📈 Binance Chart</div>',
-                    unsafe_allow_html=True)
-        if hasattr(st, "segmented_control"):
-            _bpick = st.segmented_control(
-                "Binance chart symbol", _bmaj, default=_bcur,
-                key="bin_chart_pick",
-                format_func=lambda s: s.replace("USDT", ""),
-                label_visibility="collapsed")
-        else:
-            _bpick = st.radio(
-                "Binance chart symbol", _bmaj, index=_bmaj.index(_bcur),
-                horizontal=True, key="bin_chart_pick",
-                format_func=lambda s: s.replace("USDT", ""),
-                label_visibility="collapsed")
-        if _bpick and _bpick != st.session_state.symbol:
-            st.session_state.symbol = _bpick
-            st.rerun()
-
-        # ── Chart toolbar ─────────────────────────────────────────────────────
-        # Manual BUY/SELL controls were removed — the Market Low bot is the
-        # only trader. Operator controls kept: emergency STOP, bot ON/OFF, refresh.
-        tb1, tb4, tb5, tb6 = st.columns([7, 1, 1, 1])
-        with tb1:
-            mode_badge = '<span class="cbadge red">⚡ LIVE</span>'
-            # Last signal summary for chart bar
-            _ls = get_bot_last_signal()
-            _ls_msg = (_ls.get("message","") or "")
-            if "BUY" in _ls_msg:
-                _sig_badge = '<span class="cbadge green">▲ BUY SIGNAL</span>'
-            elif "SELL" in _ls_msg:
-                _sig_badge = '<span class="cbadge red">▼ SELL SIGNAL</span>'
-            elif _ls_msg:
-                _sig_badge = f'<span class="cbadge" style="color:#6e7681;">HOLD</span>'
-            else:
-                _sig_badge = ""
-            _bot_run_badge = (
-                '<span class="cbadge" style="color:#e3b341;background:#1e1a0a;">⚡ BOT ON</span>'
-                if bot_running else
-                '<span class="cbadge" style="color:#484f58;">BOT OFF</span>'
-            )
+            _sec("💰 Wallet Overview")
             st.markdown(f"""
-<div class="chart-bar">
-  <div class="chart-title">
-    <span>{st.session_state.symbol}</span>
-    <span class="cbadge blue">{st.session_state.interval}</span>
-    <span class="cbadge gold">{st.session_state.strategy}</span>
-    {mode_badge}
-    {_bot_run_badge}
-    {_sig_badge}
-  </div>
-</div>
-""", unsafe_allow_html=True)
-        with tb4:
-            emg_btn  = st.button("🚨 STOP", width="stretch", type="secondary")
-        with tb5:
-            bot_label = "⏹ Bot OFF" if bot_running else "⏩ Bot ON"
-            if st.button(bot_label, width="stretch",
-                          help="Toggle bot on/off"):
-                if bot_running:
-                    bot_module.stop_bot()
-                    st.session_state.bot_was_running   = False
-                    st.session_state._user_stopped_bot = True
-                else:
-                    _blk = _bot_start_blocker()
-                    if _blk:
-                        st.error(_blk)
-                    else:
-                        # MEXC mode: `c` may be None (Binance not required).
-                        c = _cl()
-                        _eff_syms2, _eff_venues2, _eff_scan2 = _effective_bot_plan(
-                            st.session_state.active_symbols)
-                        _per_sym_rm2 = {}
-                        for _s in _eff_syms2:
-                            _ov = st.session_state.per_symbol_risk.get(_s)
-                            _per_sym_rm2[_s] = RiskManager(_ov) if _ov else st.session_state.risk_manager
-                        b = bot_module.create_bot(
-                            client=c,
-                            symbols=_eff_syms2,
-                            per_symbol_risk=_per_sym_rm2,
-                            global_risk=GlobalRiskManager(st.session_state.global_risk),
-                            strategy=st.session_state.strategy,
-                            risk_manager=st.session_state.risk_manager,
-                            interval=st.session_state.interval,
-                            check_every=st.session_state.check_every,
-                            threshold=st.session_state.threshold / 100,
-                            initial_balance=st.session_state.initial_balance,
-                            ai_assist=bool(st.session_state.get("ai_assist", False)),
-                            ai_aggressiveness="Active Scalper",   # ACTIVE SCALPER MODE — ignored
-                            exchange_mode=st.session_state.get("exchange_mode", "multi"),
-                            mexc_live_orders=bool(st.session_state.get("mexc_live_orders", False)),
-                            symbol_venues=_eff_venues2,
-                            scanner_driven=_eff_scan2,
-                            rotate_scanner=_eff_scan2,
-                            scanner_top_n=_mexc_cap(),  # MEXC alts up to the enforced cap
-                            manage_manual_trades=bool(getattr(st.session_state.global_risk,
-                                                              "manage_manual_trades", False)),
-                        )
-                        am.apply_profile_to_bot(b, st.session_state.aggressive_mode)
-                        b._initial_balance = st.session_state.initial_balance
-                        b.start()
-                st.rerun()
-        with tb6:
-            if st.button("↺", width="stretch", help="Refresh"):
-                st.rerun()
+    <div class="cards">
+      <div class="card" style="{_bin_card_style}">
+        <div class="c-lbl">Account Value</div>
+        <div class="c-val">{_acct_disp}</div>
+        <div class="c-sub">{_acct_sub}</div>
+      </div>
+      <div class="card" style="{_bin_card_style}">
+        <div class="c-lbl">Available (USDT)</div>
+        <div class="c-val">{_bin_free_disp}</div>
+        <div class="c-sub">{_bin_sub_free}</div>
+      </div>
+      <div class="card">
+        <div class="c-lbl">Locked (USDT)</div>
+        <div class="c-val">{f"${binance_locked_usdt:,.2f}" if _binance_connected else "—"}</div>
+        <div class="c-sub">{f"In open orders · {len(open_trades)} positions" if _binance_connected else "Connect to Binance"}</div>
+      </div>
+      <div class="card">
+        <div class="c-lbl">Realized PnL</div>
+        <div class="c-val {_r_cls}">{_fmt_pnl(realized_pnl)}</div>
+        <div class="c-sub">{len(closed_trades)} closed · Win {win_rate:.1f}%</div>
+      </div>
+      <div class="card">
+        <div class="c-lbl">Unrealized PnL</div>
+        <div class="c-val {_u_cls}">{_fmt_pnl(unrealized_pnl)}</div>
+        <div class="c-sub">Exposure {(sum((t.get('invested') or 0) for t in open_trades)/equity*100 if equity else 0):.1f}% · ROI {roi:+.2f}%</div>
+      </div>
+      <div class="card">
+        <div class="c-lbl">Daily P&L</div>
+        <div class="c-val {dpnl_cls}">{_fmt_pnl(daily_pnl)}</div>
+        <div class="c-sub">R {_fmt_pnl(daily_realized)} · {len([t for t in closed_trades if (t.get('close_time') or '').startswith(today_str)])} today</div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-        if emg_btn:
-            st.session_state.risk.emergency_stop = True
-            bot_module.stop_bot()
-            st.session_state.bot_was_running   = False
-            st.session_state._user_stopped_bot = True
-            log_activity("WARNING", "🚨 EMERGENCY STOP activated")
-            st.rerun()
-
-        # ── Chart (3-panel: Candles+EMA | Stochastic | RSI) ───────────────────
-        # ── Active Levels strip (replaces in-chart annotations) ─────────────────
-        if df_chart is not None and len(df_chart) > 5:
-            _lvl_bits = []
-            if live_price:
-                _lc = "#26a69a" if change_pct >= 0 else "#ef5350"
-                _lvl_bits.append(
-                    f'<span style="color:#6e7681;">PRICE</span> '
-                    f'<span style="color:{_lc};font-weight:700;">${live_price:,.4f}</span>'
-                )
-            for _op in open_trades:
-                _sid = _op.get("side","BUY"); _tid = (_op.get("id") or "?")[:6]
-                _sl = _op.get("stop_loss"); _tp = _op.get("take_profit")
-                if _sl or _tp:
-                    _side_col = "#26a69a" if _sid == "BUY" else "#ef5350"
-                    _lvl_bits.append(
-                        f'<span style="color:#6e7681;">{_tid}</span> '
-                        f'<span style="color:{_side_col};font-weight:600;">{_sid}</span> '
-                        + (f'<span style="color:#ef5350;">SL ${_sl:,.4f}</span> ' if _sl else '')
-                        + (f'<span style="color:#26a69a;">TP ${_tp:,.4f}</span>' if _tp else '')
-                    )
-            if _lvl_bits:
+            # ── Bot spending limit meter: how much of YOUR money is in play ─────────
+            _bot_limit   = float(getattr(st.session_state.global_risk,
+                                         "max_total_exposure_usdt", 0) or 0)
+            _bot_in_play = sum((t.get("invested") or 0) for t in open_trades)
+            if _bot_limit > 0:
+                _bot_avail = max(0.0, _bot_limit - _bot_in_play)
+                _bot_frac  = min(1.0, _bot_in_play / _bot_limit) if _bot_limit else 0.0
                 st.markdown(
-                    '<div style="display:flex;flex-wrap:wrap;gap:14px;padding:6px 10px;'
-                    'background:#0d1117;border:1px solid #1a2030;border-radius:6px;'
-                    "margin:4px 0 8px 0;font-size:11px;font-family:'JetBrains Mono',monospace;\">"
-                    + " · ".join(_lvl_bits) + "</div>",
-                    unsafe_allow_html=True,
-                )
-
-            _has_rsi = "rsi" in df_chart.columns
-
-            # ── Compute MACD inline (12/26/9) so the chart can show it ──────────
-            if "macd" not in df_chart.columns and len(df_chart) >= 26:
-                _ema12 = df_chart["close"].ewm(span=12, adjust=False).mean()
-                _ema26 = df_chart["close"].ewm(span=26, adjust=False).mean()
-                df_chart["macd"]        = _ema12 - _ema26
-                df_chart["macd_signal"] = df_chart["macd"].ewm(span=9, adjust=False).mean()
-                df_chart["macd_hist"]   = df_chart["macd"] - df_chart["macd_signal"]
-            _has_macd  = "macd" in df_chart.columns
-            _has_stoch = "stoch_k" in df_chart.columns
-
-            # ── Timeframe pills (TradingView-style) ─────────────────────────────
-            TF_PILLS = [("1m","1m"),("5m","5m"),("15m","15m"),("1h","1h"),("4h","4h")]
-            _tfcols = st.columns([0.07]*len(TF_PILLS) + [0.65])
-            for _i,(_lbl,_val) in enumerate(TF_PILLS):
-                _active = (st.session_state.interval == _val)
-                with _tfcols[_i]:
-                    if st.button(("● " if _active else "") + _lbl,
-                                 key=f"tf_pill_{_val}",
-                                 type="primary" if _active else "secondary",
-                                 width="stretch"):
-                        st.session_state.interval = _val
-                        st.rerun()
-            with _tfcols[-1]:
-                st.markdown(
-                    f'<div style="text-align:right;font-size:11px;color:#6e7681;'
-                    f'font-family:\'JetBrains Mono\',monospace;padding-top:9px;">'
-                    f'<b style="color:#c9d1d9;">{st.session_state.symbol}</b> · '
-                    f'<b style="color:#79b0ff;">{st.session_state.interval}</b> · '
-                    f'{len(df_chart)} candles</div>',
-                    unsafe_allow_html=True,
-                )
-
-            # ── Indicator toggles + view controls ───────────────────────────────
-            _ind_defaults = {"show_volume": True, "show_ema": True,
-                             "show_rsi": True, "show_macd": True, "show_stoch": True,
-                             "show_old_trades": True, "show_sl_tp": True}
-            for _k,_v in _ind_defaults.items():
-                if _k not in st.session_state: st.session_state[_k] = _v
-
-            DEFAULT_WINDOW_HOURS = 2            # Binance-like default: last 2h
-            _win_key   = "chart_window_hours"
-            _nonce_key = "chart_view_nonce"
-            _follow_key = "chart_autofollow"
-            _moff_key   = "chart_marker_offset_pct"
-            if _win_key   not in st.session_state: st.session_state[_win_key]   = DEFAULT_WINDOW_HOURS
-            if _nonce_key not in st.session_state: st.session_state[_nonce_key] = 0
-            if _follow_key not in st.session_state: st.session_state[_follow_key] = True
-            if _moff_key   not in st.session_state: st.session_state[_moff_key]   = 0.03
-            # The visible window is ALWAYS applied as an explicit, bounded x-range
-            # (driven by the Zoom in/out/Reset buttons below). We never leave the
-            # axis on autorange, otherwise Plotly expands to fit old off-screen
-            # trade markers and the chart "springs out" to many days on every
-            # refresh. Buttons change `chart_window_hours`; that window persists
-            # across auto-refreshes because it's re-applied each tick.
-
-            # Row 1 — indicator toggles + Auto-follow.
-            _c1,_c2,_c3,_c4,_c5,_c6,_c7,_csp,_cf = st.columns(
-                [0.07,0.07,0.07,0.07,0.07,0.09,0.09, 0.04, 0.20]
-            )
-            with _c1:
-                st.session_state.show_ema = st.checkbox(
-                    "EMA", value=st.session_state.show_ema, key="cb_ema",
-                    help="EMA 9 + EMA 21 overlay")
-            with _c2:
-                st.session_state.show_volume = st.checkbox(
-                    "Vol", value=st.session_state.show_volume, key="cb_vol",
-                    help="Volume bars at bottom of price panel")
-            with _c3:
-                st.session_state.show_rsi = st.checkbox(
-                    "RSI", value=st.session_state.show_rsi, key="cb_rsi",
-                    help="RSI 14 sub-panel")
-            with _c4:
-                st.session_state.show_macd = st.checkbox(
-                    "MACD", value=st.session_state.show_macd, key="cb_macd",
-                    help="MACD 12/26/9 sub-panel")
-            with _c5:
-                st.session_state.show_stoch = st.checkbox(
-                    "Stoch", value=st.session_state.show_stoch, key="cb_stoch",
-                    help="Stochastic %K/%D sub-panel")
-            with _c6:
-                st.session_state.show_old_trades = st.checkbox(
-                    "Trades", value=st.session_state.show_old_trades, key="cb_old_tr",
-                    help="Show historical BUY/SELL/EXIT markers from past trades")
-            with _c7:
-                st.session_state.show_sl_tp = st.checkbox(
-                    "SL/TP", value=st.session_state.show_sl_tp, key="cb_sltp",
-                    help="Show stop-loss / take-profit dashed lines for OPEN positions")
-            with _cf:
-                st.session_state[_follow_key] = st.checkbox(
-                    "🛰 Auto-follow latest", value=st.session_state[_follow_key],
-                    key="cb_autofollow",
-                    help="ON: chart tracks the newest candle. OFF: chart is frozen "
-                         "where you left it — it never moves on refresh, bot scan, "
-                         "or price update (zoom/pan stays exactly put, like Binance).")
-
-            # Row 2 — zoom / reset buttons + marker offset.
-            _zi,_zo,_zr2,_zr24,_msp,_mo = st.columns(
-                [0.12,0.12,0.14,0.15, 0.04, 0.30]
-            )
-            with _zi:
-                if st.button("➕ Zoom in", key="chart_zoom_in_btn", width="stretch",
-                             help="Halve the visible window"):
-                    st.session_state[_win_key] = max(0.25, st.session_state[_win_key] / 2)
-                    st.session_state[_nonce_key] += 1
-                    st.rerun()
-            with _zo:
-                if st.button("➖ Zoom out", key="chart_zoom_out_btn", width="stretch",
-                             help="Double the visible window"):
-                    st.session_state[_win_key] = min(720, st.session_state[_win_key] * 2)
-                    st.session_state[_nonce_key] += 1
-                    st.rerun()
-            with _zr2:
-                if st.button("⟲ Reset 2h", key="chart_reset_2h_btn", width="stretch",
-                             help="Reset view to the last 2 hours"):
-                    st.session_state[_win_key]   = 2
-                    st.session_state[_nonce_key] += 1
-                    st.rerun()
-            with _zr24:
-                if st.button("⟲ Reset 24h", key="chart_reset_24h_btn", width="stretch",
-                             help="Reset view to the last 24 hours"):
-                    st.session_state[_win_key]   = 24
-                    st.session_state[_nonce_key] += 1
-                    st.rerun()
-            with _mo:
-                _moff_val = min(0.20, max(0.01, float(st.session_state[_moff_key])))
-                st.session_state[_moff_key] = st.slider(
-                    "Marker offset %", min_value=0.01, max_value=0.20,
-                    value=_moff_val, step=0.01,
-                    key="sl_marker_offset", format="%.2f",
-                    help="How far the BUY/SELL arrows sit from the candle "
-                         "(% of price). BUY below, SELL above.")
-
-            # Bound the visible window to the candle data we actually have, so
-            # zooming out reveals REAL price history (max ~the fetched range)
-            # instead of empty space with old trade markers floating in it.
-            # _view_end = latest candle; _view_start = `window` hours back but
-            # never earlier than the oldest candle we hold.
-            _win_hours = float(st.session_state[_win_key])
-            # Chart timezone of the candle axis (naive Europe/London wall-clock,
-            # so `_xtz` is normally None). Used only for the view-window fallback
-            # below; trade-marker placement is handled by chart_markers, which
-            # does its own axis-tz coercion.
-            try:
-                _xtz = df_chart["open_time"].dt.tz
-            except Exception:
-                _xtz = None
-            try:
-                _data_start = df_chart["open_time"].min()
-                _data_end   = df_chart["open_time"].max()
-            except Exception:
-                _data_start = _data_end = None
-            # ── Visible window: Auto-follow vs frozen ──────────────────────────
-            # The x-range we hand Plotly is stored in session_state and reused on
-            # rerun. Two modes:
-            #   • Auto-follow ON  → recompute every tick so _view_end tracks the
-            #     newest candle (chart follows live price).
-            #   • Auto-follow OFF → reuse the saved range; _view_end does NOT
-            #     advance, so the chart never moves on refresh / scan / price tick.
-            # In BOTH modes uirevision is stable across reruns, so once the user
-            # scroll-zooms or pans, Plotly preserves that exact view and ignores
-            # the range we pass — the view only snaps to a fresh range when the
-            # nonce changes (Zoom in/out / Reset 2h / Reset 24h) or symbol/
-            # interval changes. We force a recompute on those events too.
-            _autofollow = bool(st.session_state[_follow_key])
-            _nonce      = st.session_state[_nonce_key]
-            _saved_x    = st.session_state.get("chart_saved_xrange")
-            _saved_sig  = st.session_state.get("chart_saved_sig")
-            _cur_sig    = (st.session_state.symbol, st.session_state.interval, _nonce)
-            _need_fresh = (
-                _autofollow                       # following: always re-center
-                or _saved_x is None               # nothing saved yet
-                or _saved_sig != _cur_sig         # reset / zoom-btn / symbol / interval
-            )
-
-            def _compute_window():
-                if _data_start is not None and _data_end is not None:
-                    # Pad the right edge slightly past the last candle so a trade
-                    # placed RIGHT NOW (a few seconds-to-a-minute after the last
-                    # candle's open_time) is not clipped off the right edge.
-                    _ve = _data_end + max(
-                        pd.Timedelta(hours=_win_hours) * 0.05, pd.Timedelta(minutes=1))
-                    _vs = max(_data_start, _data_end - pd.Timedelta(hours=_win_hours))
-                else:
-                    _ve = pd.Timestamp.now(tz=_xtz) if _xtz is not None else pd.Timestamp.now()
-                    _vs = _ve - pd.Timedelta(hours=_win_hours)
-                return _vs, _ve
-
-            if _need_fresh:
-                _view_start, _view_end = _compute_window()
-                st.session_state["chart_saved_xrange"] = [_view_start, _view_end]
-                st.session_state["chart_saved_sig"]    = _cur_sig
+                    f'<div style="display:flex;align-items:center;gap:10px;margin:4px 0 2px;flex-wrap:wrap;">'
+                    f'<span style="font-size:10px;color:#6e7681;text-transform:uppercase;letter-spacing:.1em;font-weight:600;">💰 Bot Spending Limit</span>'
+                    f'<span style="font-size:13px;font-weight:700;font-family:\'JetBrains Mono\',monospace;color:#f0f6fc;">${_bot_in_play:,.2f} in play</span>'
+                    f'<span style="font-size:11px;color:#6e7681;">of ${_bot_limit:,.2f} limit · ${_bot_avail:,.2f} still free for the bot</span>'
+                    f'</div>',
+                    unsafe_allow_html=True)
+                st.progress(_bot_frac)
             else:
-                _view_start, _view_end = _saved_x
+                st.caption("💸 Bot spending limit: OFF — the bot can use all your "
+                           "available USDT. Set a $ limit in the sidebar (Risk "
+                           "Management) to cap how much it uses.")
 
-            # ── Dynamic subplot layout based on enabled indicators ──────────────
-            _panels = ["price"]
-            if st.session_state.show_rsi   and _has_rsi:   _panels.append("rsi")
-            if st.session_state.show_macd  and _has_macd:  _panels.append("macd")
-            if st.session_state.show_stoch and _has_stoch: _panels.append("stoch")
-            n_rows = len(_panels)
-            # Price panel takes ≥70% of vertical so candles are large + readable.
-            _sub_h = {1:[1.0], 2:[0.78,0.22], 3:[0.72,0.14,0.14], 4:[0.70,0.10,0.10,0.10]}[n_rows]
-            fig = make_subplots(
-                rows=n_rows, cols=1, shared_xaxes=True,
-                row_heights=_sub_h, vertical_spacing=0.02,
+            # ── Equity Curve Sparkline ─────────────────────────────────────────────
+            _cum       = 0.0
+            _spark_trades = sorted(
+                [t for t in closed_trades if t.get("close_time")],
+                key=lambda t: t["close_time"],
             )
-            _row = {p:(i+1) for i,p in enumerate(_panels)}
+            # Anchor point: first trade open time, or today's start if no trades yet
+            if _spark_trades:
+                _t0 = _to_london(_spark_trades[0].get("open_time") or _spark_trades[0]["close_time"])
+            else:
+                _t0 = datetime.now(_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
+            _eq_times  = [_t0]
+            _eq_vals   = [0.0]
+            if _spark_trades:
+                for _t in _spark_trades:
+                    _cum += _t.get("profit_loss") or 0
+                    _eq_times.append(_to_london(_t["close_time"]))
+                    _eq_vals.append(round(_cum, 4))
+                # Extend to now with current unrealized P&L. REUSE unrealized_pnl
+                # (computed above), which prices EACH open position with ITS OWN
+                # coin's live price via _cur_price_for(). The old code here multiplied
+                # EVERY open position by the single selected-symbol `live_price`, so
+                # one open SOL/ETH trade priced as if it were BTC produced thousands
+                # of dollars of fake "profit" (the bogus +$8,941 equity number).
+                _eq_times.append(datetime.now(_TZ))
+                _eq_vals.append(round(_cum + unrealized_pnl, 4))
 
-            # ── Candlestick ────────────────────────────────────────────────────
-            fig.add_trace(go.Candlestick(
-                x=df_chart["open_time"],
-                open=df_chart["open"], high=df_chart["high"],
-                low=df_chart["low"],   close=df_chart["close"],
-                name=st.session_state.symbol,
-                increasing_line_color="#26a69a", increasing_fillcolor="#26a69a",
-                decreasing_line_color="#ef5350", decreasing_fillcolor="#ef5350",
-                line=dict(width=1), whiskerwidth=0,
-            ), row=1, col=1)
+            _spark_color = "#26a69a" if _eq_vals[-1] >= 0 else "#ef5350"
+            _spark_fill  = "rgba(38,166,154,0.08)" if _eq_vals[-1] >= 0 else "rgba(239,83,80,0.08)"
 
-            _pr = _row["price"]
-
-            # ── EMA 9 / 21 (subdued, toggleable) ───────────────────────────────
-            if st.session_state.show_ema and "ema9" in df_chart.columns:
-                fig.add_trace(go.Scatter(
-                    x=df_chart["open_time"], y=df_chart["ema9"],
-                    line=dict(color="rgba(239,83,80,0.85)", width=1.2),
-                    name="EMA 9",
-                    hovertemplate="EMA9: %{y:.4f}<extra></extra>",
-                ), row=_pr, col=1)
-            if st.session_state.show_ema and "ema21" in df_chart.columns:
-                fig.add_trace(go.Scatter(
-                    x=df_chart["open_time"], y=df_chart["ema21"],
-                    line=dict(color="rgba(227,179,65,0.85)", width=1.2),
-                    name="EMA 21",
-                    hovertemplate="EMA21: %{y:.4f}<extra></extra>",
-                ), row=_pr, col=1)
-
-            # ── Volume histogram (scaled to bottom 18% of price panel) ──────────
-            if st.session_state.show_volume and "volume" in df_chart.columns:
-                _prange = df_chart["high"].max() - df_chart["low"].min()
-                _vmax   = df_chart["volume"].max()
-                if _prange > 0 and _vmax > 0:
-                    _vscaled = df_chart["volume"] / _vmax * _prange * 0.18
-                    _vbase   = df_chart["low"].min() - _prange * 0.02
-                    _vcols   = [
-                        "rgba(38,166,154,0.35)" if df_chart["close"].iloc[i] >= df_chart["open"].iloc[i]
-                        else "rgba(239,83,80,0.35)"
-                        for i in range(len(df_chart))
-                    ]
-                    fig.add_trace(go.Bar(
-                        x=df_chart["open_time"],
-                        y=_vscaled,
-                        base=_vbase,
-                        name="Volume",
-                        marker_color=_vcols,
-                        marker_line_width=0,
-                        showlegend=False,
-                        customdata=df_chart["volume"],
-                        hovertemplate="Vol: %{customdata:,.0f}<extra></extra>",
-                    ), row=_pr, col=1)
-
-            # ── Live price line + right-edge price pill ────────────────────────
-            if live_price:
-                p_color = "#26a69a" if change_pct >= 0 else "#ef5350"
-                fig.add_hline(
-                    y=live_price, row=_pr, col=1,
-                    line=dict(color=p_color, width=1, dash="dot"),
-                )
-                # Pill on the right axis — exact live price, always visible
-                fig.add_annotation(
-                    xref=f"x{_pr} domain" if _pr > 1 else "x domain",
-                    yref=f"y{_pr}" if _pr > 1 else "y",
-                    x=1.0, y=live_price,
-                    text=f" ${live_price:,.4f} ",
-                    showarrow=False,
-                    font=dict(color="#0a0c10", size=11,
-                              family="'JetBrains Mono',monospace"),
-                    bgcolor=p_color, bordercolor=p_color, borderwidth=1,
-                    xanchor="left", yanchor="middle",
-                    row=_pr, col=1,
-                )
-
-            # ── Last candle emphasis (thin marker dot at close) ────────────────
-            try:
-                _lc_x = df_chart["open_time"].iloc[-1]
-                _lc_y = df_chart["close"].iloc[-1]
-                _lc_col = ("#26a69a" if df_chart["close"].iloc[-1] >= df_chart["open"].iloc[-1]
-                           else "#ef5350")
-                fig.add_trace(go.Scatter(
-                    x=[_lc_x], y=[_lc_y], mode="markers",
-                    marker=dict(symbol="circle", size=8, color=_lc_col,
-                                line=dict(color="#0a0c10", width=2)),
-                    showlegend=False, hoverinfo="skip",
-                ), row=_pr, col=1)
-            except Exception:
-                pass
-
-            # ── Trade markers (larger, clearer) ────────────────────────────────
-            # ALL historical markers are added to the figure. They don't
-            # stretch the visible x-axis because we set an explicit `range`
-            # on the xaxis below — Plotly clips to that range on first paint
-            # but the markers stay in the dataset, so panning/scrolling back
-            # reveals every past BUY/SELL exit.
-            # CRITICAL: filter to ONLY the currently-viewed symbol (handled inside
-            # build_trade_markers via the `coin` field). Mixing ETH trades onto the
-            # BTC chart blows out the Y-axis. Markers are resolved to the candle
-            # nearest each trade timestamp by `chart_markers.build_trade_markers`,
-            # which coerces UTC `open_time` and naive-local `close_time` to the
-            # chart's naive Europe/London axis (the old inline coercion mis-placed
-            # markers and a try/except:continue silently dropped them).
-            _chart_sym = st.session_state.symbol
-            _markers = build_trade_markers(
-                all_trades, _chart_sym, df_chart["open_time"])
-            # Stash for the debug panel + warning rendered just below the chart.
-            st.session_state["_chart_marker_stats"] = {
-                "symbol":        _chart_sym,
-                "trades_found":  _markers.trades_found,
-                "buy_drawn":     _markers.buy_drawn,
-                "sell_drawn":    _markers.sell_drawn,
-                # (trade_id, kind, reason, out_of_range) — out_of_range markers
-                # are benign (trade simply older than the fetched candles) and
-                # must NOT raise the scary warning; only genuine data problems do.
-                "unmatched":     [(u.trade_id, u.kind, u.reason, u.out_of_range)
-                                  for u in _markers.unmatched],
-                "errors":        _markers.error_count,
-                "out_of_range":  _markers.out_of_range_count,
-            }
-
-            # GREEN BUY markers (up-arrow + "BUY" label) on the OPEN candle, and
-            # RED SELL markers (down-arrow + "SELL" label) on the CLOSE candle.
-            # Rendered when the "Trades" toggle is on (default ON) so they are
-            # visible at every zoom level inside the current view.
-            # Marker offset: nudge the arrow off the exact price so it doesn't
-            # overlap the candle — BUY sits BELOW, SELL sits ABOVE, by
-            # `marker_offset_pct` % of price. The REAL entry/exit price is carried
-            # in customdata so the hover stays accurate.
-            _moff = float(st.session_state[_moff_key]) / 100.0
-            if st.session_state.show_old_trades:
-                if _markers.buy:
-                    fig.add_trace(go.Scatter(
-                        x=[m.x for m in _markers.buy],
-                        y=[m.y * (1.0 - _moff) for m in _markers.buy],
-                        mode="markers+text",
-                        marker=dict(symbol="triangle-up", size=16, color="#26a69a",
-                                    line=dict(color="rgba(255,255,255,0.85)", width=1.4)),
-                        text=["BUY"] * len(_markers.buy),
-                        textposition="bottom center",
-                        textfont=dict(color="#26a69a", size=10,
-                                      family="'JetBrains Mono',monospace"),
-                        name="BUY",
-                        customdata=[[m.trade_id, m.y] for m in _markers.buy],
-                        hovertemplate=("BUY %{customdata[0]}<br>%{x}<br>"
-                                       "entry $%{customdata[1]:.4f}<extra></extra>"),
-                    ), row=_pr, col=1)
-                if _markers.sell:
-                    fig.add_trace(go.Scatter(
-                        x=[m.x for m in _markers.sell],
-                        y=[m.y * (1.0 + _moff) for m in _markers.sell],
-                        mode="markers+text",
-                        marker=dict(symbol="triangle-down", size=16, color="#ef5350",
-                                    line=dict(color="rgba(255,255,255,0.85)", width=1.4)),
-                        text=["SELL"] * len(_markers.sell),
-                        textposition="top center",
-                        textfont=dict(color="#ef5350", size=10,
-                                      family="'JetBrains Mono',monospace"),
-                        name="SELL",
-                        customdata=[[m.trade_id, m.y] for m in _markers.sell],
-                        hovertemplate=("SELL %{customdata[0]}<br>%{x}<br>"
-                                       "exit $%{customdata[1]:.4f}<extra></extra>"),
-                    ), row=_pr, col=1)
-
-            # ── SL / TP lines for every open position (toggle) ────────────────
-            # Same symbol filter — don't draw ETH's SL/TP on the BTC chart.
-            if st.session_state.show_sl_tp:
-                _sym_open = [t for t in open_trades
-                             if (t.get("coin") or "").upper() == _chart_sym.upper()]
-                for _op in _sym_open:
-                    _sl  = _op.get("stop_loss")
-                    _tp  = _op.get("take_profit")
-                    if _sl and float(_sl or 0) > 0:
-                        fig.add_hline(y=_sl, row=_pr, col=1,
-                            line=dict(color="rgba(239,83,80,0.55)", width=1, dash="dash"))
-                    if _tp and float(_tp or 0) > 0:
-                        fig.add_hline(y=_tp, row=_pr, col=1,
-                            line=dict(color="rgba(38,166,154,0.55)", width=1, dash="dash"))
-
-            # ── RSI panel ───────────────────────────────────────────────────────
-            if "rsi" in _row:
-                _rr = _row["rsi"]
-                fig.add_trace(go.Scatter(
-                    x=df_chart["open_time"], y=df_chart["rsi"],
-                    line=dict(color="#b794f6", width=1.5), name="RSI 14",
-                    hovertemplate="RSI: %{y:.1f}<extra></extra>",
-                ), row=_rr, col=1)
-                fig.add_hline(y=70, line=dict(color="rgba(239,83,80,0.45)", width=1, dash="dash"), row=_rr, col=1)
-                fig.add_hline(y=30, line=dict(color="rgba(38,166,154,0.45)", width=1, dash="dash"), row=_rr, col=1)
-                fig.add_hline(y=50, line=dict(color="rgba(110,118,129,0.25)", width=1, dash="dot"), row=_rr, col=1)
-
-            # ── MACD panel ──────────────────────────────────────────────────────
-            if "macd" in _row:
-                _mr = _row["macd"]
-                _hist_col = ["rgba(38,166,154,0.55)" if v >= 0 else "rgba(239,83,80,0.55)"
-                             for v in df_chart["macd_hist"]]
-                fig.add_trace(go.Bar(
-                    x=df_chart["open_time"], y=df_chart["macd_hist"],
-                    marker_color=_hist_col, marker_line_width=0,
-                    name="Hist", showlegend=False,
-                    hovertemplate="Hist: %{y:.4f}<extra></extra>",
-                ), row=_mr, col=1)
-                fig.add_trace(go.Scatter(
-                    x=df_chart["open_time"], y=df_chart["macd"],
-                    line=dict(color="#79b0ff", width=1.4), name="MACD",
-                    hovertemplate="MACD: %{y:.4f}<extra></extra>",
-                ), row=_mr, col=1)
-                fig.add_trace(go.Scatter(
-                    x=df_chart["open_time"], y=df_chart["macd_signal"],
-                    line=dict(color="#e3b341", width=1.2, dash="dot"), name="Signal",
-                    hovertemplate="Signal: %{y:.4f}<extra></extra>",
-                ), row=_mr, col=1)
-                fig.add_hline(y=0, line=dict(color="rgba(110,118,129,0.35)", width=1), row=_mr, col=1)
-
-            # ── Stochastic panel (optional) ────────────────────────────────────
-            if "stoch" in _row:
-                _sr = _row["stoch"]
-                fig.add_trace(go.Scatter(
-                    x=df_chart["open_time"], y=df_chart["stoch_k"],
-                    line=dict(color="#79b0ff", width=1.4), name="%K",
-                    hovertemplate="%K: %{y:.1f}<extra></extra>",
-                ), row=_sr, col=1)
-                fig.add_trace(go.Scatter(
-                    x=df_chart["open_time"], y=df_chart["stoch_d"],
-                    line=dict(color="#c9d1d9", width=1.1, dash="dot"), name="%D",
-                    hovertemplate="%D: %{y:.1f}<extra></extra>",
-                ), row=_sr, col=1)
-                fig.add_hline(y=80, line=dict(color="rgba(239,83,80,0.45)",  width=1, dash="dash"), row=_sr, col=1)
-                fig.add_hline(y=20, line=dict(color="rgba(38,166,154,0.45)", width=1, dash="dash"), row=_sr, col=1)
-
-            # ── Subtle corner labels for each sub-panel (no big titles) ────────
-            _panel_lbl = {"rsi": "RSI 14", "macd": "MACD 12/26/9", "stoch": "Stoch 14"}
-            for _p, _r in _row.items():
-                if _p == "price": continue
-                fig.add_annotation(
-                    xref=f"x{_r} domain" if _r > 1 else "x domain",
-                    yref=f"y{_r} domain" if _r > 1 else "y domain",
-                    x=0.005, y=0.95, xanchor="left", yanchor="top",
-                    text=_panel_lbl.get(_p, _p),
-                    showarrow=False,
-                    font=dict(size=9, color="#6e7681",
-                              family="'JetBrains Mono',monospace"),
-                    row=_r, col=1,
-                )
-
-            # ── Layout (TradingView-style: minimal, sparse grid) ───────────────
-            G       = "rgba(48,54,61,0.35)"   # very subtle gridlines
-            G_ZERO  = "rgba(48,54,61,0.55)"
-            _heights = {1: 560, 2: 660, 3: 760, 4: 860}
-            fig.update_layout(
-                paper_bgcolor="#0a0c10",
-                plot_bgcolor="#0a0c10",
-                font=dict(color="#9ba3ad", family="'JetBrains Mono',monospace", size=10),
-                xaxis_rangeslider_visible=False,
-                height=_heights[n_rows],
-                margin=dict(l=0, r=78, t=10, b=58),  # extra right margin for price pill
-                showlegend=True,
-                legend=dict(
-                    bgcolor="rgba(13,17,23,0)",
-                    bordercolor="rgba(0,0,0,0)", borderwidth=0,
-                    font=dict(size=10, color="#9ba3ad"),
-                    orientation="h",
-                    yanchor="top", y=-0.06,
-                    xanchor="center", x=0.5,
-                    itemsizing="constant",
-                ),
+            _sfig = go.Figure()
+            _sfig.add_trace(go.Scatter(
+                x=_eq_times, y=_eq_vals,
+                mode="lines",
+                line=dict(color=_spark_color, width=2),
+                fill="tozeroy", fillcolor=_spark_fill,
+                hovertemplate="$%{y:+.4f}<br>%{x|%H:%M %b %d}<extra></extra>",
+            ))
+            # zero baseline
+            _sfig.add_hline(y=0, line=dict(color="#30363d", width=1))
+            # current dot
+            _sfig.add_trace(go.Scatter(
+                x=[_eq_times[-1]], y=[_eq_vals[-1]],
+                mode="markers",
+                marker=dict(color=_spark_color, size=7,
+                            line=dict(color="#0a0c10", width=2)),
+                showlegend=False,
+                hovertemplate=f"Now: ${_eq_vals[-1]:+.4f}<extra></extra>",
+            ))
+            _sfig.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                height=72,
+                margin=dict(l=0, r=0, t=0, b=0),
+                showlegend=False,
+                xaxis=dict(visible=False),
+                yaxis=dict(visible=False, zeroline=False),
                 hovermode="x unified",
                 hoverlabel=dict(bgcolor="#161b22", bordercolor="#30363d",
                                 font_color="#c9d1d9", font_size=11),
-                dragmode="pan",
-                uirevision=f"trade_chart_fixed-"
-                           f"{st.session_state.symbol}-"
-                           f"{st.session_state.interval}-"
-                           f"{st.session_state['chart_view_nonce']}",
+                uirevision="alphatrade-spark",
             )
-            # X-axis: shared, sparse grid, scroll/pan unlocked, default 4h window
-            for r in range(1, n_rows + 1):
-                fig.update_xaxes(
+
+            _sp_lbl = f'<span style="font-size:10px;color:#6e7681;text-transform:uppercase;letter-spacing:.1em;font-weight:600;">Cumulative P&amp;L (real)</span>'
+            _sp_val = f'<span style="font-size:13px;font-weight:700;font-family:\'JetBrains Mono\',monospace;color:{_spark_color};">{"+" if _eq_vals[-1]>=0 else ""}${_eq_vals[-1]:,.4f}</span>'
+            _sp_cnt = f'<span style="font-size:10px;color:#484f58;">{len(_spark_trades)} closed trade{"s" if len(_spark_trades)!=1 else ""}</span>'
+            st.markdown(
+                f'<div style="display:flex;align-items:center;gap:12px;margin-bottom:2px;">'
+                f'{_sp_lbl}&nbsp;&nbsp;{_sp_val}&nbsp;&nbsp;{_sp_cnt}</div>',
+                unsafe_allow_html=True,
+            )
+            st.plotly_chart(_sfig, width="stretch", key="equity_spark_chart",
+                            config={"displayModeBar": False, "staticPlot": False})
+
+            # ── Core markets + Binance chart symbol selector ───────────────────────
+            # Core Markets shows the 3 pinned Binance majors (real engine data); the
+            # selector below is the SOLE control for which major the big chart shows.
+            _render_core_markets(_acts)
+            _bmaj = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+            _bcur = st.session_state.symbol if st.session_state.symbol in _bmaj else "BTCUSDT"
+            st.markdown('<div class="sec-lbl" style="margin-top:12px;">📈 Binance Chart</div>',
+                        unsafe_allow_html=True)
+            if hasattr(st, "segmented_control"):
+                _bpick = st.segmented_control(
+                    "Binance chart symbol", _bmaj, default=_bcur,
+                    key="bin_chart_pick",
+                    format_func=lambda s: s.replace("USDT", ""),
+                    label_visibility="collapsed")
+            else:
+                _bpick = st.radio(
+                    "Binance chart symbol", _bmaj, index=_bmaj.index(_bcur),
+                    horizontal=True, key="bin_chart_pick",
+                    format_func=lambda s: s.replace("USDT", ""),
+                    label_visibility="collapsed")
+            if _bpick and _bpick != st.session_state.symbol:
+                st.session_state.symbol = _bpick
+                st.rerun()
+
+            # ── Chart toolbar ─────────────────────────────────────────────────────
+            # Manual BUY/SELL controls were removed — the Market Low bot is the
+            # only trader. Operator controls kept: emergency STOP, bot ON/OFF, refresh.
+            tb1, tb4, tb5, tb6 = st.columns([7, 1, 1, 1])
+            with tb1:
+                mode_badge = '<span class="cbadge red">⚡ LIVE</span>'
+                # Last signal summary for chart bar
+                _ls = get_bot_last_signal()
+                _ls_msg = (_ls.get("message","") or "")
+                if "BUY" in _ls_msg:
+                    _sig_badge = '<span class="cbadge green">▲ BUY SIGNAL</span>'
+                elif "SELL" in _ls_msg:
+                    _sig_badge = '<span class="cbadge red">▼ SELL SIGNAL</span>'
+                elif _ls_msg:
+                    _sig_badge = f'<span class="cbadge" style="color:#6e7681;">HOLD</span>'
+                else:
+                    _sig_badge = ""
+                _bot_run_badge = (
+                    '<span class="cbadge" style="color:#e3b341;background:#1e1a0a;">⚡ BOT ON</span>'
+                    if bot_running else
+                    '<span class="cbadge" style="color:#484f58;">BOT OFF</span>'
+                )
+                st.markdown(f"""
+    <div class="chart-bar">
+      <div class="chart-title">
+        <span>{st.session_state.symbol}</span>
+        <span class="cbadge blue">{st.session_state.interval}</span>
+        <span class="cbadge gold">{st.session_state.strategy}</span>
+        {mode_badge}
+        {_bot_run_badge}
+        {_sig_badge}
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+            with tb4:
+                emg_btn  = st.button("🚨 STOP", width="stretch", type="secondary")
+            with tb5:
+                bot_label = "⏹ Bot OFF" if bot_running else "⏩ Bot ON"
+                if st.button(bot_label, width="stretch",
+                              help="Toggle bot on/off"):
+                    if bot_running:
+                        bot_module.stop_bot()
+                        st.session_state.bot_was_running   = False
+                        st.session_state._user_stopped_bot = True
+                    else:
+                        _blk = _bot_start_blocker()
+                        if _blk:
+                            st.error(_blk)
+                        else:
+                            # MEXC mode: `c` may be None (Binance not required).
+                            c = _cl()
+                            _eff_syms2, _eff_venues2, _eff_scan2 = _effective_bot_plan(
+                                st.session_state.active_symbols)
+                            _per_sym_rm2 = {}
+                            for _s in _eff_syms2:
+                                _ov = st.session_state.per_symbol_risk.get(_s)
+                                _per_sym_rm2[_s] = RiskManager(_ov) if _ov else st.session_state.risk_manager
+                            b = bot_module.create_bot(
+                                client=c,
+                                symbols=_eff_syms2,
+                                per_symbol_risk=_per_sym_rm2,
+                                global_risk=GlobalRiskManager(st.session_state.global_risk),
+                                strategy=st.session_state.strategy,
+                                risk_manager=st.session_state.risk_manager,
+                                interval=st.session_state.interval,
+                                check_every=st.session_state.check_every,
+                                threshold=st.session_state.threshold / 100,
+                                initial_balance=st.session_state.initial_balance,
+                                ai_assist=bool(st.session_state.get("ai_assist", False)),
+                                ai_aggressiveness="Active Scalper",   # ACTIVE SCALPER MODE — ignored
+                                exchange_mode=st.session_state.get("exchange_mode", "multi"),
+                                mexc_live_orders=bool(st.session_state.get("mexc_live_orders", False)),
+                                symbol_venues=_eff_venues2,
+                                scanner_driven=_eff_scan2,
+                                rotate_scanner=_eff_scan2,
+                                scanner_top_n=_mexc_cap(),  # MEXC alts up to the enforced cap
+                                manage_manual_trades=bool(getattr(st.session_state.global_risk,
+                                                                  "manage_manual_trades", False)),
+                            )
+                            am.apply_profile_to_bot(b, st.session_state.aggressive_mode)
+                            b._initial_balance = st.session_state.initial_balance
+                            b.start()
+                    st.rerun()
+            with tb6:
+                if st.button("↺", width="stretch", help="Refresh"):
+                    st.rerun()
+
+            if emg_btn:
+                st.session_state.risk.emergency_stop = True
+                bot_module.stop_bot()
+                st.session_state.bot_was_running   = False
+                st.session_state._user_stopped_bot = True
+                log_activity("WARNING", "🚨 EMERGENCY STOP activated")
+                st.rerun()
+
+            # ── Chart (3-panel: Candles+EMA | Stochastic | RSI) ───────────────────
+            # ── Active Levels strip (replaces in-chart annotations) ─────────────────
+            if df_chart is not None and len(df_chart) > 5:
+                _lvl_bits = []
+                if live_price:
+                    _lc = "#26a69a" if change_pct >= 0 else "#ef5350"
+                    _lvl_bits.append(
+                        f'<span style="color:#6e7681;">PRICE</span> '
+                        f'<span style="color:{_lc};font-weight:700;">${live_price:,.4f}</span>'
+                    )
+                for _op in open_trades:
+                    _sid = _op.get("side","BUY"); _tid = (_op.get("id") or "?")[:6]
+                    _sl = _op.get("stop_loss"); _tp = _op.get("take_profit")
+                    if _sl or _tp:
+                        _side_col = "#26a69a" if _sid == "BUY" else "#ef5350"
+                        _lvl_bits.append(
+                            f'<span style="color:#6e7681;">{_tid}</span> '
+                            f'<span style="color:{_side_col};font-weight:600;">{_sid}</span> '
+                            + (f'<span style="color:#ef5350;">SL ${_sl:,.4f}</span> ' if _sl else '')
+                            + (f'<span style="color:#26a69a;">TP ${_tp:,.4f}</span>' if _tp else '')
+                        )
+                if _lvl_bits:
+                    st.markdown(
+                        '<div style="display:flex;flex-wrap:wrap;gap:14px;padding:6px 10px;'
+                        'background:#0d1117;border:1px solid #1a2030;border-radius:6px;'
+                        "margin:4px 0 8px 0;font-size:11px;font-family:'JetBrains Mono',monospace;\">"
+                        + " · ".join(_lvl_bits) + "</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                _has_rsi = "rsi" in df_chart.columns
+
+                # ── Compute MACD inline (12/26/9) so the chart can show it ──────────
+                if "macd" not in df_chart.columns and len(df_chart) >= 26:
+                    _ema12 = df_chart["close"].ewm(span=12, adjust=False).mean()
+                    _ema26 = df_chart["close"].ewm(span=26, adjust=False).mean()
+                    df_chart["macd"]        = _ema12 - _ema26
+                    df_chart["macd_signal"] = df_chart["macd"].ewm(span=9, adjust=False).mean()
+                    df_chart["macd_hist"]   = df_chart["macd"] - df_chart["macd_signal"]
+                _has_macd  = "macd" in df_chart.columns
+                _has_stoch = "stoch_k" in df_chart.columns
+
+                # ── Timeframe pills (TradingView-style) ─────────────────────────────
+                TF_PILLS = [("1m","1m"),("5m","5m"),("15m","15m"),("1h","1h"),("4h","4h")]
+                _tfcols = st.columns([0.07]*len(TF_PILLS) + [0.65])
+                for _i,(_lbl,_val) in enumerate(TF_PILLS):
+                    _active = (st.session_state.interval == _val)
+                    with _tfcols[_i]:
+                        if st.button(("● " if _active else "") + _lbl,
+                                     key=f"tf_pill_{_val}",
+                                     type="primary" if _active else "secondary",
+                                     width="stretch"):
+                            st.session_state.interval = _val
+                            st.rerun()
+                with _tfcols[-1]:
+                    st.markdown(
+                        f'<div style="text-align:right;font-size:11px;color:#6e7681;'
+                        f'font-family:\'JetBrains Mono\',monospace;padding-top:9px;">'
+                        f'<b style="color:#c9d1d9;">{st.session_state.symbol}</b> · '
+                        f'<b style="color:#79b0ff;">{st.session_state.interval}</b> · '
+                        f'{len(df_chart)} candles</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                # ── Indicator toggles + view controls ───────────────────────────────
+                _ind_defaults = {"show_volume": True, "show_ema": True,
+                                 "show_rsi": True, "show_macd": True, "show_stoch": True,
+                                 "show_old_trades": True, "show_sl_tp": True}
+                for _k,_v in _ind_defaults.items():
+                    if _k not in st.session_state: st.session_state[_k] = _v
+
+                DEFAULT_WINDOW_HOURS = 2            # Binance-like default: last 2h
+                _win_key   = "chart_window_hours"
+                _nonce_key = "chart_view_nonce"
+                _follow_key = "chart_autofollow"
+                _moff_key   = "chart_marker_offset_pct"
+                if _win_key   not in st.session_state: st.session_state[_win_key]   = DEFAULT_WINDOW_HOURS
+                if _nonce_key not in st.session_state: st.session_state[_nonce_key] = 0
+                if _follow_key not in st.session_state: st.session_state[_follow_key] = True
+                if _moff_key   not in st.session_state: st.session_state[_moff_key]   = 0.03
+                # The visible window is ALWAYS applied as an explicit, bounded x-range
+                # (driven by the Zoom in/out/Reset buttons below). We never leave the
+                # axis on autorange, otherwise Plotly expands to fit old off-screen
+                # trade markers and the chart "springs out" to many days on every
+                # refresh. Buttons change `chart_window_hours`; that window persists
+                # across auto-refreshes because it's re-applied each tick.
+
+                # Row 1 — indicator toggles + Auto-follow.
+                _c1,_c2,_c3,_c4,_c5,_c6,_c7,_csp,_cf = st.columns(
+                    [0.07,0.07,0.07,0.07,0.07,0.09,0.09, 0.04, 0.20]
+                )
+                with _c1:
+                    st.session_state.show_ema = st.checkbox(
+                        "EMA", value=st.session_state.show_ema, key="cb_ema",
+                        help="EMA 9 + EMA 21 overlay")
+                with _c2:
+                    st.session_state.show_volume = st.checkbox(
+                        "Vol", value=st.session_state.show_volume, key="cb_vol",
+                        help="Volume bars at bottom of price panel")
+                with _c3:
+                    st.session_state.show_rsi = st.checkbox(
+                        "RSI", value=st.session_state.show_rsi, key="cb_rsi",
+                        help="RSI 14 sub-panel")
+                with _c4:
+                    st.session_state.show_macd = st.checkbox(
+                        "MACD", value=st.session_state.show_macd, key="cb_macd",
+                        help="MACD 12/26/9 sub-panel")
+                with _c5:
+                    st.session_state.show_stoch = st.checkbox(
+                        "Stoch", value=st.session_state.show_stoch, key="cb_stoch",
+                        help="Stochastic %K/%D sub-panel")
+                with _c6:
+                    st.session_state.show_old_trades = st.checkbox(
+                        "Trades", value=st.session_state.show_old_trades, key="cb_old_tr",
+                        help="Show historical BUY/SELL/EXIT markers from past trades")
+                with _c7:
+                    st.session_state.show_sl_tp = st.checkbox(
+                        "SL/TP", value=st.session_state.show_sl_tp, key="cb_sltp",
+                        help="Show stop-loss / take-profit dashed lines for OPEN positions")
+                with _cf:
+                    st.session_state[_follow_key] = st.checkbox(
+                        "🛰 Auto-follow latest", value=st.session_state[_follow_key],
+                        key="cb_autofollow",
+                        help="ON: chart tracks the newest candle. OFF: chart is frozen "
+                             "where you left it — it never moves on refresh, bot scan, "
+                             "or price update (zoom/pan stays exactly put, like Binance).")
+
+                # Row 2 — zoom / reset buttons + marker offset.
+                _zi,_zo,_zr2,_zr24,_msp,_mo = st.columns(
+                    [0.12,0.12,0.14,0.15, 0.04, 0.30]
+                )
+                with _zi:
+                    if st.button("➕ Zoom in", key="chart_zoom_in_btn", width="stretch",
+                                 help="Halve the visible window"):
+                        st.session_state[_win_key] = max(0.25, st.session_state[_win_key] / 2)
+                        st.session_state[_nonce_key] += 1
+                        st.rerun()
+                with _zo:
+                    if st.button("➖ Zoom out", key="chart_zoom_out_btn", width="stretch",
+                                 help="Double the visible window"):
+                        st.session_state[_win_key] = min(720, st.session_state[_win_key] * 2)
+                        st.session_state[_nonce_key] += 1
+                        st.rerun()
+                with _zr2:
+                    if st.button("⟲ Reset 2h", key="chart_reset_2h_btn", width="stretch",
+                                 help="Reset view to the last 2 hours"):
+                        st.session_state[_win_key]   = 2
+                        st.session_state[_nonce_key] += 1
+                        st.rerun()
+                with _zr24:
+                    if st.button("⟲ Reset 24h", key="chart_reset_24h_btn", width="stretch",
+                                 help="Reset view to the last 24 hours"):
+                        st.session_state[_win_key]   = 24
+                        st.session_state[_nonce_key] += 1
+                        st.rerun()
+                with _mo:
+                    _moff_val = min(0.20, max(0.01, float(st.session_state[_moff_key])))
+                    st.session_state[_moff_key] = st.slider(
+                        "Marker offset %", min_value=0.01, max_value=0.20,
+                        value=_moff_val, step=0.01,
+                        key="sl_marker_offset", format="%.2f",
+                        help="How far the BUY/SELL arrows sit from the candle "
+                             "(% of price). BUY below, SELL above.")
+
+                # Bound the visible window to the candle data we actually have, so
+                # zooming out reveals REAL price history (max ~the fetched range)
+                # instead of empty space with old trade markers floating in it.
+                # _view_end = latest candle; _view_start = `window` hours back but
+                # never earlier than the oldest candle we hold.
+                _win_hours = float(st.session_state[_win_key])
+                # Chart timezone of the candle axis (naive Europe/London wall-clock,
+                # so `_xtz` is normally None). Used only for the view-window fallback
+                # below; trade-marker placement is handled by chart_markers, which
+                # does its own axis-tz coercion.
+                try:
+                    _xtz = df_chart["open_time"].dt.tz
+                except Exception:
+                    _xtz = None
+                try:
+                    _data_start = df_chart["open_time"].min()
+                    _data_end   = df_chart["open_time"].max()
+                except Exception:
+                    _data_start = _data_end = None
+                # ── Visible window: Auto-follow vs frozen ──────────────────────────
+                # The x-range we hand Plotly is stored in session_state and reused on
+                # rerun. Two modes:
+                #   • Auto-follow ON  → recompute every tick so _view_end tracks the
+                #     newest candle (chart follows live price).
+                #   • Auto-follow OFF → reuse the saved range; _view_end does NOT
+                #     advance, so the chart never moves on refresh / scan / price tick.
+                # In BOTH modes uirevision is stable across reruns, so once the user
+                # scroll-zooms or pans, Plotly preserves that exact view and ignores
+                # the range we pass — the view only snaps to a fresh range when the
+                # nonce changes (Zoom in/out / Reset 2h / Reset 24h) or symbol/
+                # interval changes. We force a recompute on those events too.
+                _autofollow = bool(st.session_state[_follow_key])
+                _nonce      = st.session_state[_nonce_key]
+                _saved_x    = st.session_state.get("chart_saved_xrange")
+                _saved_sig  = st.session_state.get("chart_saved_sig")
+                _cur_sig    = (st.session_state.symbol, st.session_state.interval, _nonce)
+                _need_fresh = (
+                    _autofollow                       # following: always re-center
+                    or _saved_x is None               # nothing saved yet
+                    or _saved_sig != _cur_sig         # reset / zoom-btn / symbol / interval
+                )
+
+                def _compute_window():
+                    if _data_start is not None and _data_end is not None:
+                        # Pad the right edge slightly past the last candle so a trade
+                        # placed RIGHT NOW (a few seconds-to-a-minute after the last
+                        # candle's open_time) is not clipped off the right edge.
+                        _ve = _data_end + max(
+                            pd.Timedelta(hours=_win_hours) * 0.05, pd.Timedelta(minutes=1))
+                        _vs = max(_data_start, _data_end - pd.Timedelta(hours=_win_hours))
+                    else:
+                        _ve = pd.Timestamp.now(tz=_xtz) if _xtz is not None else pd.Timestamp.now()
+                        _vs = _ve - pd.Timedelta(hours=_win_hours)
+                    return _vs, _ve
+
+                if _need_fresh:
+                    _view_start, _view_end = _compute_window()
+                    st.session_state["chart_saved_xrange"] = [_view_start, _view_end]
+                    st.session_state["chart_saved_sig"]    = _cur_sig
+                else:
+                    _view_start, _view_end = _saved_x
+
+                # ── Dynamic subplot layout based on enabled indicators ──────────────
+                _panels = ["price"]
+                if st.session_state.show_rsi   and _has_rsi:   _panels.append("rsi")
+                if st.session_state.show_macd  and _has_macd:  _panels.append("macd")
+                if st.session_state.show_stoch and _has_stoch: _panels.append("stoch")
+                n_rows = len(_panels)
+                # Price panel takes ≥70% of vertical so candles are large + readable.
+                _sub_h = {1:[1.0], 2:[0.78,0.22], 3:[0.72,0.14,0.14], 4:[0.70,0.10,0.10,0.10]}[n_rows]
+                fig = make_subplots(
+                    rows=n_rows, cols=1, shared_xaxes=True,
+                    row_heights=_sub_h, vertical_spacing=0.02,
+                )
+                _row = {p:(i+1) for i,p in enumerate(_panels)}
+
+                # ── Candlestick ────────────────────────────────────────────────────
+                fig.add_trace(go.Candlestick(
+                    x=df_chart["open_time"],
+                    open=df_chart["open"], high=df_chart["high"],
+                    low=df_chart["low"],   close=df_chart["close"],
+                    name=st.session_state.symbol,
+                    increasing_line_color="#26a69a", increasing_fillcolor="#26a69a",
+                    decreasing_line_color="#ef5350", decreasing_fillcolor="#ef5350",
+                    line=dict(width=1), whiskerwidth=0,
+                ), row=1, col=1)
+
+                _pr = _row["price"]
+
+                # ── EMA 9 / 21 (subdued, toggleable) ───────────────────────────────
+                if st.session_state.show_ema and "ema9" in df_chart.columns:
+                    fig.add_trace(go.Scatter(
+                        x=df_chart["open_time"], y=df_chart["ema9"],
+                        line=dict(color="rgba(239,83,80,0.85)", width=1.2),
+                        name="EMA 9",
+                        hovertemplate="EMA9: %{y:.4f}<extra></extra>",
+                    ), row=_pr, col=1)
+                if st.session_state.show_ema and "ema21" in df_chart.columns:
+                    fig.add_trace(go.Scatter(
+                        x=df_chart["open_time"], y=df_chart["ema21"],
+                        line=dict(color="rgba(227,179,65,0.85)", width=1.2),
+                        name="EMA 21",
+                        hovertemplate="EMA21: %{y:.4f}<extra></extra>",
+                    ), row=_pr, col=1)
+
+                # ── Volume histogram (scaled to bottom 18% of price panel) ──────────
+                if st.session_state.show_volume and "volume" in df_chart.columns:
+                    _prange = df_chart["high"].max() - df_chart["low"].min()
+                    _vmax   = df_chart["volume"].max()
+                    if _prange > 0 and _vmax > 0:
+                        _vscaled = df_chart["volume"] / _vmax * _prange * 0.18
+                        _vbase   = df_chart["low"].min() - _prange * 0.02
+                        _vcols   = [
+                            "rgba(38,166,154,0.35)" if df_chart["close"].iloc[i] >= df_chart["open"].iloc[i]
+                            else "rgba(239,83,80,0.35)"
+                            for i in range(len(df_chart))
+                        ]
+                        fig.add_trace(go.Bar(
+                            x=df_chart["open_time"],
+                            y=_vscaled,
+                            base=_vbase,
+                            name="Volume",
+                            marker_color=_vcols,
+                            marker_line_width=0,
+                            showlegend=False,
+                            customdata=df_chart["volume"],
+                            hovertemplate="Vol: %{customdata:,.0f}<extra></extra>",
+                        ), row=_pr, col=1)
+
+                # ── Live price line + right-edge price pill ────────────────────────
+                if live_price:
+                    p_color = "#26a69a" if change_pct >= 0 else "#ef5350"
+                    fig.add_hline(
+                        y=live_price, row=_pr, col=1,
+                        line=dict(color=p_color, width=1, dash="dot"),
+                    )
+                    # Pill on the right axis — exact live price, always visible
+                    fig.add_annotation(
+                        xref=f"x{_pr} domain" if _pr > 1 else "x domain",
+                        yref=f"y{_pr}" if _pr > 1 else "y",
+                        x=1.0, y=live_price,
+                        text=f" ${live_price:,.4f} ",
+                        showarrow=False,
+                        font=dict(color="#0a0c10", size=11,
+                                  family="'JetBrains Mono',monospace"),
+                        bgcolor=p_color, bordercolor=p_color, borderwidth=1,
+                        xanchor="left", yanchor="middle",
+                        row=_pr, col=1,
+                    )
+
+                # ── Last candle emphasis (thin marker dot at close) ────────────────
+                try:
+                    _lc_x = df_chart["open_time"].iloc[-1]
+                    _lc_y = df_chart["close"].iloc[-1]
+                    _lc_col = ("#26a69a" if df_chart["close"].iloc[-1] >= df_chart["open"].iloc[-1]
+                               else "#ef5350")
+                    fig.add_trace(go.Scatter(
+                        x=[_lc_x], y=[_lc_y], mode="markers",
+                        marker=dict(symbol="circle", size=8, color=_lc_col,
+                                    line=dict(color="#0a0c10", width=2)),
+                        showlegend=False, hoverinfo="skip",
+                    ), row=_pr, col=1)
+                except Exception:
+                    pass
+
+                # ── Trade markers (larger, clearer) ────────────────────────────────
+                # ALL historical markers are added to the figure. They don't
+                # stretch the visible x-axis because we set an explicit `range`
+                # on the xaxis below — Plotly clips to that range on first paint
+                # but the markers stay in the dataset, so panning/scrolling back
+                # reveals every past BUY/SELL exit.
+                # CRITICAL: filter to ONLY the currently-viewed symbol (handled inside
+                # build_trade_markers via the `coin` field). Mixing ETH trades onto the
+                # BTC chart blows out the Y-axis. Markers are resolved to the candle
+                # nearest each trade timestamp by `chart_markers.build_trade_markers`,
+                # which coerces UTC `open_time` and naive-local `close_time` to the
+                # chart's naive Europe/London axis (the old inline coercion mis-placed
+                # markers and a try/except:continue silently dropped them).
+                _chart_sym = st.session_state.symbol
+                _markers = build_trade_markers(
+                    all_trades, _chart_sym, df_chart["open_time"])
+                # Stash for the debug panel + warning rendered just below the chart.
+                st.session_state["_chart_marker_stats"] = {
+                    "symbol":        _chart_sym,
+                    "trades_found":  _markers.trades_found,
+                    "buy_drawn":     _markers.buy_drawn,
+                    "sell_drawn":    _markers.sell_drawn,
+                    # (trade_id, kind, reason, out_of_range) — out_of_range markers
+                    # are benign (trade simply older than the fetched candles) and
+                    # must NOT raise the scary warning; only genuine data problems do.
+                    "unmatched":     [(u.trade_id, u.kind, u.reason, u.out_of_range)
+                                      for u in _markers.unmatched],
+                    "errors":        _markers.error_count,
+                    "out_of_range":  _markers.out_of_range_count,
+                }
+
+                # GREEN BUY markers (up-arrow + "BUY" label) on the OPEN candle, and
+                # RED SELL markers (down-arrow + "SELL" label) on the CLOSE candle.
+                # Rendered when the "Trades" toggle is on (default ON) so they are
+                # visible at every zoom level inside the current view.
+                # Marker offset: nudge the arrow off the exact price so it doesn't
+                # overlap the candle — BUY sits BELOW, SELL sits ABOVE, by
+                # `marker_offset_pct` % of price. The REAL entry/exit price is carried
+                # in customdata so the hover stays accurate.
+                _moff = float(st.session_state[_moff_key]) / 100.0
+                if st.session_state.show_old_trades:
+                    if _markers.buy:
+                        fig.add_trace(go.Scatter(
+                            x=[m.x for m in _markers.buy],
+                            y=[m.y * (1.0 - _moff) for m in _markers.buy],
+                            mode="markers+text",
+                            marker=dict(symbol="triangle-up", size=16, color="#26a69a",
+                                        line=dict(color="rgba(255,255,255,0.85)", width=1.4)),
+                            text=["BUY"] * len(_markers.buy),
+                            textposition="bottom center",
+                            textfont=dict(color="#26a69a", size=10,
+                                          family="'JetBrains Mono',monospace"),
+                            name="BUY",
+                            customdata=[[m.trade_id, m.y] for m in _markers.buy],
+                            hovertemplate=("BUY %{customdata[0]}<br>%{x}<br>"
+                                           "entry $%{customdata[1]:.4f}<extra></extra>"),
+                        ), row=_pr, col=1)
+                    if _markers.sell:
+                        fig.add_trace(go.Scatter(
+                            x=[m.x for m in _markers.sell],
+                            y=[m.y * (1.0 + _moff) for m in _markers.sell],
+                            mode="markers+text",
+                            marker=dict(symbol="triangle-down", size=16, color="#ef5350",
+                                        line=dict(color="rgba(255,255,255,0.85)", width=1.4)),
+                            text=["SELL"] * len(_markers.sell),
+                            textposition="top center",
+                            textfont=dict(color="#ef5350", size=10,
+                                          family="'JetBrains Mono',monospace"),
+                            name="SELL",
+                            customdata=[[m.trade_id, m.y] for m in _markers.sell],
+                            hovertemplate=("SELL %{customdata[0]}<br>%{x}<br>"
+                                           "exit $%{customdata[1]:.4f}<extra></extra>"),
+                        ), row=_pr, col=1)
+
+                # ── SL / TP lines for every open position (toggle) ────────────────
+                # Same symbol filter — don't draw ETH's SL/TP on the BTC chart.
+                if st.session_state.show_sl_tp:
+                    _sym_open = [t for t in open_trades
+                                 if (t.get("coin") or "").upper() == _chart_sym.upper()]
+                    for _op in _sym_open:
+                        _sl  = _op.get("stop_loss")
+                        _tp  = _op.get("take_profit")
+                        if _sl and float(_sl or 0) > 0:
+                            fig.add_hline(y=_sl, row=_pr, col=1,
+                                line=dict(color="rgba(239,83,80,0.55)", width=1, dash="dash"))
+                        if _tp and float(_tp or 0) > 0:
+                            fig.add_hline(y=_tp, row=_pr, col=1,
+                                line=dict(color="rgba(38,166,154,0.55)", width=1, dash="dash"))
+
+                # ── RSI panel ───────────────────────────────────────────────────────
+                if "rsi" in _row:
+                    _rr = _row["rsi"]
+                    fig.add_trace(go.Scatter(
+                        x=df_chart["open_time"], y=df_chart["rsi"],
+                        line=dict(color="#b794f6", width=1.5), name="RSI 14",
+                        hovertemplate="RSI: %{y:.1f}<extra></extra>",
+                    ), row=_rr, col=1)
+                    fig.add_hline(y=70, line=dict(color="rgba(239,83,80,0.45)", width=1, dash="dash"), row=_rr, col=1)
+                    fig.add_hline(y=30, line=dict(color="rgba(38,166,154,0.45)", width=1, dash="dash"), row=_rr, col=1)
+                    fig.add_hline(y=50, line=dict(color="rgba(110,118,129,0.25)", width=1, dash="dot"), row=_rr, col=1)
+
+                # ── MACD panel ──────────────────────────────────────────────────────
+                if "macd" in _row:
+                    _mr = _row["macd"]
+                    _hist_col = ["rgba(38,166,154,0.55)" if v >= 0 else "rgba(239,83,80,0.55)"
+                                 for v in df_chart["macd_hist"]]
+                    fig.add_trace(go.Bar(
+                        x=df_chart["open_time"], y=df_chart["macd_hist"],
+                        marker_color=_hist_col, marker_line_width=0,
+                        name="Hist", showlegend=False,
+                        hovertemplate="Hist: %{y:.4f}<extra></extra>",
+                    ), row=_mr, col=1)
+                    fig.add_trace(go.Scatter(
+                        x=df_chart["open_time"], y=df_chart["macd"],
+                        line=dict(color="#79b0ff", width=1.4), name="MACD",
+                        hovertemplate="MACD: %{y:.4f}<extra></extra>",
+                    ), row=_mr, col=1)
+                    fig.add_trace(go.Scatter(
+                        x=df_chart["open_time"], y=df_chart["macd_signal"],
+                        line=dict(color="#e3b341", width=1.2, dash="dot"), name="Signal",
+                        hovertemplate="Signal: %{y:.4f}<extra></extra>",
+                    ), row=_mr, col=1)
+                    fig.add_hline(y=0, line=dict(color="rgba(110,118,129,0.35)", width=1), row=_mr, col=1)
+
+                # ── Stochastic panel (optional) ────────────────────────────────────
+                if "stoch" in _row:
+                    _sr = _row["stoch"]
+                    fig.add_trace(go.Scatter(
+                        x=df_chart["open_time"], y=df_chart["stoch_k"],
+                        line=dict(color="#79b0ff", width=1.4), name="%K",
+                        hovertemplate="%K: %{y:.1f}<extra></extra>",
+                    ), row=_sr, col=1)
+                    fig.add_trace(go.Scatter(
+                        x=df_chart["open_time"], y=df_chart["stoch_d"],
+                        line=dict(color="#c9d1d9", width=1.1, dash="dot"), name="%D",
+                        hovertemplate="%D: %{y:.1f}<extra></extra>",
+                    ), row=_sr, col=1)
+                    fig.add_hline(y=80, line=dict(color="rgba(239,83,80,0.45)",  width=1, dash="dash"), row=_sr, col=1)
+                    fig.add_hline(y=20, line=dict(color="rgba(38,166,154,0.45)", width=1, dash="dash"), row=_sr, col=1)
+
+                # ── Subtle corner labels for each sub-panel (no big titles) ────────
+                _panel_lbl = {"rsi": "RSI 14", "macd": "MACD 12/26/9", "stoch": "Stoch 14"}
+                for _p, _r in _row.items():
+                    if _p == "price": continue
+                    fig.add_annotation(
+                        xref=f"x{_r} domain" if _r > 1 else "x domain",
+                        yref=f"y{_r} domain" if _r > 1 else "y domain",
+                        x=0.005, y=0.95, xanchor="left", yanchor="top",
+                        text=_panel_lbl.get(_p, _p),
+                        showarrow=False,
+                        font=dict(size=9, color="#6e7681",
+                                  family="'JetBrains Mono',monospace"),
+                        row=_r, col=1,
+                    )
+
+                # ── Layout (TradingView-style: minimal, sparse grid) ───────────────
+                G       = "rgba(48,54,61,0.35)"   # very subtle gridlines
+                G_ZERO  = "rgba(48,54,61,0.55)"
+                _heights = {1: 560, 2: 660, 3: 760, 4: 860}
+                fig.update_layout(
+                    paper_bgcolor="#0a0c10",
+                    plot_bgcolor="#0a0c10",
+                    font=dict(color="#9ba3ad", family="'JetBrains Mono',monospace", size=10),
+                    xaxis_rangeslider_visible=False,
+                    height=_heights[n_rows],
+                    margin=dict(l=0, r=78, t=10, b=58),  # extra right margin for price pill
+                    showlegend=True,
+                    legend=dict(
+                        bgcolor="rgba(13,17,23,0)",
+                        bordercolor="rgba(0,0,0,0)", borderwidth=0,
+                        font=dict(size=10, color="#9ba3ad"),
+                        orientation="h",
+                        yanchor="top", y=-0.06,
+                        xanchor="center", x=0.5,
+                        itemsizing="constant",
+                    ),
+                    hovermode="x unified",
+                    hoverlabel=dict(bgcolor="#161b22", bordercolor="#30363d",
+                                    font_color="#c9d1d9", font_size=11),
+                    dragmode="pan",
+                    uirevision=f"trade_chart_fixed-"
+                               f"{st.session_state.symbol}-"
+                               f"{st.session_state.interval}-"
+                               f"{st.session_state['chart_view_nonce']}",
+                )
+                # X-axis: shared, sparse grid, scroll/pan unlocked, default 4h window
+                for r in range(1, n_rows + 1):
+                    fig.update_xaxes(
+                        gridcolor=G, gridwidth=1, zerolinecolor=G_ZERO,
+                        showspikes=True, spikecolor="#484f58",
+                        spikethickness=1, spikedash="dot", spikemode="across",
+                        tickfont=dict(size=10, color="#6e7681"),
+                        tickformat="%H:%M\n%b-%d",
+                        hoverformat="%Y-%m-%d %H:%M:%S",
+                        range=[_view_start, _view_end],
+                        fixedrange=False, autorange=False,
+                        nticks=8,
+                        row=r, col=1,
+                    )
+                # Price Y-axis — auto-fit to VISIBLE candles only (not full history),
+                # with 3% padding above/below so wicks don't kiss the frame.
+                try:
+                    # df_chart["open_time"] is tz-naive (Europe/London wall clock,
+                    # tz stripped at load). _view_start/_view_end may be tz-aware
+                    # if _xtz was set — coerce both sides to naive so the mask
+                    # never raises TypeError on mixed tz comparisons.
+                    _ot = df_chart["open_time"]
+                    if getattr(_ot.dt, "tz", None) is not None:
+                        _ot = _ot.dt.tz_convert(None) if _ot.dt.tz else _ot
+                    _vs = _view_start.tz_localize(None) if getattr(_view_start, "tzinfo", None) else _view_start
+                    _ve = _view_end.tz_localize(None)   if getattr(_view_end,   "tzinfo", None) else _view_end
+                    _vis = df_chart[(_ot >= _vs) & (_ot <= _ve)]
+                    if len(_vis) >= 2:
+                        _y_lo = float(_vis["low"].min())
+                        _y_hi = float(_vis["high"].max())
+                        _pad  = max((_y_hi - _y_lo) * 0.03, _y_hi * 0.0005)
+                        _y_range = [_y_lo - _pad, _y_hi + _pad]
+                    else:
+                        _y_range = None
+                except Exception:
+                    _y_range = None
+                _price_yaxis_kwargs = dict(
                     gridcolor=G, gridwidth=1, zerolinecolor=G_ZERO,
                     showspikes=True, spikecolor="#484f58",
-                    spikethickness=1, spikedash="dot", spikemode="across",
-                    tickfont=dict(size=10, color="#6e7681"),
-                    tickformat="%H:%M\n%b-%d",
-                    hoverformat="%Y-%m-%d %H:%M:%S",
-                    range=[_view_start, _view_end],
-                    fixedrange=False, autorange=False,
-                    nticks=8,
-                    row=r, col=1,
+                    spikethickness=1, spikedash="dot",
+                    tickfont=dict(size=10, color="#9ba3ad"),
+                    tickprefix="$", side="right", nticks=8,
+                    fixedrange=False,
+                    row=_row["price"], col=1,
                 )
-            # Price Y-axis — auto-fit to VISIBLE candles only (not full history),
-            # with 3% padding above/below so wicks don't kiss the frame.
-            try:
-                # df_chart["open_time"] is tz-naive (Europe/London wall clock,
-                # tz stripped at load). _view_start/_view_end may be tz-aware
-                # if _xtz was set — coerce both sides to naive so the mask
-                # never raises TypeError on mixed tz comparisons.
-                _ot = df_chart["open_time"]
-                if getattr(_ot.dt, "tz", None) is not None:
-                    _ot = _ot.dt.tz_convert(None) if _ot.dt.tz else _ot
-                _vs = _view_start.tz_localize(None) if getattr(_view_start, "tzinfo", None) else _view_start
-                _ve = _view_end.tz_localize(None)   if getattr(_view_end,   "tzinfo", None) else _view_end
-                _vis = df_chart[(_ot >= _vs) & (_ot <= _ve)]
-                if len(_vis) >= 2:
-                    _y_lo = float(_vis["low"].min())
-                    _y_hi = float(_vis["high"].max())
-                    _pad  = max((_y_hi - _y_lo) * 0.03, _y_hi * 0.0005)
-                    _y_range = [_y_lo - _pad, _y_hi + _pad]
+                if _y_range is not None:
+                    _price_yaxis_kwargs["range"]     = _y_range
+                    _price_yaxis_kwargs["autorange"] = False
                 else:
-                    _y_range = None
-            except Exception:
-                _y_range = None
-            _price_yaxis_kwargs = dict(
-                gridcolor=G, gridwidth=1, zerolinecolor=G_ZERO,
-                showspikes=True, spikecolor="#484f58",
-                spikethickness=1, spikedash="dot",
-                tickfont=dict(size=10, color="#9ba3ad"),
-                tickprefix="$", side="right", nticks=8,
-                fixedrange=False,
-                row=_row["price"], col=1,
-            )
-            if _y_range is not None:
-                _price_yaxis_kwargs["range"]     = _y_range
-                _price_yaxis_kwargs["autorange"] = False
-            else:
-                _price_yaxis_kwargs["autorange"] = True
-            fig.update_yaxes(**_price_yaxis_kwargs)
-            # RSI / Stoch Y-axes: pinned 0–100, sparse ticks
-            for _p in ("rsi", "stoch"):
-                if _p in _row:
+                    _price_yaxis_kwargs["autorange"] = True
+                fig.update_yaxes(**_price_yaxis_kwargs)
+                # RSI / Stoch Y-axes: pinned 0–100, sparse ticks
+                for _p in ("rsi", "stoch"):
+                    if _p in _row:
+                        fig.update_yaxes(
+                            gridcolor=G, gridwidth=1, range=[0, 100],
+                            tickvals=[20, 50, 80] if _p == "stoch" else [30, 50, 70],
+                            tickfont=dict(size=9, color="#6e7681"),
+                            side="right", fixedrange=False,
+                            row=_row[_p], col=1,
+                        )
+                # MACD Y-axis: autoscale, sparse
+                if "macd" in _row:
                     fig.update_yaxes(
-                        gridcolor=G, gridwidth=1, range=[0, 100],
-                        tickvals=[20, 50, 80] if _p == "stoch" else [30, 50, 70],
+                        gridcolor=G, gridwidth=1, zerolinecolor=G_ZERO,
                         tickfont=dict(size=9, color="#6e7681"),
-                        side="right", fixedrange=False,
-                        row=_row[_p], col=1,
+                        side="right", nticks=4,
+                        autorange=True, fixedrange=False,
+                        row=_row["macd"], col=1,
                     )
-            # MACD Y-axis: autoscale, sparse
-            if "macd" in _row:
-                fig.update_yaxes(
-                    gridcolor=G, gridwidth=1, zerolinecolor=G_ZERO,
-                    tickfont=dict(size=9, color="#6e7681"),
-                    side="right", nticks=4,
-                    autorange=True, fixedrange=False,
-                    row=_row["macd"], col=1,
+
+                # Stable key → Streamlit reuses the same DOM node across reruns (no flicker / no remount)
+                # scrollZoom=True lets the user wheel/pinch-zoom freely; doubleClick="reset"
+                # auto-restores the default 4h view; pan is the default drag.
+                st.plotly_chart(
+                    fig, width="stretch", key="main_candle_chart",
+                    config={
+                        "displayModeBar": True,
+                        "displaylogo":    False,
+                        "scrollZoom":     True,
+                        "doubleClick":    "reset",
+                        "modeBarButtonsToRemove": ["select2d", "lasso2d", "toImage"],
+                    },
                 )
 
-            # Stable key → Streamlit reuses the same DOM node across reruns (no flicker / no remount)
-            # scrollZoom=True lets the user wheel/pinch-zoom freely; doubleClick="reset"
-            # auto-restores the default 4h view; pan is the default drag.
-            st.plotly_chart(
-                fig, width="stretch", key="main_candle_chart",
-                config={
-                    "displayModeBar": True,
-                    "displaylogo":    False,
-                    "scrollZoom":     True,
-                    "doubleClick":    "reset",
-                    "modeBarButtonsToRemove": ["select2d", "lasso2d", "toImage"],
-                },
-            )
+                # ── Chart markers debug panel + unmatched warning ──────────────────
+                # Truthful accounting of how recorded trades map onto the chart so a
+                # "markers missing" report is diagnosable at a glance instead of a
+                # silent drop.
+                _ms = st.session_state.get("_chart_marker_stats", {})
+                _errs = int(_ms.get("errors", 0))
+                _oor  = int(_ms.get("out_of_range", 0))
+                # ONLY genuine data problems (missing price / unparseable time) warn.
+                # Trades that simply fall outside the fetched candle window are
+                # expected — they're listed calmly in the panel, never warned about.
+                if _errs:
+                    st.warning(
+                        f"⚠️ {_errs} marker(s) could not be placed for "
+                        f"{_ms.get('symbol','?')} due to a data problem (missing price "
+                        f"or unparseable time). See the Chart markers panel for details.")
+                elif _oor:
+                    st.caption(
+                        f"ℹ️ {_oor} past trade(s) for {_ms.get('symbol','?')} are "
+                        f"outside the current chart window — scroll/zoom back to view "
+                        f"them, or see the Chart markers panel below.")
+                with st.expander(
+                        f"🔍 Chart markers — {_ms.get('buy_drawn',0)} BUY · "
+                        f"{_ms.get('sell_drawn',0)} SELL"
+                        + (f" · {_oor} off-screen" if _oor else "")
+                        + (f" · {_errs} error" if _errs else ""),
+                        expanded=False):
+                    _dm1, _dm2, _dm3, _dm4 = st.columns(4)
+                    _dm1.metric("Trades found", _ms.get("trades_found", 0))
+                    _dm2.metric("BUY markers drawn", _ms.get("buy_drawn", 0))
+                    _dm3.metric("SELL markers drawn", _ms.get("sell_drawn", 0))
+                    _dm4.metric("Off-screen / errors", f"{_oor} / {_errs}")
+                    st.caption(
+                        f"Symbol {_ms.get('symbol','?')} · BUY anchored on `open_time`/"
+                        f"`entry_price`, SELL on `close_time`/`exit_price`, each snapped "
+                        f"to the nearest candle within one interval. Timestamps are "
+                        f"normalized to UTC before matching. 'Off-screen' = trade older "
+                        f"than the fetched candles (benign). Source: data/trades/*.json.")
+                    if _ms.get("unmatched"):
+                        _udf = pd.DataFrame(
+                            [(tid, kind, reason,
+                              "off-screen" if oor else "error")
+                             for (tid, kind, reason, oor) in _ms["unmatched"]],
+                            columns=["trade id", "marker", "reason", "type"])
+                        st.dataframe(_udf, width="stretch", hide_index=True)
+            else:
+                with st.spinner("Loading chart data from Binance…"):
+                    st.info("Chart will appear here once data loads. No API key required.")
 
-            # ── Chart markers debug panel + unmatched warning ──────────────────
-            # Truthful accounting of how recorded trades map onto the chart so a
-            # "markers missing" report is diagnosable at a glance instead of a
-            # silent drop.
-            _ms = st.session_state.get("_chart_marker_stats", {})
-            _errs = int(_ms.get("errors", 0))
-            _oor  = int(_ms.get("out_of_range", 0))
-            # ONLY genuine data problems (missing price / unparseable time) warn.
-            # Trades that simply fall outside the fetched candle window are
-            # expected — they're listed calmly in the panel, never warned about.
-            if _errs:
-                st.warning(
-                    f"⚠️ {_errs} marker(s) could not be placed for "
-                    f"{_ms.get('symbol','?')} due to a data problem (missing price "
-                    f"or unparseable time). See the Chart markers panel for details.")
-            elif _oor:
-                st.caption(
-                    f"ℹ️ {_oor} past trade(s) for {_ms.get('symbol','?')} are "
-                    f"outside the current chart window — scroll/zoom back to view "
-                    f"them, or see the Chart markers panel below.")
-            with st.expander(
-                    f"🔍 Chart markers — {_ms.get('buy_drawn',0)} BUY · "
-                    f"{_ms.get('sell_drawn',0)} SELL"
-                    + (f" · {_oor} off-screen" if _oor else "")
-                    + (f" · {_errs} error" if _errs else ""),
-                    expanded=False):
-                _dm1, _dm2, _dm3, _dm4 = st.columns(4)
-                _dm1.metric("Trades found", _ms.get("trades_found", 0))
-                _dm2.metric("BUY markers drawn", _ms.get("buy_drawn", 0))
-                _dm3.metric("SELL markers drawn", _ms.get("sell_drawn", 0))
-                _dm4.metric("Off-screen / errors", f"{_oor} / {_errs}")
-                st.caption(
-                    f"Symbol {_ms.get('symbol','?')} · BUY anchored on `open_time`/"
-                    f"`entry_price`, SELL on `close_time`/`exit_price`, each snapped "
-                    f"to the nearest candle within one interval. Timestamps are "
-                    f"normalized to UTC before matching. 'Off-screen' = trade older "
-                    f"than the fetched candles (benign). Source: data/trades/*.json.")
-                if _ms.get("unmatched"):
-                    _udf = pd.DataFrame(
-                        [(tid, kind, reason,
-                          "off-screen" if oor else "error")
-                         for (tid, kind, reason, oor) in _ms["unmatched"]],
-                        columns=["trade id", "marker", "reason", "type"])
-                    st.dataframe(_udf, width="stretch", hide_index=True)
-        else:
-            with st.spinner("Loading chart data from Binance…"):
-                st.info("Chart will appear here once data loads. No API key required.")
-
-        # ── Binance active trades + legacy holdings + AI decisions ─────────────
-        _render_positions("binance")
-        _render_binance_legacy()
-        _render_ai_decisions(_BIN_MAJORS, _acts, "#f0b90b")
+            # ── Binance active trades + legacy holdings + AI decisions ─────────────
+            _render_positions("binance")
+            _render_binance_legacy()
+            _render_ai_decisions(_BIN_MAJORS, _acts, "#f0b90b")
 
         # ══════════════════════════════════════════════════════════════════════
         # MEXC DASHBOARD — fully separate venue (own wallet / scanner / charts /
         # active trades / AI / rotation). Never side-by-side with Binance.
         # ══════════════════════════════════════════════════════════════════════
-        _venue_header("🔵 MEXC DASHBOARD",
-                      "Scanner-selected volatile alts (excl. majors) · Market-Low "
-                      "rule · rotated as they go quiet · max 15 positions",
-                      "#3b82f6", "#0a1020")
-        _render_mexc_wallet()
-        _mexc_top = _render_scanner_table()
-        _render_scanner_charts(_mexc_top or _mexc_syms)
-        _render_positions("mexc")
-        _render_ai_decisions((_mexc_syms or _mexc_top), _acts, "#3b82f6")
-        _render_rotation_engine(_mexc_syms)
+        if _show_mexc:
+            _venue_header("🔵 MEXC DASHBOARD",
+                          "Scanner-selected volatile alts (excl. majors) · Market-Low "
+                          "rule · rotated as they go quiet · max 15 positions",
+                          "#3b82f6", "#0a1020")
+            _render_mexc_wallet()
+            _mexc_top = _render_scanner_table()
+            _render_scanner_charts(_mexc_top or _mexc_syms)
+            _render_positions("mexc")
+            _render_ai_decisions((_mexc_syms or _mexc_top), _acts, "#3b82f6")
+            _render_rotation_engine(_mexc_syms)
 
         st.markdown("<div style='height:48px'></div>", unsafe_allow_html=True)
 

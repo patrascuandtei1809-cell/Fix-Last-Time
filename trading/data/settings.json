@@ -1,12 +1,10 @@
 {
   "symbol": "BTCUSDT",
   "active_symbols": [
-    "BTCUSDT",
-    "ETHUSDT",
-    "SOLUSDT"
+    "BEATUSDT"
   ],
   "bot_was_running": true,
-  "exchange_mode": "multi",
+  "exchange_mode": "mexc",
   "mexc_live_orders": false,
   "use_scanner_symbols": true,
   "strategy": "Market Low",

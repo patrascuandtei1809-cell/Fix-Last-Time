@@ -102,6 +102,43 @@ def test_mexc_live_orders_without_creds_still_raises():
         m.get_balance("USDT")
 
 
+def test_plan_for_mode_mexc_never_routes_to_binance(fake_scanner):
+    """MEXC-only mode must NEVER route an opportunity to the **binance** venue —
+    Binance is LIVE, so a stray Binance worker would place real orders the
+    operator never picked. Unlike resolve_live_plan, the BTC/ETH/SOL majors are
+    NOT pinned to Binance here (a major may still appear if the scanner found it
+    ON MEXC, which is legitimately tradeable there)."""
+    plan = bot.resolve_plan_for_mode("mexc", top_n_mexc=10)
+    assert plan, "expected MEXC scanner opportunities"
+    assert all(p["exchange"] == "mexc" for p in plan)
+    # No major is ever PINNED to binance (the resolve_live_plan behaviour).
+    assert not any(p["exchange"] == "binance" for p in plan)
+
+
+def test_plan_for_mode_mexc_empty_when_no_scan(monkeypatch):
+    """No scan yet in MEXC mode → empty plan (caller falls back to static syms,
+    still routed to MEXC). It must NOT silently fall back to Binance majors."""
+    import scanner
+    monkeypatch.setattr(scanner, "load_opportunities", lambda exchange=None: [])
+    assert bot.resolve_plan_for_mode("mexc", top_n_mexc=10) == []
+
+
+def test_plan_for_mode_binance_pins_only_majors(fake_scanner):
+    plan = bot.resolve_plan_for_mode("binance", top_n_mexc=10)
+    assert [p["symbol"] for p in plan] == list(bot.BINANCE_MAJORS)
+    assert all(p["exchange"] == "binance" for p in plan)
+
+
+def test_plan_for_mode_multi_includes_majors_and_mexc(fake_scanner):
+    plan = bot.resolve_plan_for_mode("multi", top_n_mexc=10)
+    venues = {p["symbol"]: p["exchange"] for p in plan}
+    # Majors pinned to Binance …
+    for m in bot.BINANCE_MAJORS:
+        assert venues.get(m) == "binance"
+    # … and at least one MEXC alt is present.
+    assert any(v == "mexc" for v in venues.values())
+
+
 def test_active_symbols_cap_fits_full_split_plan():
     """Task #44 — the worker cap must fit 3 pinned Binance + 15 MEXC = 18, so the
     full split-routing plan is never truncated below the MEXC cap."""

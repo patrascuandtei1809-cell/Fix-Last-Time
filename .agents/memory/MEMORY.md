@@ -1,4 +1,5 @@
 - [Entry gate invariant](entry-gate-invariant.md) — orchestrator qualification and execute_entry sizing must use the SAME entry rule, or a winner gets qualified then silently blocked at sizing.
+- [Venue-mode plan separation](alphatrade-venue-mode-plan.md) — UI venue selector + bot symbol/venue plan must share ONE mode-aware resolver, else MEXC-only mode silently spins up LIVE Binance majors.
 - [Multi-exchange additive](alphatrade-multi-exchange-additive.md) — MEXC DRY-RUN safety lives in MexcExchange (not the UI); dynamic symbols ride the create_bot rebuild path; multi mode falls back to Binance; MEXC-only start still gated by Binance conn.
 - [Min-notional floor](alphatrade-min-notional-floor.md) — sizing must FLOOR UP to Binance $10 min (not block), or small accounts (~$66 @ 10%=$6.60) never trade; decision engine is testable on geo-blocked Replit with synthetic OHLCV.
 - [Orchestrator resilience](alphatrade-orchestrator-resilience.md) — trading daemon thread must self-heal via a supervisor try/except loop; never rely on a UI rerun/watchdog to revive a dead bot thread.
