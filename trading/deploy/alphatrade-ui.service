@@ -1,0 +1,16 @@
+[Unit]
+Description=AlphaTrade React dashboard (static preview on port 3000)
+After=network.target alphatrade-api.service
+Wants=alphatrade-api.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/trading-bot-clean/trading/dashboard-ui
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npx serve -s dist -l 3000
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
