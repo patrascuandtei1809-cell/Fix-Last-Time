@@ -1089,7 +1089,7 @@ if not st.session_state.get("_settings_loaded"):
     # may carry trend_filter_on=False or min_volume_multiple=0.0 (filters off);
     # force-snap them back to spec on cold start and persist the correction so
     # the droplet self-heals on first boot after deploy. Thresholds
-    # (buy −0.05 / TP +0.60 / SL −0.30) and cooldowns stay operator-loaded.
+    # (buy −0.05 / TP +1.00 / SL −0.30) and cooldowns stay operator-loaded.
     try:
         _ls = st.session_state.live_settings
         _ls_fixed = False
@@ -2483,7 +2483,7 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     st.caption("BUY when market-low change ≤ −0.05% with volume + trend "
-               "confirmation, SELL at +0.60%, STOP at −0.30%, 1-min cooldown. "
+               "confirmation, SELL at +1.00%, STOP at −0.30%, 2-min cooldown. "
                "MEXC is the trading venue; Binance is display/reconciliation only.")
 
     st.markdown('<hr class="s-div"/>', unsafe_allow_html=True)
@@ -2747,7 +2747,7 @@ with st.sidebar:
             f"**The only live strategy.** BUY when the market-low change ≤ "
             f"**{_ls.buy_threshold_pct:.2f}%** · SELL at "
             f"**+{_ls.take_profit_pct:.2f}%** profit · STOP-LOSS at "
-            f"**{_ls.stop_loss_pct:.2f}%** · then a **1-min** cooldown after "
+            f"**{_ls.stop_loss_pct:.2f}%** · then a **{_ls.reentry_cooldown_sec}s** cooldown after "
             f"BOTH a stop-loss and a sell. BUY also needs volume ≥ "
             f"**{_ls.min_volume_multiple:.1f}×** avg + trend filter."
         )
@@ -2821,7 +2821,7 @@ with st.sidebar:
         ))
 
         st.markdown("**Optional exit enhancements (OFF by default — risky if enabled)**")
-        st.caption("Global rules remain TP +0.60% and SL −0.30%. These add optional "
+        st.caption("Global rules remain TP +1.00% and SL −0.30%. These add optional "
                    "breakeven/trailing layers on top when explicitly enabled.")
         _ls.breakeven_enabled = st.checkbox(
             "Enable breakeven exit (arm then exit at entry if profit fades)",
@@ -3243,9 +3243,9 @@ def _dip_rules() -> dict:
             return default
     return {
         "buy":      float(_g("buy_threshold_pct", -0.05)),
-        "tp":       float(_g("take_profit_pct", 0.60)),
+        "tp":       float(_g("take_profit_pct", 1.00)),
         "sl":       float(_g("stop_loss_pct", -0.30)),
-        "cooldown": int(_g("reentry_cooldown_sec", 60)),
+        "cooldown": int(_g("reentry_cooldown_sec", 120)),
         "trend":    bool(_g("trend_filter_on", True)),
         "vol":      bool(_g("volume_filter_on", True)),
     }
@@ -3525,8 +3525,8 @@ def _render_history_tabs(
                     + " · ".join(r[:60] for r in reasons if r)[:500]
                 )
             st.caption(
-                "Global rules remain BUY ≤ −0.05% · TP +0.60% · SL −0.30% · "
-                "cooldown 60s · trend ON · volume ON unless you change live settings."
+                "Global rules remain BUY ≤ −0.05% · TP +1.00% · SL −0.30% · "
+                "cooldown 120s · trend ON · volume ON unless you change live settings."
             )
 
     def _closed_tab(closed_list, venue_label):

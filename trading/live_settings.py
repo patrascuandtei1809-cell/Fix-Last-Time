@@ -57,7 +57,7 @@ class LiveSettings:
     """Every operator-tunable LIVE trading setting. Defaults match the spec."""
     # Strategy thresholds (defaults = the FINAL TRADING RULE)
     buy_threshold_pct: float = -0.05     # BUY when 20m change ≤ this
-    take_profit_pct: float = 0.60        # SELL when profit ≥ this
+    take_profit_pct: float = 1.00        # SELL when profit ≥ this
     stop_loss_pct: float = -0.30         # STOP-LOSS when loss ≤ this
     lookback_minutes: int = 20
 
@@ -83,10 +83,10 @@ class LiveSettings:
     aggressive_on: bool = True             # aggressive default ON (spec)
     safe_mode: bool = False                # operator freeze (no new entries)
 
-    # Cooldowns (seconds) — FINAL RULE: 1 minute after a stop-loss AND 1 minute
+    # Cooldowns (seconds) — FINAL RULE: 2 minutes after a stop-loss AND 2 minutes
     # after a (profitable) sell before re-entering the same symbol.
-    stop_loss_cooldown_sec: int = 60       # 1 minute after a stop-loss
-    reentry_cooldown_sec: int = 60         # 1 minute after any sell
+    stop_loss_cooldown_sec: int = 120      # 2 minutes after a stop-loss
+    reentry_cooldown_sec: int = 120        # 2 minutes after any sell
 
     # Optional exit enhancements — OFF by default (operator must enable in dashboard)
     breakeven_enabled: bool = False

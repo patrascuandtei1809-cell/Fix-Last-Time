@@ -385,7 +385,7 @@ def cooldown_block(settings: LiveSettings, state: Dict, now: datetime = None):
 
     # 2) Re-entry cooldown after any sell (default 1 minute).
     sell_at = state.get("last_sell_at")
-    reentry = int(getattr(settings, "reentry_cooldown_sec", 60) or 0)
+    reentry = int(getattr(settings, "reentry_cooldown_sec", 120) or 0)
     if sell_at is not None and reentry > 0:
         if sell_at.tzinfo is None:
             sell_at = sell_at.replace(tzinfo=timezone.utc)

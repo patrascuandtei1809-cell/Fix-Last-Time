@@ -19,9 +19,9 @@ SCANNER_PATH = os.path.join(_DIR, "data", "multi_exchange_opportunities.json")
 
 # Global live rules (display baseline — operator may override via live_settings)
 GLOBAL_BUY_PCT = -0.05
-GLOBAL_TP_PCT = 0.60
+GLOBAL_TP_PCT = 1.00
 GLOBAL_SL_PCT = -0.30
-GLOBAL_COOLDOWN_SEC = 60
+GLOBAL_COOLDOWN_SEC = 120
 
 
 def trades_dir_status() -> Dict[str, Any]:
