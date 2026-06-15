@@ -260,9 +260,10 @@ class MexcClient:
 
     # ── account ──
     def get_account_balance(self, asset: str = "USDT") -> dict:
+        asset = (asset or "USDT").upper()
         acct = self._signed_request("GET", "/api/v3/account", {})
         for b in acct.get("balances", []):
-            if b.get("asset") == asset:
+            if (b.get("asset") or "").upper() == asset:
                 free = float(b.get("free") or 0)
                 locked = float(b.get("locked") or 0)
                 return {"asset": asset, "free": free, "locked": locked,
@@ -355,13 +356,14 @@ class MexcExchange(Exchange):
 
     # ── account ──
     def get_balance(self, asset: str = "USDT") -> Dict[str, float]:
+        asset = (asset or "USDT").upper()
         if not self.client:
             # DRY-RUN with no MEXC creds: return a deterministic SIMULATED wallet
             # so scanner-routed MEXC opportunities can still be evaluated and
             # logged as simulated (paper) trades instead of being silently
             # skipped at the balance gate. Only USDT carries simulated funds.
             if not self.live_orders:
-                free = float(SIM_DRY_RUN_USDT) if asset.upper() == "USDT" else 0.0
+                free = float(SIM_DRY_RUN_USDT) if asset == "USDT" else 0.0
                 return {"free": free, "locked": 0.0, "total": free}
             raise RuntimeError(
                 f"MexcExchange.get_balance({asset}) called without an "

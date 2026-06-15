@@ -148,18 +148,22 @@ class _MexcExitPlan:
     exchange_total: float = 0.0
     sell_qty: Optional[float] = None
     partial: bool = False
+    balance_error: Optional[str] = None
 
 
 def _mexc_balance_total(exchange, base_asset: str) -> float:
-    bal = exchange.get_balance(base_asset)
+    base = (base_asset or "").upper()
+    bal = exchange.get_balance(base)
     free = float(bal.get("free", 0) or 0)
     locked = float(bal.get("locked", 0) or 0)
     return float(bal.get("total", free + locked) or (free + locked))
 
 
-def _plan_mexc_exit(exchange, symbol: str, trade: Dict) -> _MexcExitPlan:
+def _plan_mexc_exit(exchange, symbol: str, trade: Dict,
+                    log_fn=None) -> _MexcExitPlan:
     """Pre-SELL reconciliation plan for MEXC LONG exits."""
     plan = _MexcExitPlan()
+    log = log_fn or (lambda *_a, **_kw: None)
     if not _is_mexc_exchange(exchange):
         return plan
     if (trade.get("side") or "BUY").upper() != "BUY":
@@ -167,10 +171,16 @@ def _plan_mexc_exit(exchange, symbol: str, trade: Dict) -> _MexcExitPlan:
     base = _base_asset_from_symbol(symbol)
     try:
         plan.exchange_total = _mexc_balance_total(exchange, base)
-    except Exception:
+    except Exception as exc:
+        plan.balance_error = str(exc)
+        log("WARNING",
+            f"[RECONCILE][DEBUG] {symbol} base={base} balance check failed: {exc}")
         return plan
     dust = _mexc_dust_threshold(exchange, symbol)
     trade_qty = float(trade.get("quantity") or 0)
+    log("INFO",
+        f"[RECONCILE][DEBUG] {symbol} base={base} exchange_total="
+        f"{plan.exchange_total} dust={dust} trade_qty={trade_qty}")
     if plan.exchange_total <= dust:
         plan.reconciled = True
         return plan
@@ -217,26 +227,51 @@ def _mexc_post_close_oversold_reconcile(exchange, log_fn, trade: Dict,
                                         symbol: str, price: float) -> bool:
     """After a failed SELL, close if MEXC balance is zero (Oversold fallback)."""
     if not _is_mexc_exchange(exchange):
+        log_fn("INFO",
+               f"[RECONCILE][DEBUG] {symbol} post-close oversold: skipped "
+               f"(not MEXC exchange)")
         return False
     import bot as _bot
     if not any(t.get("id") == trade.get("id") and t.get("status") == "open"
                for t in _bot.load_trades()):
+        log_fn("INFO",
+               f"[RECONCILE][DEBUG] {symbol} post-close oversold: skipped "
+               f"(trade {trade.get('id')} already closed)")
         return False
     base = _base_asset_from_symbol(symbol)
     try:
         total = _mexc_balance_total(exchange, base)
-    except Exception:
+    except Exception as exc:
+        log_fn("WARNING",
+               f"[RECONCILE][DEBUG] {symbol} post-close oversold: balance "
+               f"check failed for base={base}: {exc}")
         return False
     dust = _mexc_dust_threshold(exchange, symbol)
     if total > dust:
+        log_fn("INFO",
+               f"[RECONCILE][DEBUG] {symbol} post-close oversold: not "
+               f"reconciling (base={base} total={total} > dust={dust})")
         return False
+    log_fn("WARNING",
+           f"[RECONCILE][DEBUG] {symbol} post-close oversold: reconciling "
+           f"(base={base} total={total} <= dust={dust})")
     return _reconcile_close_mexc(log_fn, trade, symbol, price, total)
 
 
 def _mexc_exit_close(exchange, close_fn, log_fn, trade: Dict, symbol: str,
                      price: float, reason: str) -> None:
     """Balance-gated exit: reconcile phantoms, cap partial sells, then close_fn."""
-    plan = _plan_mexc_exit(exchange, symbol, trade)
+    plan = _plan_mexc_exit(exchange, symbol, trade, log_fn)
+    log_fn("INFO",
+           f"[RECONCILE][DEBUG] {symbol} exit plan: reconciled={plan.reconciled} "
+           f"exchange_total={plan.exchange_total} sell_qty={plan.sell_qty} "
+           f"partial={plan.partial}"
+           + (f" balance_error={plan.balance_error!r}" if plan.balance_error else ""))
+    if plan.balance_error:
+        log_fn("WARNING",
+               f"[RECONCILE] {symbol} skipping SELL — MEXC balance check failed: "
+               f"{plan.balance_error}")
+        return
     if plan.reconciled:
         _reconcile_close_mexc(log_fn, trade, symbol, price, plan.exchange_total)
         return
