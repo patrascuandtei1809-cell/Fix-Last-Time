@@ -620,6 +620,10 @@ class TradingBot:
         # Aggressive default ON ⇒ scan faster; calmer cadence when OFF.
         self.check_every = 2 if settings.aggressive_on else 6
 
+        # Live safety — open positions must always reach _manage_exit even when
+        # their symbol is no longer in the scanner/static active set.
+        self._ensure_open_trade_exit_workers()
+
         # Task #41 — rotate stale scanner picks before iterating workers so the
         # snapshot below reflects any swap (self-throttled; no-op when disabled).
         self._maybe_rotate_scanner_symbols()
@@ -756,6 +760,8 @@ class TradingBot:
         settings = live_settings.get_settings()
         self.check_every = 2 if settings.aggressive_on else 6
 
+        self._ensure_open_trade_exit_workers()
+
         traded = False
         for key, worker in list(self.workers.items()):
             if not self._running:
@@ -880,6 +886,64 @@ class TradingBot:
         if key in self.workers:
             del self.workers[key]
             log_activity("INFO", f"➖ Worker removed: {key}")
+
+    # ── Open-position exit management (live safety) ───────────────────────────
+    def _ensure_open_trade_exit_workers(self) -> None:
+        """Merge every open bot trade into the worker set so TP/SL always runs.
+
+        Symbols that dropped out of the scanner/static active list still need a
+        worker each cycle so DipLiveEngine.evaluate() reaches _manage_exit.
+        Preserves each trade's venue (binance vs mexc). Does not change new-buy
+        symbol selection — entry gates are unchanged."""
+        if self._worker_factory is None:
+            return
+        try:
+            open_trades = get_open_trades()
+        except Exception as e:  # noqa: BLE001
+            print(f"[EXIT-MANAGER] open-trade scan failed: {e}", flush=True)
+            return
+
+        bot_open: List[tuple] = []
+        for t in open_trades:
+            if t.get("type") != "bot" or t.get("manual", False):
+                continue
+            sym = (t.get("coin") or "").upper()
+            if not sym:
+                continue
+            ex = (t.get("exchange") or "binance").lower()
+            venue = "binance" if "binance" in ex else ("mexc" if "mexc" in ex else ex)
+            bot_open.append((sym, venue))
+
+        if not bot_open:
+            return
+
+        unique = sorted(set(bot_open))
+        print(
+            "[EXIT-MANAGER] managing open symbols: "
+            + ", ".join(f"{s}@{v}" for s, v in unique),
+            flush=True,
+        )
+
+        for sym, venue in unique:
+            key = f"{venue}:{sym}"
+            if key in self.workers:
+                continue
+            try:
+                w = self._worker_factory(sym, venue)
+                w._on_candidate = self._collect_candidate
+                self.workers[key] = w
+                msg = (
+                    f"[EXIT-MANAGER] added open symbol not in active scan: "
+                    f"{sym} exchange={venue}"
+                )
+                print(msg, flush=True)
+                log_activity("INFO", msg)
+            except Exception as e:  # noqa: BLE001
+                print(
+                    f"[EXIT-MANAGER] failed to add worker {sym} "
+                    f"exchange={venue}: {e}",
+                    flush=True,
+                )
 
     # ── Dynamic scanner rotation (Task #41) ──────────────────────────────────
     def _open_symbols_by_venue(self) -> Dict[str, set]:
