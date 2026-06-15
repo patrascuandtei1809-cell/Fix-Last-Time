@@ -6,7 +6,7 @@ Design goals (operator-specified):
   • DRY-RUN by default. Order methods SIMULATE a fill (no network, no keys
     needed) until ``live_orders=True`` is explicitly passed — one switch.
   • Order-level safety baked in (close to execution, not just in the scanner):
-      - cap each BUY to ``max_quote_usdt`` (default 2 USDT),
+      - cap each BUY to ``max_quote_usdt`` (default 15 USDT),
       - refuse BUY if free USDT < ``min_usdt_balance`` (default 5),
       - refuse BUY on dangerous markets (24h range > ``max_volatility_pct`` or
         24h change < ``min_24h_change_pct``).
@@ -326,7 +326,7 @@ class MexcExchange(Exchange):
         self,
         client: Optional[MexcClient] = None,
         live_orders: bool = False,          # DRY-RUN unless explicitly enabled
-        max_quote_usdt: float = 2.0,        # cap each BUY (operator default)
+        max_quote_usdt: float = 15.0,        # cap each BUY (operator default)
         min_usdt_balance: float = 5.0,      # refuse BUY below this free USDT
         max_volatility_pct: float = 120.0,  # refuse BUY on >120% 24h range
         min_24h_change_pct: float = -35.0,  # refuse BUY on <-35% 24h change

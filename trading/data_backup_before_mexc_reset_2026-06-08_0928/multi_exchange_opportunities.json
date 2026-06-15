@@ -1,0 +1,366 @@
+{
+  "updated_at": "2026-06-08T08:27:19.416418+00:00",
+  "count": 40,
+  "opportunities": [
+    {
+      "exchange": "BINANCE",
+      "symbol": "ZECUSDT",
+      "price": 433.92,
+      "change_24h_percent": 9.26,
+      "volume_usdt": 263774531.73,
+      "volatility_percent": 13.07,
+      "score": 321.51
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "ALLOUSDT",
+      "price": 0.4678,
+      "change_24h_percent": 51.54,
+      "volume_usdt": 45666667.62,
+      "volatility_percent": 40.06,
+      "score": 268.92
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "WLDUSDT",
+      "price": 0.4719,
+      "change_24h_percent": 6.33,
+      "volume_usdt": 97817966.83,
+      "volatility_percent": 20.62,
+      "score": 172.34
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "NEARUSDT",
+      "price": 2.128,
+      "change_24h_percent": 11.01,
+      "volume_usdt": 100151062.58,
+      "volatility_percent": 15.98,
+      "score": 170.1
+    },
+    {
+      "exchange": "MEXC",
+      "symbol": "BEATUSDT",
+      "price": 4.24076,
+      "change_24h_percent": 0.87,
+      "volume_usdt": 4918607.73,
+      "volatility_percent": 48.84,
+      "score": 153.18
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "ATMUSDT",
+      "price": 0.996,
+      "change_24h_percent": 7.79,
+      "volume_usdt": 5844254.1,
+      "volatility_percent": 42.87,
+      "score": 150.04
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "EPICUSDT",
+      "price": 0.589,
+      "change_24h_percent": -3.44,
+      "volume_usdt": 10376422.85,
+      "volatility_percent": 46.35,
+      "score": 149.43
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "BANKUSDT",
+      "price": 0.0421,
+      "change_24h_percent": 23.46,
+      "volume_usdt": 7656017.25,
+      "volatility_percent": 31.59,
+      "score": 149.35
+    },
+    {
+      "exchange": "MEXC",
+      "symbol": "BSBUSDT",
+      "price": 0.33877,
+      "change_24h_percent": 0.35,
+      "volume_usdt": 2670361.89,
+      "volatility_percent": 48.38,
+      "score": 148.52
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "OSMOUSDT",
+      "price": 0.0462,
+      "change_24h_percent": 12.96,
+      "volume_usdt": 5959278.26,
+      "volatility_percent": 37.88,
+      "score": 145.51
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "STGUSDT",
+      "price": 0.2748,
+      "change_24h_percent": 27.4,
+      "volume_usdt": 2843484.42,
+      "volatility_percent": 29.18,
+      "score": 145.2
+    },
+    {
+      "exchange": "MEXC",
+      "symbol": "EPICUSDT",
+      "price": 0.5897,
+      "change_24h_percent": -0.03,
+      "volume_usdt": 2419554.08,
+      "volatility_percent": 46.45,
+      "score": 141.76
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "OPNUSDT",
+      "price": 0.107,
+      "change_24h_percent": -17.76,
+      "volume_usdt": 19032332.89,
+      "volatility_percent": 40.65,
+      "score": 140.99
+    },
+    {
+      "exchange": "MEXC",
+      "symbol": "SIRENUSDT",
+      "price": 1.1754,
+      "change_24h_percent": 0.38,
+      "volume_usdt": 5261890.29,
+      "volatility_percent": 44.55,
+      "score": 139.67
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "EDENUSDT",
+      "price": 0.0454,
+      "change_24h_percent": -15.46,
+      "volume_usdt": 10808459.03,
+      "volatility_percent": 41.41,
+      "score": 135.04
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "CTSIUSDT",
+      "price": 0.02482,
+      "change_24h_percent": 6.98,
+      "volume_usdt": 3910682.14,
+      "volatility_percent": 32.84,
+      "score": 116.39
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "FIDAUSDT",
+      "price": 0.02543,
+      "change_24h_percent": -11.36,
+      "volume_usdt": 15075830.41,
+      "volatility_percent": 31.26,
+      "score": 108.86
+    },
+    {
+      "exchange": "MEXC",
+      "symbol": "SKYAIUSDT",
+      "price": 0.2833,
+      "change_24h_percent": -0.0,
+      "volume_usdt": 2654990.51,
+      "volatility_percent": 33.5,
+      "score": 103.15
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "BCHUSDT",
+      "price": 202.4,
+      "change_24h_percent": -9.72,
+      "volume_usdt": 45874882.42,
+      "volatility_percent": 17.44,
+      "score": 98.2
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "PORTALUSDT",
+      "price": 0.01591,
+      "change_24h_percent": -4.33,
+      "volume_usdt": 9913910.38,
+      "volatility_percent": 29.1,
+      "score": 97.22
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "SAHARAUSDT",
+      "price": 0.03805,
+      "change_24h_percent": 15.16,
+      "volume_usdt": 13981719.41,
+      "volatility_percent": 15.27,
+      "score": 90.12
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "JUVUSDT",
+      "price": 0.338,
+      "change_24h_percent": -0.59,
+      "volume_usdt": 2167755.1,
+      "volatility_percent": 28.4,
+      "score": 87.37
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "MEGAUSDT",
+      "price": 0.05117,
+      "change_24h_percent": 13.71,
+      "volume_usdt": 6392680.61,
+      "volatility_percent": 17.08,
+      "score": 85.06
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "HEIUSDT",
+      "price": 0.0988,
+      "change_24h_percent": -3.42,
+      "volume_usdt": 6689086.95,
+      "volatility_percent": 23.08,
+      "score": 75.92
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "PROVEUSDT",
+      "price": 0.1854,
+      "change_24h_percent": 3.46,
+      "volume_usdt": 4121048.96,
+      "volatility_percent": 21.57,
+      "score": 75.77
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "GENIUSUSDT",
+      "price": 0.4553,
+      "change_24h_percent": 8.1,
+      "volume_usdt": 6547558.16,
+      "volatility_percent": 16.25,
+      "score": 71.5
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "JTOUSDT",
+      "price": 0.6153,
+      "change_24h_percent": 6.54,
+      "volume_usdt": 10476274.11,
+      "volatility_percent": 15.88,
+      "score": 71.2
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "OPENUSDT",
+      "price": 0.2054,
+      "change_24h_percent": 11.21,
+      "volume_usdt": 5215648.68,
+      "volatility_percent": 14.31,
+      "score": 70.57
+    },
+    {
+      "exchange": "MEXC",
+      "symbol": "BCHUSDT",
+      "price": 202.4,
+      "change_24h_percent": -0.1,
+      "volume_usdt": 13908911.9,
+      "volatility_percent": 17.34,
+      "score": 65.93
+    },
+    {
+      "exchange": "MEXC",
+      "symbol": "WLDUSDT",
+      "price": 0.4724,
+      "change_24h_percent": 0.06,
+      "volume_usdt": 2149567.84,
+      "volatility_percent": 20.51,
+      "score": 63.81
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "LRCUSDT",
+      "price": 0.01879,
+      "change_24h_percent": -6.24,
+      "volume_usdt": 2891184.21,
+      "volatility_percent": 19.69,
+      "score": 61.97
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "DEXEUSDT",
+      "price": 21.926,
+      "change_24h_percent": 10.78,
+      "volume_usdt": 2963847.14,
+      "volatility_percent": 11.85,
+      "score": 60.09
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "EIGENUSDT",
+      "price": 0.1823,
+      "change_24h_percent": 6.98,
+      "volume_usdt": 3550499.28,
+      "volatility_percent": 13.17,
+      "score": 57.01
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "LUNCUSDT",
+      "price": 7.042e-05,
+      "change_24h_percent": 6.97,
+      "volume_usdt": 6152826.08,
+      "volatility_percent": 11.83,
+      "score": 55.59
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "GPSUSDT",
+      "price": 0.00693,
+      "change_24h_percent": -11.61,
+      "volume_usdt": 3274428.06,
+      "volatility_percent": 17.32,
+      "score": 55.22
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "ONDOUSDT",
+      "price": 0.3575,
+      "change_24h_percent": 3.44,
+      "volume_usdt": 16651778.96,
+      "volatility_percent": 10.18,
+      "score": 54.08
+    },
+    {
+      "exchange": "MEXC",
+      "symbol": "NEARUSDT",
+      "price": 2.1314,
+      "change_24h_percent": 0.11,
+      "volume_usdt": 5297760.64,
+      "volatility_percent": 15.8,
+      "score": 52.91
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "BABYUSDT",
+      "price": 0.01613,
+      "change_24h_percent": -1.28,
+      "volume_usdt": 4726088.69,
+      "volatility_percent": 15.87,
+      "score": 52.34
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "INJUSDT",
+      "price": 5.53,
+      "change_24h_percent": 4.08,
+      "volume_usdt": 11899328.55,
+      "volatility_percent": 10.67,
+      "score": 52.07
+    },
+    {
+      "exchange": "BINANCE",
+      "symbol": "MEMEUSDT",
+      "price": 0.000573,
+      "change_24h_percent": -11.3,
+      "volume_usdt": 2585339.45,
+      "volatility_percent": 16.4,
+      "score": 51.8
+    }
+  ]
+}

@@ -1,0 +1,87 @@
+============================================================================
+AlphaTrade STRATEGY RESEARCH — honest after-fee edge proof
+============================================================================
+fee=0.1%/side  slippage=0.02%/side  round-trip cost≈0.24%
+symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[90, 180]d  walk-forward folds=4
+ACCEPT rule: net expectancy>0 AND PF≥1 on EVERY cell (≥5 trades), ≥20 total trades, majority WF folds positive
+----------------------------------------------------------------------------
+
+▶ Funding Contrarian (perp)  @ 5m  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[90]d)
+      BTCUSDT/90d: 350 trades  net_exp=-0.236%  PF=0.26
+      ETHUSDT/90d: 356 trades  net_exp=-0.223%  PF=0.36
+      SOLUSDT/90d: 316 trades  net_exp=-0.243%  PF=0.37
+    → 🔴 REJECT  net_exp=-0.233%  PF=0.33  trades=1022  (aggregate not profitable after fees (net_exp=-0.233%, PF=0.33))
+
+▶ Funding Contrarian (perp)  @ 4h  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[1825]d)
+      BTCUSDT/1825d: 319 trades  net_exp=-0.111%  PF=0.94
+      ETHUSDT/1825d: 339 trades  net_exp=+0.078%  PF=1.03
+      SOLUSDT/1825d: 341 trades  net_exp=-0.947%  PF=0.75
+    → 🔴 REJECT  net_exp=-0.332%  PF=0.88  trades=999  (aggregate not profitable after fees (net_exp=-0.332%, PF=0.88))
+
+▶ Funding Contrarian (perp)  @ 8h  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[1825]d)
+      BTCUSDT/1825d: 159 trades  net_exp=+0.476%  PF=1.20
+      ETHUSDT/1825d: 178 trades  net_exp=+0.468%  PF=1.14
+      SOLUSDT/1825d: 181 trades  net_exp=-0.520%  PF=0.90
+    → 🔴 REJECT  net_exp=+0.125%  PF=1.03  trades=518  (1/3 cells negative after fees: SOLUSDT/1825d)
+
+▶ Funding Momentum (perp)  @ 5m  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[90]d)
+      BTCUSDT/90d: 375 trades  net_exp=-0.244%  PF=0.22
+      ETHUSDT/90d: 350 trades  net_exp=-0.259%  PF=0.29
+      SOLUSDT/90d: 363 trades  net_exp=-0.247%  PF=0.36
+    → 🔴 REJECT  net_exp=-0.250%  PF=0.29  trades=1088  (aggregate not profitable after fees (net_exp=-0.250%, PF=0.29))
+
+▶ Funding Momentum (perp)  @ 4h  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[1825]d)
+      BTCUSDT/1825d: 313 trades  net_exp=+0.025%  PF=1.02
+      ETHUSDT/1825d: 308 trades  net_exp=-0.367%  PF=0.83
+      SOLUSDT/1825d: 319 trades  net_exp=+0.273%  PF=1.09
+    → 🔴 REJECT  net_exp=-0.019%  PF=0.99  trades=940  (aggregate not profitable after fees (net_exp=-0.019%, PF=0.99))
+
+▶ Funding Momentum (perp)  @ 8h  (symbols=BTCUSDT,ETHUSDT,SOLUSDT  periods=[1825]d)
+      BTCUSDT/1825d: 176 trades  net_exp=-0.208%  PF=0.91
+      ETHUSDT/1825d: 159 trades  net_exp=+0.064%  PF=1.02
+      SOLUSDT/1825d: 161 trades  net_exp=+1.299%  PF=1.35
+    → 🔴 REJECT  net_exp=+0.368%  PF=1.13  trades=496  (1/3 cells negative after fees: BTCUSDT/1825d)
+
+(merge) carried forward 25 cell(s) from prior latest.json: basis_contrarian, basis_momentum, donchian_breakout, ema_macd_rsi_vol_v2, reversal_scalper_1m, trend_pullback, xspread_contrarian, xspread_momentum
+
+============================================================================
+LEADERBOARD — ranked by NET expectancy/trade (after fees)
+============================================================================
+  #  strategy @ tf                      trades  net_exp%     PF   win%  verdict
+  ------------------------------------------------------------------------
+  1  Funding Momentum (perp) @ 8h          496    +0.368   1.13   34.7  REJECT
+  2  Funding Contrarian (perp) @ 8h        518    +0.125   1.03   36.7  REJECT
+  3  Funding Momentum (perp) @ 4h          940    -0.019   0.99   34.3  REJECT
+  4  Basis Contrarian (perp−spot) @ 4h      76    -0.107   0.94   35.5  REJECT
+  5  Trend Pullback (HTF) @ 1h             250    -0.171   0.81   37.2  REJECT
+  6  Trend Pullback (HTF) @ 4h              68    -0.186   0.89   33.8  REJECT
+  7  EMA/MACD/RSI/Volume V2 (HTF) @ 15m   1054    -0.222   0.59   32.2  REJECT
+  8  Funding Contrarian (perp) @ 5m       1022    -0.233   0.33   29.3  REJECT
+  9  Donchian Breakout (HTF) @ 5m         2232    -0.238   0.38   29.0  REJECT
+  10 EMA/MACD/RSI/Volume V2 (HTF) @ 5m    2957    -0.238   0.38   28.7  REJECT
+  11 X-Spread Momentum (OKX−Binance) @ 5m   3534    -0.241   0.33   28.5  REJECT
+  12 Reversal Scalper (1m baseline) @ 1m   1073    -0.242   0.05    5.7  REJECT
+  13 EMA/MACD/RSI/Volume V2 (HTF) @ 4h      83    -0.242   0.85   32.5  REJECT
+  14 Trend Pullback (HTF) @ 5m            1863    -0.243   0.42   30.2  REJECT
+  15 Basis Momentum (perp−spot) @ 5m      3450    -0.246   0.32   27.9  REJECT
+  16 X-Spread Contrarian (OKX−Binance) @ 5m   3518    -0.248   0.32   26.9  REJECT
+  17 Funding Momentum (perp) @ 5m         1088    -0.250   0.29   27.0  REJECT
+  18 Trend Pullback (HTF) @ 15m           1013    -0.254   0.55   30.4  REJECT
+  19 Basis Contrarian (perp−spot) @ 5m    3531    -0.259   0.30   26.0  REJECT
+  20 Donchian Breakout (HTF) @ 15m         817    -0.269   0.52   31.7  REJECT
+  21 X-Spread Contrarian (OKX−Binance) @ 1h    270    -0.283   0.71   31.9  REJECT
+  22 Funding Contrarian (perp) @ 4h        999    -0.332   0.88   33.9  REJECT
+  23 X-Spread Momentum (OKX−Binance) @ 1h    287    -0.353   0.63   31.0  REJECT
+  24 Basis Contrarian (perp−spot) @ 1h     268    -0.355   0.64   30.2  REJECT
+  25 X-Spread Momentum (OKX−Binance) @ 4h     74    -0.358   0.80   31.1  REJECT
+  26 Basis Momentum (perp−spot) @ 1h       273    -0.366   0.63   29.3  REJECT
+  27 EMA/MACD/RSI/Volume V2 (HTF) @ 1h     283    -0.386   0.61   29.3  REJECT
+  28 Donchian Breakout (HTF) @ 1h          210    -0.404   0.60   30.5  REJECT
+  29 X-Spread Contrarian (OKX−Binance) @ 4h     80    -0.407   0.78   31.2  REJECT
+  30 Basis Momentum (perp−spot) @ 4h        77    -0.409   0.77   28.6  REJECT
+  31 Donchian Breakout (HTF) @ 4h           74    -0.689   0.62   24.3  REJECT
+
+============================================================================
+VERDICT: 🔴 NO EDGE — no strategy×timeframe clears the fee hurdle under the strict acceptance rule.
+Honest outcome: the live bot stays AUTO-DISABLED (allowlist empty). Manual trading remains available.
+============================================================================

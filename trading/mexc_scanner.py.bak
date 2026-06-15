@@ -1,0 +1,68 @@
+import requests
+
+BASE_URL = "https://api.mexc.com"
+
+def get_top_mexc_spot(limit=30):
+    r = requests.get(f"{BASE_URL}/api/v3/ticker/24hr", timeout=15)
+    r.raise_for_status()
+    data = r.json()
+
+    rows = []
+    for x in data:
+        symbol = x.get("symbol", "")
+        if not symbol.endswith("USDT"):
+            continue
+
+        try:
+            quote_volume = float(x.get("quoteVolume", 0))
+            price_change = float(x.get("priceChangePercent", 0))
+            high = float(x.get("highPrice", 0))
+            low = float(x.get("lowPrice", 0))
+            last = float(x.get("lastPrice", 0))
+
+            if quote_volume < 500000:
+                continue
+            if last <= 0:
+                continue
+
+            volatility = ((high - low) / last) * 100
+
+            score = (
+                quote_volume / 1_000_000
+                + abs(price_change) * 2
+                + volatility * 3
+            )
+
+            rows.append({
+                "symbol": symbol,
+                "last": last,
+                "change_24h_%": round(price_change, 2),
+                "volume_usdt": round(quote_volume, 2),
+                "volatility_%": round(volatility, 2),
+                "score": round(score, 2),
+            })
+        except Exception:
+            continue
+
+    rows.sort(key=lambda x: x["score"], reverse=True)
+    return rows[:limit]
+
+
+if __name__ == "__main__":
+    print("\n=== MEXC TOP SPOT OPPORTUNITIES ===\n")
+
+    try:
+        top = get_top_mexc_spot(30)
+
+        for i, coin in enumerate(top, 1):
+            print(
+                f"{i:02d}. {coin['symbol']} | "
+                f"Price: {coin['last']} | "
+                f"24h: {coin['change_24h_%']}% | "
+                f"Vol: ${coin['volume_usdt']:,.0f} | "
+                f"Volatility: {coin['volatility_%']}% | "
+                f"Score: {coin['score']}"
+            )
+
+    except Exception as e:
+        print(f"[ERROR] MEXC scanner failed: {e}")

@@ -1,0 +1,2502 @@
+[
+  {
+    "time": "2026-06-08T09:19:12.084707",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:12.320535",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:12.553511",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:12.797816",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:13.031448",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:13.261716",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:13.490900",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:15.725614",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:15.954657",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:16.185749",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:16.418809",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:16.651215",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:16.892230",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:17.128530",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:17.356687",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:17.591592",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:17.823165",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:18.055006",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:18.285927",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:18.517539",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:18.751870",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:18.990788",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:21.231837",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:21.463061",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:21.690448",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:21.916700",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:22.157463",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:22.391489",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:22.618329",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:22.854836",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:23.083271",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:23.313326",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:23.541960",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:23.773764",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:24.004160",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:24.241378",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:24.473759",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:26.710568",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:26.951793",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:27.185230",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:27.419298",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:27.650960",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:27.880702",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:28.111498",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:28.339035",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:28.570940",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:28.801885",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:29.032013",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:29.266862",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:29.497199",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:29.727865",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:29.963603",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:32.198715",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:32.433355",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:32.664747",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:32.896352",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:33.130513",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:33.360317",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:33.602140",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:33.832655",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:34.064007",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:34.293543",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:34.524475",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:34.754982",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:34.985486",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:35.217609",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:35.452219",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:37.695799",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:37.928384",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:38.156405",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:38.391481",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:38.624013",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:38.859275",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:39.090233",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:39.323384",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:39.554112",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:39.788690",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:40.020470",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:40.250519",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:40.482957",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:40.710203",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:40.942407",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:43.182427",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:43.421946",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:43.654017",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:43.882649",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:44.112375",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:44.345349",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:44.578511",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:44.805020",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:45.038953",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:45.273433",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:45.506001",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:45.735224",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:45.964627",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:46.200255",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:46.428368",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:48.667825",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:48.896513",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:49.126454",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:49.356187",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:49.590753",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:49.825407",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:50.059550",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:50.289408",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:50.524638",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:50.752199",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:50.986388",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:51.216116",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:51.444561",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:51.673561",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:51.907552",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:54.148554",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:54.377797",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:54.609952",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:54.839636",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:55.069999",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:55.309621",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:55.536206",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:55.769561",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:56.002777",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:56.235613",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:56.466576",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:56.701204",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:56.933426",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:57.159572",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:57.389565",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:59.631427",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:19:59.861228",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:00.087298",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:00.322198",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:00.560449",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:00.812057",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:01.042266",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:01.277287",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:01.526894",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:01.771922",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:02.008768",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:02.276827",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:02.519988",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:02.783178",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:03.058634",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:05.312548",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:05.546750",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:05.785688",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:06.031052",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:06.267786",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:06.507606",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:06.748447",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:06.987724",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:07.219104",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:07.455283",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:07.689539",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:07.924673",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:08.159914",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:08.404575",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:08.641788",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:10.952571",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:11.184349",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:11.425895",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:11.663499",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:11.908503",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:12.151090",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:12.399022",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:12.631102",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:12.874000",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:13.121927",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:13.382766",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:13.621105",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:13.856058",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:14.094835",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:14.333115",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:16.588095",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:16.825426",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:17.060891",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:17.299516",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:17.527797",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:17.762929",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:17.995917",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:18.232031",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:18.463011",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:18.696930",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:18.929547",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:19.170655",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:19.416158",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:19.653742",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:19.890906",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:22.135633",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:22.371200",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:22.610655",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:22.846951",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:23.084448",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:23.321637",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:23.550944",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:23.789707",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:24.027364",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:24.257904",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:24.494368",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:24.736584",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:24.973985",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:25.209886",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:25.492852",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:27.730807",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:27.965459",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:28.198822",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:28.438640",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:28.671222",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:28.902923",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:29.142533",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:29.369818",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:29.599916",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:29.836294",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:30.072131",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:30.300355",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:30.529502",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:30.768866",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:30.999405",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:33.241745",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:33.470749",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:33.700910",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:33.928704",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:34.158300",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:34.386191",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:34.615139",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:34.848023",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:35.080146",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:35.306763",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:35.541258",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:35.779926",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:36.012464",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:36.242513",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:36.481957",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:38.724578",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:38.957103",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:39.191298",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:39.422268",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:39.649386",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:39.884371",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:40.119128",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:40.352295",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:40.578938",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:40.807527",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:41.042604",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:41.276429",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:41.514942",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:41.748725",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:41.983600",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:44.229595",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:44.467288",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:44.701576",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:44.929921",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:45.161817",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:45.395837",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:45.630836",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:45.862479",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:46.102519",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:46.348884",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:46.575271",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:46.807295",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:47.038727",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:47.275343",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:47.509149",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:49.751075",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:49.987820",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:50.224619",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:50.453913",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:50.684499",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:50.917883",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:51.151048",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:51.387972",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:51.624016",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:51.857227",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:52.087354",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:52.322158",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:52.557415",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:52.793970",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:53.024437",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:55.266332",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:55.500593",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:55.734937",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:55.967460",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:56.199677",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:56.430823",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:56.664089",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:56.897557",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:57.132438",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:57.371299",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:57.598153",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:57.825909",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:58.053916",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:58.289110",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:20:58.524191",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:00.767970",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:00.995118",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:01.225286",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:01.457943",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:01.690982",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:01.921589",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:02.161477",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:02.397734",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:02.631347",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:02.859997",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:03.093594",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:03.329532",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:03.557265",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:03.792345",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:04.024100",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:06.264145",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:06.496157",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:06.723991",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:06.954360",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:07.191017",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:07.422126",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:07.652743",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:07.886323",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:08.123510",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:08.354449",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:08.580174",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:08.808166",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:09.042885",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:09.272263",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:09.507972",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:11.751095",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:11.981835",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:12.216928",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:12.452085",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:12.684201",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:12.917038",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:13.148787",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:13.383721",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:13.610763",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:13.841544",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:14.071074",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:14.301613",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:14.532956",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:14.765350",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:15.014044",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:17.251640",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:17.480631",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:17.711778",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:17.945488",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:18.178360",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:18.411302",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:18.644347",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:18.873801",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:19.100270",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:19.331365",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:19.566020",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:19.798942",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:20.029006",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:20.261066",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:20.490871",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:22.726325",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:22.960395",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:23.192713",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:23.425651",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:23.663936",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:23.894872",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:24.126509",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:24.355926",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:24.587839",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:24.817641",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:25.053298",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:25.291233",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:25.526797",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:25.758911",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:25.994278",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:28.232696",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:28.467051",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:28.700160",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:28.932088",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:29.166964",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:29.400041",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:29.633905",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:29.864973",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:30.096957",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:30.334973",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:30.569599",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:30.802824",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:31.035144",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:31.272715",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:31.508008",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:33.746977",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:33.978787",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:34.215596",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:34.448602",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:34.682396",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:34.908321",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:35.139973",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:35.375457",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:35.607027",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:35.842688",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:36.074152",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:36.306023",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:36.537689",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:36.771238",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:37.006689",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:39.245815",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:39.474754",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:39.708572",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:39.949261",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:40.184653",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:40.412004",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:40.643657",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:40.878118",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:41.109815",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:41.350634",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:41.576837",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:41.805205",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:42.036032",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:42.265438",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:42.499789",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:44.774283",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:45.003274",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:45.231366",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:45.461394",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:45.690111",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:45.925809",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:46.155030",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:46.382711",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:46.617272",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:46.850784",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:47.082473",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:47.306819",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:47.535843",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:47.771759",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:48.002599",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:50.244682",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:50.475117",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:50.702736",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:50.933289",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:51.162842",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:51.400078",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:51.630025",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:51.858475",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:52.091839",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:52.325983",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:52.556133",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:52.787024",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:53.022430",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:53.259222",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:53.497202",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:55.739620",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:55.976046",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:56.209028",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:56.438505",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:56.671575",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:56.902589",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:57.137012",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:57.368051",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:57.603061",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:57.832683",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:58.060461",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:58.289295",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:58.518406",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:58.751846",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:21:58.987939",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:01.227163",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:01.456206",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:01.688041",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:01.920028",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:02.156785",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:02.396018",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:02.630987",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:02.862333",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:03.096340",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:03.325956",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:03.557860",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:03.794631",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:04.027062",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:04.262013",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:04.496756",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:06.734887",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:06.968187",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:07.198040",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:07.429774",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:07.659538",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:07.893147",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:08.137901",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:08.367958",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:08.596051",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:08.828117",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:09.059389",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:09.283623",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:09.512718",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:09.743655",
+    "level": "INFO",
+    "message": "[PORTALUSDT] \ud83d\udd12 PORTALUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:09.972967",
+    "level": "INFO",
+    "message": "[JUVUSDT] \ud83d\udd12 JUVUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:12.210825",
+    "level": "INFO",
+    "message": "[ZECUSDT] \ud83d\udd12 ZECUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:12.446227",
+    "level": "INFO",
+    "message": "[ALLOUSDT] \ud83d\udd12 ALLOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:12.680597",
+    "level": "INFO",
+    "message": "[WLDUSDT] \ud83d\udd12 WLDUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:12.911193",
+    "level": "INFO",
+    "message": "[NEARUSDT] \ud83d\udd12 NEARUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:13.144186",
+    "level": "INFO",
+    "message": "[OSMOUSDT] \ud83d\udd12 OSMOUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:13.370055",
+    "level": "INFO",
+    "message": "[EPICUSDT] \ud83d\udd12 EPICUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:13.598918",
+    "level": "INFO",
+    "message": "[BANKUSDT] \ud83d\udd12 BANKUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:13.824040",
+    "level": "INFO",
+    "message": "[ATMUSDT] \ud83d\udd12 ATMUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:14.055905",
+    "level": "INFO",
+    "message": "[STGUSDT] \ud83d\udd12 STGUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:14.289554",
+    "level": "INFO",
+    "message": "[OPNUSDT] \ud83d\udd12 OPNUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:14.518087",
+    "level": "INFO",
+    "message": "[EDENUSDT] \ud83d\udd12 EDENUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:14.757124",
+    "level": "INFO",
+    "message": "[CTSIUSDT] \ud83d\udd12 CTSIUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  },
+  {
+    "time": "2026-06-08T09:22:14.992494",
+    "level": "INFO",
+    "message": "[FIDAUSDT] \ud83d\udd12 FIDAUSDT not research-validated for EMA_MACD_RSI_VOLUME_V2@4h \u2014 bot will NOT auto-trade this symbol"
+  }
+]

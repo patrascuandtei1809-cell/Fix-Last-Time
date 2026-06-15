@@ -1715,6 +1715,7 @@ def create_bot(
         _bot._worker_factory      = _make_worker
         _bot._scanner_rotation_on = bool(rotate_scanner)
         _bot._scanner_top_n       = int(scanner_top_n)
+        _bot._last_rotation_at    = 0.0  # force first MEXC scanner rotation immediately
 
         # ── Live-path selection ──────────────────────────────────────────────
         # The research-validated strategy (EMA_MACD_RSI_VOLUME_V2) runs via the

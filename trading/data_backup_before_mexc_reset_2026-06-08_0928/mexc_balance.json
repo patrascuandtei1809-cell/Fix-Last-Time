@@ -1,0 +1,21 @@
+{
+  "updated_at": 1780907330,
+  "account_type": "SPOT",
+  "can_trade": true,
+  "balances": [
+    {
+      "asset": "USDT",
+      "free": 27.59885,
+      "locked": 0.0,
+      "total": 27.59885
+    },
+    {
+      "asset": "BNB",
+      "free": 3.335122698131e-05,
+      "locked": 0.0,
+      "total": 3.335122698131e-05
+    }
+  ],
+  "usdt_available": 27.59885,
+  "usdt_total_known": 27.59885
+}

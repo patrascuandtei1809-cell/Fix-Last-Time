@@ -1,0 +1,32 @@
+[
+  {
+    "coin": "NEARUSDT",
+    "exchange": "binance",
+    "type": "bot",
+    "manual": false,
+    "strategy": "20-Minute Dip",
+    "side": "BUY",
+    "entry_price": 1.999,
+    "exit_price": 2.0319999999999996,
+    "quantity": 8.3,
+    "invested": 16.591700000000003,
+    "profit_loss": 0.27389999999999565,
+    "entry_fee": 0.0165917,
+    "open_time": "2026-06-07T21:20:06.564383+00:00",
+    "stop_loss": 1.993003,
+    "take_profit": 2.010994,
+    "status": "closed",
+    "reason": "Dip detected \u2014 20m change -0.548% \u2264 -0.05% buy threshold",
+    "id": "e162e59b",
+    "profit_loss_pct": 1.6508254127063267,
+    "gross_pnl": 0.27389999999999565,
+    "gross_pnl_pct": 1.6508254127063267,
+    "exit_fee": 0.016459199999999997,
+    "total_fees": 0.033050899999999994,
+    "fees_complete": true,
+    "net_pnl": 0.24084909999999565,
+    "net_pnl_pct": 1.4516240047734446,
+    "close_time": "2026-06-08T00:23:08.208005",
+    "close_reason": "Take profit \u2014 +1.701% \u2265 +0.60% target"
+  }
+]

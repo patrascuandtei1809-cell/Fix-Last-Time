@@ -1,0 +1,213 @@
+diff --git a/trading/dashboard.py b/trading/dashboard.py
+index 919bdda5..7d3c95b1 100644
+--- a/trading/dashboard.py
++++ b/trading/dashboard.py
+@@ -2175,21 +2175,43 @@ with st.sidebar:
+ 
+     # Market
+     st.markdown('<div class="sec-lbl">Market</div>', unsafe_allow_html=True)
++    # MEXC balance panel
++    try:
++        import json, time
++        from pathlib import Path
++        _mexc_file = Path("data/mexc_balance.json")
++        if _mexc_file.exists():
++            _mexc = json.loads(_mexc_file.read_text())
++            _mexc_usdt = float(_mexc.get("usdt_available", 0) or 0)
++            _mexc_can_trade = bool(_mexc.get("can_trade", False))
++            _mexc_age = int(time.time() - int(_mexc.get("updated_at", 0) or 0))
++            st.metric("MEXC USDT", f"{_mexc_usdt:.2f}", "LIVE" if _mexc_can_trade else "NO TRADE")
++            st.caption(f"MEXC balance updated {_mexc_age}s ago")
++        else:
++            st.caption("MEXC balance: not loaded yet")
++    except Exception as _e:
++        st.caption(f"MEXC balance error: {_e}")
+ 
+-    # Active symbols — the bot trades all of these (max 3)
+-    _act_default = [s for s in st.session_state.active_symbols if s in SYMBOLS] \
+-                   or ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+-    _act_default = _act_default[:3]
+-    act_sel = st.multiselect(
+-        "Active symbols (bot)", SYMBOLS,
+-        default=_act_default,
+-        max_selections=3,
+-        help="Bot trades all selected symbols. Maximum 3.",
+-    )
+-    if not act_sel:
+-        act_sel = ["BTCUSDT"]
+-        st.caption("⚠️ At least one symbol required — defaulted to BTCUSDT")
+-    st.session_state.active_symbols = act_sel
++
++    # Active symbols
++    if st.session_state.get("use_scanner_symbols", False):
++        act_sel = _effective_bot_symbols(st.session_state.get("active_symbols", []))
++        st.caption("✅ Scanner LIVE symbols — bot trades these dynamically:")
++        st.write(", ".join(act_sel))
++    else:
++        _act_default = [s for s in st.session_state.active_symbols if s in SYMBOLS] \
++                       or ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
++        _act_default = _act_default[:15]
++        act_sel = st.multiselect(
++            "Active symbols (bot)", SYMBOLS,
++            default=_act_default,
++            max_selections=15,
++            help="Bot trades all selected symbols. Maximum 15.",
++        )
++        if not act_sel:
++            act_sel = ["BTCUSDT"]
++            st.caption("⚠️ At least one symbol required — defaulted to BTCUSDT")
++        st.session_state.active_symbols = act_sel
+ 
+     # Currently-viewed symbol — drives chart, manual trade, force buttons
+     _view_default = st.session_state.symbol if st.session_state.symbol in act_sel else act_sel[0]
+diff --git a/trading/data/settings.json b/trading/data/settings.json
+index 978a8e43..ba9425de 100644
+--- a/trading/data/settings.json
++++ b/trading/data/settings.json
+@@ -11,7 +11,7 @@
+   "use_scanner_symbols": false,
+   "strategy": "EMA_MACD_RSI_VOLUME_V2",
+   "interval": "4h",
+-  "check_every": 8,
++  "check_every": 2,
+   "threshold": 0.01,
+   "initial_balance": 1000.0,
+   "manual_amount": 100.0,
+@@ -31,19 +31,118 @@
+   "global_risk": {
+     "max_total_exposure_usdt": 300.0,
+     "max_exposure_per_symbol_pct": 100,
+-    "max_open_trades_total": 30,
++    "max_open_trades_total": 3,
+     "max_daily_loss_pct": 5.0,
+     "manage_manual_trades": true
+   },
+-  "per_symbol_risk": {},
++  "per_symbol_risk": {
++    "BTCUSDT": {
++      "invest_per_trade": 20.0,
++      "max_trade_usdt": 20.0,
++      "stop_loss_pct": 0.4,
++      "take_profit_pct": 0.6,
++      "max_open_trades": 1
++    },
++    "ETHUSDT": {
++      "invest_per_trade": 20.0,
++      "max_trade_usdt": 20.0,
++      "stop_loss_pct": 0.4,
++      "take_profit_pct": 0.6,
++      "max_open_trades": 1
++    },
++    "SOLUSDT": {
++      "invest_per_trade": 20.0,
++      "max_trade_usdt": 20.0,
++      "stop_loss_pct": 0.4,
++      "take_profit_pct": 0.6,
++      "max_open_trades": 1
++    },
++    "ZECUSDT": {
++      "invest_per_trade": 20.0,
++      "max_trade_usdt": 20.0,
++      "stop_loss_pct": 0.4,
++      "take_profit_pct": 0.6,
++      "max_open_trades": 1
++    },
++    "FIDAUSDT": {
++      "invest_per_trade": 20.0,
++      "max_trade_usdt": 20.0,
++      "stop_loss_pct": 0.4,
++      "take_profit_pct": 0.6,
++      "max_open_trades": 1
++    },
++    "ALLOUSDT": {
++      "invest_per_trade": 20.0,
++      "max_trade_usdt": 20.0,
++      "stop_loss_pct": 0.4,
++      "take_profit_pct": 0.6,
++      "max_open_trades": 1
++    },
++    "WLDUSDT": {
++      "invest_per_trade": 20.0,
++      "max_trade_usdt": 20.0,
++      "stop_loss_pct": 0.4,
++      "take_profit_pct": 0.6,
++      "max_open_trades": 1
++    },
++    "EDENUSDT": {
++      "invest_per_trade": 20.0,
++      "max_trade_usdt": 20.0,
++      "stop_loss_pct": 0.4,
++      "take_profit_pct": 0.6,
++      "max_open_trades": 1
++    },
++    "OSMOUSDT": {
++      "invest_per_trade": 20.0,
++      "max_trade_usdt": 20.0,
++      "stop_loss_pct": 0.4,
++      "take_profit_pct": 0.6,
++      "max_open_trades": 1
++    },
++    "BANKUSDT": {
++      "invest_per_trade": 20.0,
++      "max_trade_usdt": 20.0,
++      "stop_loss_pct": 0.4,
++      "take_profit_pct": 0.6,
++      "max_open_trades": 1
++    },
++    "CTSIUSDT": {
++      "invest_per_trade": 20.0,
++      "max_trade_usdt": 20.0,
++      "stop_loss_pct": 0.4,
++      "take_profit_pct": 0.6,
++      "max_open_trades": 1
++    },
++    "NEARUSDT": {
++      "invest_per_trade": 20.0,
++      "max_trade_usdt": 20.0,
++      "stop_loss_pct": 0.4,
++      "take_profit_pct": 0.6,
++      "max_open_trades": 1
++    },
++    "JTOUSDT": {
++      "invest_per_trade": 20.0,
++      "max_trade_usdt": 20.0,
++      "stop_loss_pct": 0.4,
++      "take_profit_pct": 0.6,
++      "max_open_trades": 1
++    },
++    "HEIUSDT": {
++      "invest_per_trade": 20.0,
++      "max_trade_usdt": 20.0,
++      "stop_loss_pct": 0.4,
++      "take_profit_pct": 0.6,
++      "max_open_trades": 1
++    }
++  },
+   "risk": {
+     "invest_per_trade": 20.0,
+     "max_trade_usdt": 20.0,
+     "stop_loss_pct": 0.4,
+     "take_profit_pct": 0.6,
+-    "max_open_trades": 30,
+-    "cooldown_seconds": 15,
++    "max_open_trades": 3,
++    "cooldown_seconds": 5,
+     "max_daily_loss_pct": 5.0,
+-    "max_trades_per_session": 0
++    "max_trades_per_session": 90
+   }
+ }
+\ No newline at end of file
+diff --git a/trading/scanner.py b/trading/scanner.py
+index d1e5f19d..aa3745b6 100644
+--- a/trading/scanner.py
++++ b/trading/scanner.py
+@@ -259,7 +259,7 @@ def load_opportunities(exchange: Optional[str] = None) -> List[dict]:
+             data = json.load(f)
+         opps = data.get("opportunities", [])
+         if exchange:
+-            opps = [o for o in opps if o.get("exchange") == exchange]
++            opps = [o for o in opps if str(o.get("exchange", "")).lower() == str(exchange).lower()]
+         return opps
+     except Exception as e:  # noqa: BLE001
+         print(f"[SCANNER][ERROR] failed to read opportunities: {e}", flush=True)

@@ -225,7 +225,7 @@ def scan(cfg: Optional[ScanConfig] = None, write: bool = True) -> dict:
     cfg = cfg or ScanConfig()
     raw = fetch_all_tickers()
     ranked = rank(raw, cfg)
-    top = ranked[: cfg.top_n]
+    top = [o for o in ranked if o.get('exchange') == 'mexc'][: cfg.top_n]
     payload = {
         "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "config": {
