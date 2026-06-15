@@ -197,23 +197,43 @@ def fetch_all_tickers() -> Dict[str, List[dict]]:
 
 # ── pure: ranking over already-fetched tickers ───────────────────────────────
 def rank(raw_by_exchange: Dict[str, List[dict]],
-         cfg: Optional[ScanConfig] = None) -> List[dict]:
-    """Normalise → filter → score → sort. Pure (no network)."""
+         cfg: Optional[ScanConfig] = None,
+         collect_rejections: bool = False,
+         max_rejections: int = 40) -> List[dict]:
+    """Normalise → filter → score → sort. Pure (no network).
+
+    When ``collect_rejections`` is True, side-effect: stores samples on
+    ``rank.last_rejections`` for dashboard visibility (not persisted elsewhere).
+    """
     cfg = cfg or ScanConfig()
     scored: List[dict] = []
+    rejections: List[dict] = []
     for exch, rows in raw_by_exchange.items():
         for raw in rows:
             m = normalize_ticker(raw, exch)
             if m is None:
                 continue
-            if filter_reason(m, cfg) is not None:
+            rej = filter_reason(m, cfg)
+            if rej is not None:
+                if collect_rejections and len(rejections) < max_rejections:
+                    rejections.append({
+                        "exchange": exch,
+                        "symbol": m.get("symbol"),
+                        "rejection": rej,
+                        "volume": m.get("volume"),
+                        "volatility": m.get("volatility"),
+                    })
                 continue
             sc, reason = score_opportunity(m, cfg)
             m["score"] = sc
             m["reason"] = reason
             scored.append(m)
     scored.sort(key=lambda x: x["score"], reverse=True)
+    rank.last_rejections = rejections  # type: ignore[attr-defined]
     return scored
+
+
+rank.last_rejections = []  # type: ignore[attr-defined]
 
 
 # ── orchestration ────────────────────────────────────────────────────────────
@@ -224,8 +244,10 @@ def scan(cfg: Optional[ScanConfig] = None, write: bool = True) -> dict:
     """
     cfg = cfg or ScanConfig()
     raw = fetch_all_tickers()
-    ranked = rank(raw, cfg)
-    top = [o for o in ranked if o.get('exchange') == 'mexc'][: cfg.top_n]
+    count_raw = {ex: len(rows) for ex, rows in raw.items()}
+    ranked = rank(raw, cfg, collect_rejections=True)
+    rejections = getattr(rank, "last_rejections", [])
+    top = [o for o in ranked if o.get("exchange") == "mexc"][: cfg.top_n]
     payload = {
         "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "config": {
@@ -236,8 +258,14 @@ def scan(cfg: Optional[ScanConfig] = None, write: bool = True) -> dict:
             "max_24h_change_pct": cfg.max_24h_change_pct,
             "top_n": cfg.top_n,
         },
+        "count_raw": count_raw,
+        "count_raw_total": sum(count_raw.values()),
         "count_scored": len(ranked),
+        "count_mexc_scored": sum(1 for o in ranked if o.get("exchange") == "mexc"),
+        "count_binance_scored": sum(1 for o in ranked if o.get("exchange") == "binance"),
         "opportunities": top,
+        "rejection_samples": rejections,
+        "scanner_running": True,
     }
     if write:
         _OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -245,26 +273,50 @@ def scan(cfg: Optional[ScanConfig] = None, write: bool = True) -> dict:
         with tmp.open("w") as f:
             json.dump(payload, f, indent=2)
         tmp.replace(_OUT_PATH)
+        try:
+            from heartbeats import write as _hb_write
+            _hb_write("scanner", {
+                "count_raw_total": payload["count_raw_total"],
+                "count_scored": payload["count_scored"],
+                "top_n": len(top),
+                "updated_at": payload["updated_at"],
+            })
+        except Exception:
+            pass
         print(f"[SCANNER] wrote {len(top)} opportunities → {_OUT_PATH.name} "
-              f"(scored {len(ranked)})", flush=True)
+              f"(raw={payload['count_raw_total']} scored={len(ranked)})",
+              flush=True)
     return payload
+
+
+def load_scan_payload() -> dict:
+    """Read the full persisted scanner JSON (metadata + opportunities)."""
+    if not _OUT_PATH.exists():
+        return {}
+    try:
+        with _OUT_PATH.open(encoding="utf-8") as f:
+            return json.load(f) or {}
+    except Exception as e:  # noqa: BLE001
+        print(f"[SCANNER][ERROR] failed to read scan payload: {e}", flush=True)
+        return {}
 
 
 def load_opportunities(exchange: Optional[str] = None) -> List[dict]:
     """Read the persisted scan output. Optionally filter to one exchange
     (used by the bot to scope active_symbols by exchange_mode)."""
-    if not _OUT_PATH.exists():
+    data = load_scan_payload()
+    if not data:
         return []
-    try:
-        with _OUT_PATH.open() as f:
-            data = json.load(f)
-        opps = data.get("opportunities", [])
-        if exchange:
-            opps = [o for o in opps if o.get("exchange") == exchange]
-        return opps
-    except Exception as e:  # noqa: BLE001
-        print(f"[SCANNER][ERROR] failed to read opportunities: {e}", flush=True)
-        return []
+    opps = data.get("opportunities", [])
+    if exchange:
+        ex = exchange.lower()
+        opps = [o for o in opps if str(o.get("exchange", "")).lower() == ex]
+    return opps
+
+
+def is_daemon_running() -> bool:
+    """Best-effort: daemon sets module flag when started."""
+    return bool(_daemon_started)
 
 
 # ── background cadence daemon ────────────────────────────────────────────────

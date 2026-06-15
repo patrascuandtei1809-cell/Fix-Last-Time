@@ -716,6 +716,16 @@ class TradingBot:
             diagnostics.record_dip_cycle(traded)
         except Exception:
             pass
+        try:
+            from heartbeats import write as _hb_write
+            _open_hb, _ = refresh_fn()
+            _hb_write("bot", {
+                "workers": len(self.workers),
+                "traded_this_cycle": traded,
+                "open_trades": len(_open_hb),
+            })
+        except Exception:
+            pass
         return traded
 
     # ── Research-validated strategy live path (Task #19) ─────────────────────

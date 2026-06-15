@@ -52,7 +52,7 @@ import live_engine
 import diagnostics
 from bot import (
     load_trades, load_activity, get_open_trades,
-    add_trade, close_trade, reset_all_data, log_activity,
+    add_trade, close_trade, reset_all_data, clear_activity, log_activity,
     get_shared_df, get_shared_price, get_shared_updated_at, get_shared_last_tick,
     get_bot_session_trades, get_bot_last_signal, get_bot_signal_meta,
     get_bot_diagnostics, save_settings, get_all_symbol_state,
@@ -62,6 +62,8 @@ from chart_markers import build_trade_markers
 from risk import RiskManager, RiskSettings, GlobalRiskSettings, GlobalRiskManager
 import telegram_notifier as tg
 from binance_client import public_klines, public_price, public_24h
+import dashboard_support as dsupport
+import heartbeats
 
 # ── Real commission → USDT (P2) ─────────────────────────────────────────────
 # Manual trades hit the raw Binance client (place_market_order) which returns the
@@ -604,7 +606,7 @@ def _init():
         "ai_assist":        True,                # AI always on (advisory, never blocks)
         "ai_aggressiveness": "Active Scalper",   # ignored — single mode
         "aggressive_mode":  am.DEFAULT_MODE,     # Conservative/Balanced/Aggressive/Very Aggressive (PG-persisted)
-        "refresh_secs":     5,
+        "refresh_secs":     3,
         "alert_open_ids":      [],
         "alert_closed_ids":    [],
         "pending_live_trade":  None,   # dict stored between reruns for live confirmation
@@ -1243,6 +1245,10 @@ if df_chart is None and bot_running:
 all_trades     = load_trades()
 open_trades    = get_open_trades()
 closed_trades  = [t for t in all_trades if t.get("status") == "closed"]
+_trades_status = dsupport.trades_dir_status()
+_trades_by_ex   = dsupport.group_trades_by_exchange(all_trades)
+_bin_closed     = [t for t in _trades_by_ex.get("binance", []) if t.get("status") == "closed"]
+_mexc_closed    = [t for t in _trades_by_ex.get("mexc", []) if t.get("status") == "closed"]
 realized_pnl   = sum((t.get("profit_loss") or 0) for t in closed_trades)
 today_str      = datetime.now(_TZ).strftime("%Y-%m-%d")
 daily_realized = sum(
@@ -1448,7 +1454,7 @@ bot_pill  = ('<span class="pill p-blue"><span class="dot dot-y"></span>BOT ON</s
              else '<span class="pill p-gray">BOT OFF</span>')
 mode_pill = '<span class="pill p-red"><span class="dot dot-r"></span>⚡ LIVE</span>'
 net_pill  = '<span class="pill p-red">MAINNET</span>'
-_ref_secs = st.session_state.get("refresh_secs", 5)
+_ref_secs = st.session_state.get("refresh_secs", 3)
 live_pill = f'<span class="pill p-gold"><span class="dot dot-y"></span>LIVE {_ref_secs}s · {_upd_str} <span style="font-size:9px;opacity:.6;">LON</span></span>'
 
 st.markdown(f"""
@@ -2716,6 +2722,37 @@ with st.sidebar:
             help="Binance min-notional is ~$10.", key="dip_min_pos",
         ))
 
+        st.markdown("**Optional exit enhancements (OFF by default — risky if enabled)**")
+        st.caption("Global rules remain TP +0.60% and SL −0.30%. These add optional "
+                   "breakeven/trailing layers on top when explicitly enabled.")
+        _ls.breakeven_enabled = st.checkbox(
+            "Enable breakeven exit (arm then exit at entry if profit fades)",
+            value=bool(getattr(_ls, "breakeven_enabled", False)),
+            key="dip_be_en",
+        )
+        if _ls.breakeven_enabled:
+            _ls.breakeven_arm_pct = float(st.number_input(
+                "Breakeven arm % profit", 0.05, 2.0,
+                float(getattr(_ls, "breakeven_arm_pct", 0.20)), 0.05,
+                key="dip_be_arm",
+            ))
+        _ls.trailing_stop_enabled = st.checkbox(
+            "Enable trailing stop (exit if profit falls from peak)",
+            value=bool(getattr(_ls, "trailing_stop_enabled", False)),
+            key="dip_trail_en",
+        )
+        if _ls.trailing_stop_enabled:
+            _ls.trailing_stop_arm_pct = float(st.number_input(
+                "Trailing arm % (start after this profit)", 0.1, 5.0,
+                float(getattr(_ls, "trailing_stop_arm_pct", 0.40)), 0.05,
+                key="dip_trail_arm",
+            ))
+            _ls.trailing_stop_pct = float(st.number_input(
+                "Trailing distance % from peak", 0.05, 2.0,
+                float(getattr(_ls, "trailing_stop_pct", 0.15)), 0.05,
+                key="dip_trail_dist",
+            ))
+
         # ── Calculated next-order-size preview (the REAL number the dip engine
         #    will use this cycle: mode → max-position cap → spending limit →
         #    25% reserve → $10 min-notional floor). ────────────────────────────
@@ -3013,8 +3050,8 @@ with st.sidebar:
 
     # Data & Live Refresh
     st.markdown('<div class="sec-lbl">Data & Refresh</div>', unsafe_allow_html=True)
-    _ref_opts = [5, 10, 30, 60]   # min 5s to prevent chart flicker
-    _cur_ref  = max(5, int(st.session_state.refresh_secs))
+    _ref_opts = [3, 5, 10, 30, 60]   # default 3s live refresh
+    _cur_ref  = max(3, int(st.session_state.refresh_secs))
     _ref_idx  = _ref_opts.index(_cur_ref) if _cur_ref in _ref_opts else 0
     _ref_choice = st.selectbox(
         "Live refresh interval",
@@ -3163,7 +3200,242 @@ def _decision_state(rec):
     return "WAIT", "#8b949e"
 
 
+def _render_health_panel(
+    bot_running: bool,
+    binance_connected: bool,
+    mexc_connected: bool,
+):
+    """24/7 health — real process heartbeats + live connection state."""
+    _sec("🏥 System Health")
+    _hb_bot = heartbeats.read("bot", max_age_sec=120)
+    _hb_scan = heartbeats.read("scanner", max_age_sec=300)
+    _hb_dash = heartbeats.read("dashboard", max_age_sec=60)
+    _scan_payload = dsupport.load_scanner_payload()
+    _last_scan = _scan_payload.get("updated_at") or "—"
+    try:
+        import scanner as _sc_mod
+        _scan_daemon = _sc_mod.is_daemon_running()
+    except Exception:
+        _scan_daemon = False
+    _last_tick = get_shared_last_tick()
+    _last_sig = get_bot_last_signal()
+    _ls_msg = (_last_sig.get("message") or "")[:80] if _last_sig else "—"
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Streamlit", "ALIVE")
+    c2.metric("Bot", "RUNNING" if bot_running else "OFF")
+    c3.metric("Binance", "CONNECTED" if binance_connected else "OFF")
+    c4.metric("MEXC", "CONNECTED" if mexc_connected else "OFF")
+    d1, d2, d3, d4 = st.columns(4)
+    d1.metric("Scanner daemon", "ON" if _scan_daemon else "OFF")
+    d2.metric("Last scan", str(_last_scan)[:19])
+    d3.metric("Last bot tick", _fmt_london(_last_tick) if _last_tick else "—")
+    d4.metric("Last decision", _ls_msg[:40])
+    st.caption(
+        f"Heartbeats: bot={'OK' if _hb_bot and not _hb_bot.get('stale') else 'stale/missing'} · "
+        f"scanner={'OK' if _hb_scan and not _hb_scan.get('stale') else 'stale/missing'} · "
+        f"dashboard refresh {int(st.session_state.get('refresh_secs', 3))}s · "
+        f"trades files {_trades_status.get('file_count', 0)}"
+    )
+
+
+def _render_scanner_status_panel():
+    """Scanner counters + rejection samples — real file only."""
+    _sec("🛰️ Scanner Status · MEXC universe")
+    payload = dsupport.load_scanner_payload()
+    if not payload:
+        st.warning(dsupport.scanner_file_missing_message())
+        return payload
+    raw = payload.get("count_raw") or {}
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Raw symbols", payload.get("count_raw_total", sum(raw.values()) if raw else "—"))
+    c2.metric("Binance raw", raw.get("binance", "—"))
+    c3.metric("MEXC raw", raw.get("mexc", "—"))
+    c4.metric("Scored total", payload.get("count_scored", "—"))
+    c5.metric("Top selected", len(payload.get("opportunities") or []))
+    st.caption(
+        f"Last run: {payload.get('updated_at', '—')} · "
+        f"MEXC scored: {payload.get('count_mexc_scored', '—')} · "
+        f"Max open MEXC trades: {_mexc_cap()}"
+    )
+    rejects = payload.get("rejection_samples") or []
+    if rejects:
+        with st.expander(f"Why rejected (sample {len(rejects)})", expanded=False):
+            st.dataframe(
+                pd.DataFrame([{
+                    "Coin": (r.get("symbol") or "—").replace("USDT", ""),
+                    "Exchange": r.get("exchange"),
+                    "Reason": r.get("rejection"),
+                    "Vol $": f"${float(r.get('volume') or 0):,.0f}",
+                    "Vol%": f"{float(r.get('volatility') or 0):.1f}",
+                } for r in rejects[:30]]),
+                width="stretch", hide_index=True,
+            )
+    return payload
+
+
+def _render_history_tabs(
+    fmt_pnl_fn,
+    fmt_pct_fn,
+    total_pnl_val: float,
+    win_rate_val: float,
+    wins_val: int,
+):
+    """Trade History · Activity Log · Stats — restored from backup, all exchanges."""
+    _sec("📋 History · Activity · Performance")
+    if not _trades_status.get("exists") or _trades_status.get("file_count", 0) == 0:
+        st.warning(dsupport.trades_dir_missing_message())
+
+    tab_h, tab_a, tab_s, tab_b, tab_m = st.tabs([
+        "📋 Trade History",
+        "📟 Activity Log",
+        "📊 Stats",
+        "🟡 Binance Closed",
+        "🔵 MEXC Closed",
+    ])
+
+    with tab_h:
+        if not all_trades:
+            st.info("No trades recorded yet. History appears when the bot or manual "
+                    "close flow writes to data/trades/*.json.")
+        else:
+            st.dataframe(
+                pd.DataFrame(dsupport.build_history_rows(all_trades, fmt_pnl_fn, fmt_pct_fn)),
+                width="stretch", hide_index=True, height=320,
+                column_config={
+                    "Open Reason": st.column_config.TextColumn(width="large"),
+                    "Close Reason": st.column_config.TextColumn(width="large"),
+                },
+            )
+
+    with tab_a:
+        try:
+            _dip_acts = live_engine.get_all_activity()
+        except Exception:
+            _dip_acts = []
+        if _dip_acts:
+            st.markdown("**Market Low — live engine decisions**")
+            for _rec in _dip_acts:
+                _chg = getattr(_rec, "change_pct", None)
+                _chg_s = f"{_chg:+.3f}%" if _chg is not None else "—"
+                st.caption(
+                    f"**{_rec.symbol}** · {_rec.decision} · "
+                    f"20m {_chg_s} · {getattr(_rec, 'reason', '')}"
+                )
+            st.divider()
+        ac1, ac2 = st.columns([8, 1])
+        with ac2:
+            if st.button("🗑 Clear log", key="clear_activity_btn"):
+                clear_activity()
+                st.rerun()
+        activity = load_activity()
+        if not activity:
+            st.info("No activity log yet — expected at trading/data/activity.json")
+        else:
+            lines = []
+            for entry in reversed(activity[-300:]):
+                ts = _fmt_london(entry.get("time"), "%Y-%m-%d %H:%M:%S")
+                lvl = entry.get("level", "INFO")
+                msg = (entry.get("message", "")
+                       .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+                lines.append(
+                    f'<div class="log-line">'
+                    f'<span class="l-ts">{ts}</span>'
+                    f'<span class="l-lvl l{lvl}">[{lvl}]</span>'
+                    f'<span class="l-msg l{lvl}">{msg}</span></div>'
+                )
+            st.markdown('<div class="log-wrap">' + "".join(lines) + "</div>",
+                        unsafe_allow_html=True)
+
+    with tab_s:
+        s1, s2, s3, s4, s5 = st.columns(5)
+
+        def _sc(col, lbl, val, cls=""):
+            col.markdown(
+                f'<div class="card" style="text-align:center;">'
+                f'<div class="c-lbl">{lbl}</div>'
+                f'<div class="c-val {cls}">{val}</div></div>',
+                unsafe_allow_html=True,
+            )
+
+        _sc(s1, "Total Trades", len(all_trades))
+        _sc(s2, "Closed", len(closed_trades))
+        _sc(s3, "Wins", wins_val, "up")
+        _sc(s4, "Win Rate", f"{win_rate_val:.1f}%",
+            "up" if win_rate_val >= 50 else "dn")
+        _sc(s5, "Total P&L", fmt_pnl_fn(total_pnl_val),
+            "up" if total_pnl_val >= 0 else "dn")
+
+        _sum = dsupport.summarize_closed(closed_trades)
+        st.markdown("**Net P&L summary (prefers recorded fees when available)**")
+        p1, p2, p3, p4 = st.columns(4)
+        p1.metric("Gross closed P&L", f"${_sum['total_gross']:+.4f}")
+        p2.metric("Net closed P&L", f"${_sum['total_net']:+.4f}")
+        p3.metric("Avg win", f"${_sum['avg_win']:+.4f}")
+        p4.metric("Avg loss", f"${_sum['avg_loss']:+.4f}")
+
+        if closed_trades:
+            st.markdown("**P&L per closed trade**")
+            st.dataframe(
+                pd.DataFrame(dsupport.closed_trade_detail_rows(closed_trades)),
+                width="stretch", hide_index=True, height=220,
+            )
+
+        st.markdown("**Performance by symbol (top)**")
+        _ps = dsupport.performance_by_symbol(closed_trades)
+        if len(_ps):
+            c_best, c_worst = st.columns(2)
+            with c_best:
+                st.markdown("Best symbols")
+                st.dataframe(_ps.head(5), width="stretch", hide_index=True)
+            with c_worst:
+                st.markdown("Worst symbols")
+                st.dataframe(_ps.tail(5).sort_values("Total PnL $"), width="stretch",
+                             hide_index=True)
+        else:
+            st.caption("No closed trades for symbol breakdown yet.")
+
+        st.markdown("**Performance by hour (UTC close time)**")
+        _ph = dsupport.performance_by_hour(closed_trades)
+        if len(_ph):
+            st.dataframe(_ph, width="stretch", hide_index=True)
+
+        if closed_trades:
+            st.markdown("**Parameter notes (informational — live rules NOT auto-changed)**")
+            losers = [t for t in closed_trades if trade_pnl_usd(t) < 0]
+            if losers:
+                reasons = [t.get("close_reason") or "" for t in losers[:20]]
+                st.caption(
+                    "Recent losing close reasons: "
+                    + " · ".join(r[:60] for r in reasons if r)[:500]
+                )
+            st.caption(
+                "Global rules remain BUY ≤ −0.05% · TP +0.60% · SL −0.30% · "
+                "cooldown 60s · trend ON · volume ON unless you change live settings."
+            )
+
+    def _closed_tab(closed_list, venue_label):
+        if not closed_list:
+            st.info(f"No closed {venue_label} trades in data/trades/*.json yet.")
+        else:
+            st.dataframe(
+                pd.DataFrame(dsupport.build_history_rows(closed_list, fmt_pnl_fn, fmt_pct_fn)),
+                width="stretch", hide_index=True, height=280,
+            )
+
+    with tab_b:
+        _closed_tab(_bin_closed, "Binance")
+    with tab_m:
+        _closed_tab(_mexc_closed, "MEXC")
+
+
+def trade_pnl_usd(t):
+    return dsupport.trade_pnl_usd(t)
+
+
 def _sec(title: str):
+    st.markdown(f'<div class="sec-lbl">{title}</div>', unsafe_allow_html=True)
+
+
     st.markdown(f'<div class="sec-lbl">{title}</div>', unsafe_allow_html=True)
 
 
@@ -3286,6 +3558,8 @@ def _render_binance_legacy():
             _status = "📈 Open position"
         elif _val < 10.0:
             _status = "🪙 Dust (below ~$10 min)"
+        elif _val >= 10.0:
+            _status = "🚪 EXIT CANDIDATE (legacy — manual/convert only)"
         else:
             _status = "💼 Holding"
         _legacy_rows.append({
@@ -3443,6 +3717,15 @@ def _render_mexc_wallet():
   <div style="font-size:18px;font-weight:700;color:#f0f6fc;font-family:'JetBrains Mono',monospace;">${_mx_total:,.2f} <span style="font-size:11px;color:#6e7681;">USDT total</span></div>
   <div style="font-size:10px;color:#8b949e;margin-top:4px;font-family:'JetBrains Mono',monospace;">free ${_mx_free:,.2f} · locked ${_mx_lock:,.2f}</div>
 </div>""", unsafe_allow_html=True)
+            _mexc_exp = sum((t.get("invested") or 0) for t in open_trades
+                            if (t.get("exchange") or "") == "mexc")
+            _mexc_lim = float(getattr(st.session_state.global_risk,
+                                      "max_total_exposure_usdt", 0) or 0)
+            _mx_left = dsupport.amount_left_to_trade(_mx_free, _mexc_lim, _mexc_exp)
+            st.caption(
+                f"MEXC amount left to deploy: **${_mx_left:,.2f}** · "
+                f"open MEXC positions {sum(1 for t in open_trades if t.get('exchange')=='mexc')}"
+                f"/{_mexc_cap()}")
     except Exception as _mxe:  # noqa: BLE001
         st.caption(f"🔵 MEXC ({_mexc_tag}) — balance unavailable: {_mxe}")
 
@@ -3626,74 +3909,65 @@ def _render_positions(venue: str):
                         st.rerun()
 
 
-def _render_ai_decisions(symbols, acts: dict, accent: str):
-    """ACTIONABLE per-symbol decision table for ONE venue — shows exactly what
-    the bot will do next and why (real live-engine ActivityRecord output).
+@st.cache_data(ttl=30, show_spinner=False)
+def _indicator_snapshot(sym: str, venue: str):
+    """Real 1m candles → MACD/RSI for decision assistant layer."""
+    try:
+        if venue == "mexc":
+            from exchanges.mexc import public_klines as _pk
+            df = _pk(sym, "1m", limit=120)
+        else:
+            df = public_klines(sym, "1m", limit=120)
+        return get_indicators(df)
+    except Exception:
+        return None
 
-    Columns: Coin · Market-Low % · Trend · Volume · Score · Decision · Reason.
-    Decision states: BUY READY / WAIT / BLOCKED / SELL / STOP LOSS. Symbols the
-    engine has not evaluated yet are omitted — no empty placeholder cards."""
-    _sec("🧠 AI Decisions · what the bot will do next & why")
+
+def _render_ai_decisions(symbols, acts: dict, accent: str, venue: str = "binance"):
+    """Per-symbol decision table — Market-Low + MACD/RSI assistant layer."""
+    _sec("🧠 AI / MACD Decisions · next action & why")
     syms = [s for s in (symbols or []) if s]
     scores = _scanner_scores()
     rows = []
     for sym in syms:
         rec = acts.get(str(sym).upper())
         if rec is None:
-            continue  # no empty "waiting for first scan" cards
-        state, scol = _decision_state(rec)
-        # Market-Low % — the 20m change; ≤ buy threshold = dip/entry candidate.
+            continue
+        df_ind = _indicator_snapshot(sym, venue)
+        macd_l, rsi_l, ai_conf = dsupport.macd_rsi_state(df_ind)
+        buy_thr = float(getattr(rec, "buy_threshold", dsupport.GLOBAL_BUY_PCT) or dsupport.GLOBAL_BUY_PCT)
+        state, scol, rsn = dsupport.classify_decision(rec, buy_thr, macd_l, rsi_l, ai_conf)
         chg = getattr(rec, "change_pct", None)
-        buy_thr = getattr(rec, "buy_threshold", None)
         if chg is None:
             ml = '<span style="color:#484f58;">—</span>'
         else:
-            _c = ("#26a69a" if (buy_thr is not None and chg <= buy_thr)
+            _c = ("#26a69a" if chg <= buy_thr
                   else "#ef5350" if chg < 0 else "#8b949e")
             ml = f'<span style="color:{_c};">{chg:+.2f}%</span>'
-        # Trend gate
-        t_on = getattr(rec, "trend_filter_on", True)
         t_ok = getattr(rec, "trend_ok", None)
-        if not t_on:
-            tr = '<span style="color:#6e7681;">off</span>'
-        elif t_ok is True:
-            tr = '<span style="color:#26a69a;">&#8593; up</span>'
-        elif t_ok is False:
-            tr = '<span style="color:#d29922;">flat</span>'
-        else:
-            tr = '<span style="color:#484f58;">—</span>'
-        # Volume gate (ratio vs required multiple)
+        tr = ('<span style="color:#26a69a;">up</span>' if t_ok is True
+              else '<span style="color:#d29922;">flat</span>' if t_ok is False
+              else '<span style="color:#484f58;">—</span>')
         vr = getattr(rec, "volume_ratio", None)
-        v_on = getattr(rec, "volume_filter_on", False)
-        v_min = getattr(rec, "min_volume_multiple", 1.5)
-        if vr is None:
-            vol = '<span style="color:#484f58;">—</span>'
-        else:
-            _c = "#ef5350" if (v_on and v_min > 0 and vr < v_min) else "#c9d1d9"
-            vol = f'<span style="color:{_c};">{vr:.2f}&#215;</span>'
-        # Scanner score (majors are pinned, not scanner-ranked → —)
+        vol = (f'<span style="color:#c9d1d9;">{vr:.2f}×</span>' if vr is not None
+               else '<span style="color:#484f58;">—</span>')
         sc = scores.get(str(sym).upper())
-        if sc is None:
-            sco = '<span style="color:#484f58;">—</span>'
-        else:
-            _c = "#26a69a" if sc >= 70 else "#d29922" if sc >= 45 else "#8b949e"
-            sco = f'<span style="color:{_c};font-weight:700;">{sc}</span>'
-        rsn = (getattr(rec, "reason", "") or "—")
-        rsn = (rsn.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+        sco = (f'<span style="color:#26a69a;font-weight:700;">{sc}</span>' if sc is not None
+               else '<span style="color:#484f58;">—</span>')
+        rsn = rsn.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         coin = str(sym).replace("USDT", "")
         rows.append(
-            f'<tr><td style="font-weight:700;">{coin}'
-            f'<span style="color:#484f58;font-weight:400;">/USDT</span></td>'
-            f'<td>{ml}</td><td>{tr}</td><td>{vol}</td><td>{sco}</td>'
+            f'<tr><td style="font-weight:700;">{coin}/USDT</td>'
+            f'<td>{ml}</td><td>{macd_l}</td><td>{rsi_l}</td>'
+            f'<td>{tr}</td><td>{vol}</td><td>{sco}</td>'
             f'<td><span style="background:{scol}22;color:{scol};'
             f'border:1px solid {scol}66;border-radius:6px;padding:2px 8px;'
-            f'font-weight:800;font-size:11px;white-space:nowrap;">{state}</span></td>'
-            f'<td style="color:#8b949e;font-size:11px;">{rsn[:120]}</td></tr>')
+            f'font-weight:800;font-size:11px;">{state}</span></td>'
+            f'<td style="color:#8b949e;font-size:11px;">{rsn[:140]}</td></tr>')
     if not rows:
-        st.caption("No live engine decisions yet — start the bot to see what it "
-                   "will do next per coin.")
+        st.caption("No live engine decisions yet — start the bot to populate this table.")
         return
-    head = ("Coin", "Market-Low %", "Trend", "Volume", "Score", "Decision", "Reason")
+    head = ("Coin", "ML %", "MACD", "RSI", "Trend", "Vol", "Score", "Decision", "Reason")
     thead = "".join(f"<th>{h}</th>" for h in head)
     st.markdown(
         "<style>.dec-tbl{width:100%;border-collapse:collapse;font-size:12px;"
@@ -3711,18 +3985,22 @@ def _render_ai_decisions(symbols, acts: dict, accent: str):
 
 def _render_scanner_table():
     """MEXC live scanner — real ranked opportunities. Returns top symbols."""
-    _sec("🛰️ Live Scanner · MEXC volatile alts")
+    _sec("🛰️ Live Scanner · MEXC volatile alts (top 15)")
+    payload = dsupport.load_scanner_payload()
+    if not payload:
+        st.warning(dsupport.scanner_file_missing_message())
+        return []
     try:
         import scanner as _sc
-        opps = _sc.load_opportunities()
+        opps = _sc.load_opportunities("mexc")
     except Exception:  # noqa: BLE001
-        opps = []
+        opps = payload.get("opportunities") or []
     mexc = [o for o in opps
-            if o.get("exchange") == "mexc"
+            if str(o.get("exchange", "")).lower() == "mexc"
             and o.get("symbol") and o.get("symbol") not in _BIN_MAJORS]
     if not mexc:
-        st.caption("Scanner has no MEXC opportunities yet — press "
-                   "“🔄 Refresh scan now” in the sidebar to populate it.")
+        st.caption("Scanner file exists but has no MEXC opportunities — press "
+                   "“🔄 Refresh scan now” in the sidebar.")
         return []
     rows = [{
         "Coin":  o.get("symbol", "—").replace("USDT", ""),
@@ -3730,7 +4008,9 @@ def _render_scanner_table():
         "Vol%":  f"{o.get('volatility', 0):.1f}",
         "24h%":  f"{o.get('change', 0):+.1f}",
         "Liq $": f"${o.get('volume', 0):,.0f}",
+        "Spread": (f"{o.get('spread'):.2f}%" if o.get("spread") is not None else "—"),
         "Score": int(o.get("score", 0)),
+        "Why selected": (o.get("reason") or "")[:80],
     } for o in mexc[:15]]
     st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True,
                  height=min(40 + 36 * len(rows), 420))
@@ -3893,6 +4173,12 @@ with st.container():
         # Permanent GLOBAL RULES bar (applies to BOTH venues), then the Binance
         # venue section header. The MEXC section header is rendered further down.
         _render_global_rules_bar()
+        try:
+            from exchanges.mexc import load_mexc_credentials as _mx_cred_ok
+            _mexc_connected = bool(_mx_cred_ok())
+        except Exception:
+            _mexc_connected = False
+        _render_health_panel(bot_running, _binance_connected, _mexc_connected)
         _venue_header("🟡 BINANCE DASHBOARD",
                       "Pinned majors BTC · ETH · SOL · Market-Low rule · "
                       "never rotated · max 3 open positions",
@@ -3979,6 +4265,15 @@ with st.container():
             st.caption("💸 Bot spending limit: OFF — the bot can use all your "
                        "available USDT. Set a $ limit in the sidebar (Risk "
                        "Management) to cap how much it uses.")
+
+        _left_trade = dsupport.amount_left_to_trade(
+            binance_free_usdt if _binance_connected else 0.0,
+            _bot_limit, _bot_in_play)
+        if _binance_connected and not binance_balance_err:
+            st.caption(
+                f"💵 Binance amount left to deploy (after limits): "
+                f"**${_left_trade:,.2f}** USDT · free ${_binance_free_usdt:,.2f} · "
+                f"locked ${_binance_locked_usdt:,.2f}")
 
         # ── Equity Curve Sparkline ─────────────────────────────────────────────
         _cum       = 0.0
@@ -4834,11 +5129,14 @@ with st.container():
                       "rule · rotated as they go quiet · max 15 positions",
                       "#3b82f6", "#0a1020")
         _render_mexc_wallet()
+        _render_scanner_status_panel()
         _mexc_top = _render_scanner_table()
         _render_scanner_charts(_mexc_top or _mexc_syms)
         _render_positions("mexc")
-        _render_ai_decisions((_mexc_syms or _mexc_top), _acts, "#3b82f6")
+        _render_ai_decisions((_mexc_syms or _mexc_top), _acts, "#3b82f6", venue="mexc")
         _render_rotation_engine(_mexc_syms)
+
+        _render_history_tabs(_fmt_pnl, _fmt_pct, total_pnl, win_rate, wins)
 
         st.markdown("<div style='height:48px'></div>", unsafe_allow_html=True)
 
@@ -4919,3 +5217,21 @@ if st.session_state.get("_last_settings_hash") != _snap_hash:
         if st.session_state.get("_settings_initial_saved"):
             st.toast("✅ Settings saved", icon="💾")
         st.session_state._settings_initial_saved = True
+
+# ── Dashboard heartbeat + auto-refresh (Phase 3) ─────────────────────────────
+try:
+    heartbeats.write("dashboard", {
+        "refresh_secs": int(st.session_state.get("refresh_secs", 3)),
+        "bot_running": bool(bot_running),
+    })
+except Exception:
+    pass
+
+_ref_sec = max(3, int(st.session_state.get("refresh_secs", 3)))
+_now_ar = time.time()
+_last_ar = float(st.session_state.get("_auto_refresh_at") or 0)
+if _last_ar == 0:
+    st.session_state._auto_refresh_at = _now_ar
+elif (_now_ar - _last_ar) >= _ref_sec:
+    st.session_state._auto_refresh_at = _now_ar
+    st.rerun()

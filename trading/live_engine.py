@@ -458,6 +458,18 @@ class DipLiveEngine:
             return self._skip(rec, f"Risk gate blocked — {g_reason}")
 
         # 12. Place the LIVE BUY order + record.
+        # HARD RULE: Binance auto-trade ONLY pinned majors (BTC/ETH/SOL).
+        if getattr(self.exchange, "name", "").lower() == "binance":
+            try:
+                from bot import BINANCE_MAJORS
+                if symbol not in BINANCE_MAJORS:
+                    return self._skip(
+                        rec,
+                        f"Binance auto-buy blocked — {symbol} not in pinned majors "
+                        f"{BINANCE_MAJORS} (legacy/dust display only)",
+                    )
+            except Exception:
+                pass
         return self._open_buy(rec, symbol, price, amount, decision.reason, thr)
 
     # ── order placement ──────────────────────────────────────────────────────
@@ -513,6 +525,56 @@ class DipLiveEngine:
     def _manage_exit(self, rec, symbol, trade, price, thr) -> ActivityRecord:
         entry = float(trade.get("entry_price") or 0.0)
         side = trade.get("side", "BUY")
+        settings = live_settings.get_settings()
+
+        # Optional breakeven / trailing (OFF unless operator enabled in live settings)
+        profit_pct = dip.position_profit_pct(entry, price, side)
+        if side == "BUY" and entry > 0:
+            peak_key = "_peak_profit_pct"
+            peak = float(trade.get(peak_key) or profit_pct)
+            if profit_pct > peak:
+                trade[peak_key] = profit_pct
+                peak = profit_pct
+            if getattr(settings, "breakeven_enabled", False):
+                arm = float(getattr(settings, "breakeven_arm_pct", 0.20) or 0.20)
+                if profit_pct >= arm:
+                    trade["be_armed"] = True
+                if trade.get("be_armed") and profit_pct <= 0:
+                    msg = f"Breakeven exit — profit {profit_pct:+.3f}% (SL moved to entry)"
+                    self._log("ORDER", f"[{symbol}] 🛡️ BREAKEVEN | {trade.get('id')} | {msg}")
+                    try:
+                        self._close(trade, price, msg)
+                    except Exception as e:
+                        return self._skip(rec, f"Exit order failed: {e}", level="ERROR")
+                    if self.cooldown is not None:
+                        self.cooldown.record_stop_loss(symbol)
+                    rec.decision = dip.STOP_LOSS
+                    rec.reason = msg
+                    rec.profit_pct = profit_pct
+                    rec.traded = True
+                    return _publish(rec)
+            if getattr(settings, "trailing_stop_enabled", False):
+                arm_t = float(getattr(settings, "trailing_stop_arm_pct", 0.40) or 0.40)
+                trail = float(getattr(settings, "trailing_stop_pct", 0.15) or 0.15)
+                if peak >= arm_t:
+                    trail_floor = peak - trail
+                    if profit_pct <= trail_floor:
+                        verb = "🔻 TRAILING STOP"
+                        msg = (f"Trailing stop — profit {profit_pct:+.3f}% fell "
+                               f"{trail:.2f}% below peak {peak:+.3f}%")
+                        self._log("ORDER", f"[{symbol}] {verb} | {trade.get('id')} | {msg}")
+                        try:
+                            self._close(trade, price, msg)
+                        except Exception as e:
+                            return self._skip(rec, f"Exit order failed: {e}", level="ERROR")
+                        if self.cooldown is not None:
+                            self.cooldown.record_stop_loss(symbol)
+                        rec.decision = dip.STOP_LOSS
+                        rec.reason = msg
+                        rec.profit_pct = profit_pct
+                        rec.traded = True
+                        return _publish(rec)
+
         decision = dip.decide_exit(entry, price, side, thr)
         rec.change_pct = rec.change_pct  # keep 20m context
         rec.amount = float(trade.get("invested") or 0.0)

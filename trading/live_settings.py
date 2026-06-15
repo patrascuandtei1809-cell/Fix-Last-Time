@@ -88,6 +88,13 @@ class LiveSettings:
     stop_loss_cooldown_sec: int = 60       # 1 minute after a stop-loss
     reentry_cooldown_sec: int = 60         # 1 minute after any sell
 
+    # Optional exit enhancements — OFF by default (operator must enable in dashboard)
+    breakeven_enabled: bool = False
+    breakeven_arm_pct: float = 0.20        # move SL to entry after +X% profit
+    trailing_stop_enabled: bool = False
+    trailing_stop_arm_pct: float = 0.40    # start trailing after +X% profit
+    trailing_stop_pct: float = 0.15        # trail peak by this %
+
     def normalized(self) -> "LiveSettings":
         self.size_mode = normalize_size_mode(self.size_mode)
         return self
