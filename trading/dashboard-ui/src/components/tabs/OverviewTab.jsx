@@ -1,6 +1,6 @@
 import React from 'react';
-import { Card, MetricGrid, SectionTitle, TradeTable } from './Ui';
-import { fmtUsd, sumInvested } from '../utils';
+import { Card, MetricGrid, SectionTitle, TradeTable } from '../Ui';
+import { fmtUsd, sumInvested } from '../../utils';
 
 export function OverviewTab({ data }) {
   const open = data?.open?.data || [];
