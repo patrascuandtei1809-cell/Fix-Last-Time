@@ -503,6 +503,25 @@ class MexcExchange(Exchange):
         qty = self.round_quantity(symbol, raw_qty)
         if not self.live_orders or not self.client:
             return self._simulate(symbol, "SELL", qty, price)
+        # Oversold protection — never sell more base asset than MEXC holds.
+        base = self._base_asset(symbol)
+        try:
+            bal = self.get_balance(base)
+            free = float(bal.get("free", 0) or 0)
+            locked = float(bal.get("locked", 0) or 0)
+            total = float(bal.get("total", free + locked) or (free + locked))
+            avail = self.round_quantity(symbol, total)
+            if avail <= 0:
+                return self._fail(
+                    symbol, "SELL", qty,
+                    f"no {base} balance on MEXC (total={total}) — oversold prevented")
+            if qty > avail:
+                print(f"[MEXC-EX] capping SELL {symbol} qty {qty} → {avail} "
+                      f"(balance total={total})", flush=True)
+                qty = avail
+        except Exception as e:  # noqa: BLE001
+            print(f"[MEXC-EX] balance pre-check failed for SELL {symbol}: {e}",
+                  flush=True)
         print(f"[MEXC-EX] rounded SELL qty {symbol} raw={raw_qty} "
               f"rounded={qty} step={step}", flush=True)
         if qty <= 0:
@@ -517,7 +536,20 @@ class MexcExchange(Exchange):
             raw = self.client.place_market_sell_qty(symbol, qty)
             return self._normalize(raw, symbol, "SELL", qty, price, dry_run=False)
         except Exception as e:  # noqa: BLE001
-            return self._fail(symbol, "SELL", qty, str(e))
+            err = str(e)
+            if "oversold" in err.lower():
+                try:
+                    bal = self.get_balance(base)
+                    free = float(bal.get("free", 0) or 0)
+                    locked = float(bal.get("locked", 0) or 0)
+                    total = float(bal.get("total", free + locked) or (free + locked))
+                    if total <= 0:
+                        return self._fail(
+                            symbol, "SELL", qty,
+                            f"Oversold — no {base} balance on MEXC (reconcile close)")
+                except Exception:
+                    pass
+            return self._fail(symbol, "SELL", qty, err)
 
     # ── symbol filters ──
     def get_symbol_filters(self, symbol: str) -> Dict:

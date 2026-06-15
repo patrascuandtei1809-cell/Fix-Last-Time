@@ -365,13 +365,24 @@ def add_trade(trade: Dict) -> Dict:
 
 
 def close_trade(trade_id: str, exit_price: float, reason: str,
-                exit_fee: float = 0.0) -> Optional[Dict]:
+                exit_fee: float = 0.0, *,
+                quantity_sold: Optional[float] = None,
+                reconciliation_status: Optional[str] = None,
+                reconciliation_exchange_total: Optional[float] = None,
+                force_profit_loss: Optional[float] = None) -> Optional[Dict]:
     """Find the trade across all per-symbol files and close it.
 
     P2 REAL PnL: records GROSS pnl (price move only — kept on `profit_loss` for
     backward compatibility with old records/UI) AND the fee-aware NET pnl. The
     entry commission was stamped on the trade at open time (`entry_fee`); the
     exit commission is passed in here from the live close order.
+
+    Optional reconciliation kwargs (MEXC phantom-position cleanup):
+      quantity_sold — base qty actually sold (0 when reconciled without a SELL)
+      reconciliation_status — e.g. ``missing_exchange_balance``
+      reconciliation_exchange_total — exchange-reported base balance at close
+      force_profit_loss — when set, overrides computed gross/net (use 0 for
+        reconciled closes where the true outcome is unknown)
     """
     closed: Optional[Dict] = None
     state_log: Optional[str] = None
@@ -384,7 +395,10 @@ def close_trade(trade_id: str, exit_price: float, reason: str,
                     invested = t.get("invested") or 0
                     entry    = t["entry_price"]
                     side     = t["side"]
-                    if side == "BUY":
+                    if force_profit_loss is not None:
+                        gross     = float(force_profit_loss)
+                        gross_pct = (gross / invested * 100) if invested else 0.0
+                    elif side == "BUY":
                         gross     = (exit_price - entry) / entry * invested
                         gross_pct = (exit_price - entry) / entry * 100
                     else:
@@ -417,6 +431,13 @@ def close_trade(trade_id: str, exit_price: float, reason: str,
                     t["close_time"]   = datetime.now(timezone.utc).isoformat()
                     t["close_reason"] = reason
                     t["status"]       = "closed"
+                    if quantity_sold is not None:
+                        t["quantity_sold"] = float(quantity_sold)
+                    if reconciliation_status is not None:
+                        t["reconciliation_status"] = reconciliation_status
+                    if reconciliation_exchange_total is not None:
+                        t["reconciliation_exchange_total"] = float(
+                            reconciliation_exchange_total)
                     _save_trade_file(fp, trades)
                     closed = t
                     # P1 SYNC — explicit OPEN→CLOSED state-transition log.

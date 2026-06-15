@@ -119,6 +119,142 @@ def get_all_activity() -> List[ActivityRecord]:
         return list(_ACTIVITY.values())
 
 
+# ── MEXC exit reconciliation (phantom open trades) ───────────────────────────
+def _base_asset_from_symbol(symbol: str) -> str:
+    """SKYAIUSDT → SKYAI."""
+    sym = (symbol or "").upper()
+    for q in ("USDT", "BUSD", "USDC"):
+        if sym.endswith(q):
+            return sym[: -len(q)]
+    return sym
+
+
+def _is_mexc_exchange(exchange) -> bool:
+    return getattr(exchange, "name", "").lower() == "mexc"
+
+
+def _mexc_dust_threshold(exchange, symbol: str) -> float:
+    try:
+        min_qty = float(exchange.get_symbol_filters(symbol).get("min_qty") or 0)
+    except Exception:
+        min_qty = 0.0
+    return min_qty if min_qty > 0 else 1e-8
+
+
+@dataclass
+class _MexcExitPlan:
+    """Result of a pre-SELL MEXC balance check."""
+    reconciled: bool = False
+    exchange_total: float = 0.0
+    sell_qty: Optional[float] = None
+    partial: bool = False
+
+
+def _mexc_balance_total(exchange, base_asset: str) -> float:
+    bal = exchange.get_balance(base_asset)
+    free = float(bal.get("free", 0) or 0)
+    locked = float(bal.get("locked", 0) or 0)
+    return float(bal.get("total", free + locked) or (free + locked))
+
+
+def _plan_mexc_exit(exchange, symbol: str, trade: Dict) -> _MexcExitPlan:
+    """Pre-SELL reconciliation plan for MEXC LONG exits."""
+    plan = _MexcExitPlan()
+    if not _is_mexc_exchange(exchange):
+        return plan
+    if (trade.get("side") or "BUY").upper() != "BUY":
+        return plan
+    base = _base_asset_from_symbol(symbol)
+    try:
+        plan.exchange_total = _mexc_balance_total(exchange, base)
+    except Exception:
+        return plan
+    dust = _mexc_dust_threshold(exchange, symbol)
+    trade_qty = float(trade.get("quantity") or 0)
+    if plan.exchange_total <= dust:
+        plan.reconciled = True
+        return plan
+    avail_qty = exchange.round_quantity(symbol, plan.exchange_total)
+    if avail_qty <= 0:
+        plan.reconciled = True
+        return plan
+    sell_qty = exchange.round_quantity(symbol, min(trade_qty, plan.exchange_total))
+    if sell_qty <= 0:
+        plan.reconciled = True
+        return plan
+    plan.sell_qty = sell_qty
+    plan.partial = sell_qty < trade_qty
+    return plan
+
+
+def _reconcile_close_mexc(log_fn, trade: Dict, symbol: str, price: float,
+                          exchange_total: float) -> bool:
+    """Mark an open MEXC trade closed without sending a SELL. Returns True if closed."""
+    import bot as _bot
+    base = _base_asset_from_symbol(symbol)
+    entry = float(trade.get("entry_price") or 0)
+    exit_price = float(price) if price and price > 0 else entry
+    close_reason = (
+        f"Reconciled: no {base} balance on MEXC; trade missing from exchange / "
+        f"already closed externally")
+    log_fn("WARNING",
+           f"[RECONCILE] {symbol} open trade has no MEXC balance; "
+           f"marking closed reconciled")
+    closed = _bot.close_trade(
+        trade["id"],
+        exit_price,
+        close_reason,
+        exit_fee=0.0,
+        quantity_sold=0,
+        reconciliation_status="missing_exchange_balance",
+        reconciliation_exchange_total=exchange_total,
+        force_profit_loss=0.0,
+    )
+    return closed is not None
+
+
+def _mexc_post_close_oversold_reconcile(exchange, log_fn, trade: Dict,
+                                        symbol: str, price: float) -> bool:
+    """After a failed SELL, close if MEXC balance is zero (Oversold fallback)."""
+    if not _is_mexc_exchange(exchange):
+        return False
+    import bot as _bot
+    if not any(t.get("id") == trade.get("id") and t.get("status") == "open"
+               for t in _bot.load_trades()):
+        return False
+    base = _base_asset_from_symbol(symbol)
+    try:
+        total = _mexc_balance_total(exchange, base)
+    except Exception:
+        return False
+    dust = _mexc_dust_threshold(exchange, symbol)
+    if total > dust:
+        return False
+    return _reconcile_close_mexc(log_fn, trade, symbol, price, total)
+
+
+def _mexc_exit_close(exchange, close_fn, log_fn, trade: Dict, symbol: str,
+                     price: float, reason: str) -> None:
+    """Balance-gated exit: reconcile phantoms, cap partial sells, then close_fn."""
+    plan = _plan_mexc_exit(exchange, symbol, trade)
+    if plan.reconciled:
+        _reconcile_close_mexc(log_fn, trade, symbol, price, plan.exchange_total)
+        return
+    work_trade = trade
+    work_reason = reason
+    if _is_mexc_exchange(exchange) and plan.sell_qty is not None:
+        work_trade = dict(trade)
+        work_trade["quantity"] = plan.sell_qty
+        if plan.partial:
+            base = _base_asset_from_symbol(symbol)
+            work_reason = (
+                f"{reason} | partial reconciliation: sold {plan.sell_qty} of "
+                f"{float(trade.get('quantity') or 0)} "
+                f"(MEXC {base} balance {plan.exchange_total})")
+    close_fn(work_trade, price, work_reason)
+    _mexc_post_close_oversold_reconcile(exchange, log_fn, trade, symbol, price)
+
+
 # ── Position sizing ──────────────────────────────────────────────────────────
 def compute_order_amount(settings: LiveSettings, free_usdt: float,
                          current_exposure: float):
@@ -260,6 +396,10 @@ class DipLiveEngine:
             pass
         self._log(level, f"[{rec.symbol}] {reason}")
         return _publish(rec)
+
+    def _exit_close(self, trade: Dict, symbol: str, price: float, reason: str) -> None:
+        """MEXC balance reconciliation before SELL, then delegate to close_fn."""
+        _mexc_exit_close(self.exchange, self._close, self._log, trade, symbol, price, reason)
 
     # ── main evaluation (12-step path) ───────────────────────────────────────
     def evaluate(self, *, symbol: str, settings: LiveSettings,
@@ -543,7 +683,7 @@ class DipLiveEngine:
                     msg = f"Breakeven exit — profit {profit_pct:+.3f}% (SL moved to entry)"
                     self._log("ORDER", f"[{symbol}] 🛡️ BREAKEVEN | {trade.get('id')} | {msg}")
                     try:
-                        self._close(trade, price, msg)
+                        self._exit_close(trade, symbol, price, msg)
                     except Exception as e:
                         return self._skip(rec, f"Exit order failed: {e}", level="ERROR")
                     if self.cooldown is not None:
@@ -564,7 +704,7 @@ class DipLiveEngine:
                                f"{trail:.2f}% below peak {peak:+.3f}%")
                         self._log("ORDER", f"[{symbol}] {verb} | {trade.get('id')} | {msg}")
                         try:
-                            self._close(trade, price, msg)
+                            self._exit_close(trade, symbol, price, msg)
                         except Exception as e:
                             return self._skip(rec, f"Exit order failed: {e}", level="ERROR")
                         if self.cooldown is not None:
@@ -590,7 +730,7 @@ class DipLiveEngine:
         verb = "🔴 STOP LOSS" if is_stop else "🟢 TAKE PROFIT"
         self._log("ORDER", f"[{symbol}] {verb} | {trade.get('id')} | {decision.reason}")
         try:
-            self._close(trade, price, decision.reason)
+            self._exit_close(trade, symbol, price, decision.reason)
         except Exception as e:
             return self._skip(rec, f"Exit order failed: {e}", level="ERROR")
 
@@ -669,6 +809,10 @@ class StrategyLiveEngine:
             pass
         self._log(level, f"[{rec.symbol}] {reason}")
         return _publish(rec)
+
+    def _exit_close(self, trade: Dict, symbol: str, price: float, reason: str) -> None:
+        """MEXC balance reconciliation before SELL, then delegate to close_fn."""
+        _mexc_exit_close(self.exchange, self._close, self._log, trade, symbol, price, reason)
 
     # ── main evaluation ──────────────────────────────────────────────────────
     def evaluate(self, *, symbol: str, settings: LiveSettings,
@@ -929,7 +1073,7 @@ class StrategyLiveEngine:
             why = f"Take-profit hit at {price:.4f} ({profit_pct:+.2f}%)"
         self._log("ORDER", f"[{symbol}] {verb} | {trade.get('id')} | {why}")
         try:
-            self._close(trade, price, why)
+            self._exit_close(trade, symbol, price, why)
         except Exception as e:
             return self._skip(rec, f"Exit order failed: {e}", level="ERROR")
         if self.cooldown is not None:
