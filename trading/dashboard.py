@@ -4272,8 +4272,8 @@ with st.container():
         if _binance_connected and not binance_balance_err:
             st.caption(
                 f"💵 Binance amount left to deploy (after limits): "
-                f"**${_left_trade:,.2f}** USDT · free ${_binance_free_usdt:,.2f} · "
-                f"locked ${_binance_locked_usdt:,.2f}")
+                f"**${_left_trade:,.2f}** USDT · free ${binance_free_usdt:,.2f} · "
+                f"locked ${binance_locked_usdt:,.2f}")
 
         # ── Equity Curve Sparkline ─────────────────────────────────────────────
         _cum       = 0.0
