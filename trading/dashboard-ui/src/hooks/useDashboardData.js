@@ -12,6 +12,7 @@ export function useDashboardData() {
   const mounted = useRef(true);
   const inFlight = useRef(false);
   const hasLoadedRef = useRef(false);
+  const intervalRef = useRef(null);
 
   const refresh = useCallback(async () => {
     if (inFlight.current) return;
@@ -37,11 +38,21 @@ export function useDashboardData() {
 
   useEffect(() => {
     mounted.current = true;
+
+    if (intervalRef.current != null) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
     refresh();
-    const id = setInterval(refresh, POLL_MS);
+    intervalRef.current = setInterval(refresh, POLL_MS);
+
     return () => {
       mounted.current = false;
-      clearInterval(id);
+      if (intervalRef.current != null) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
     };
   }, [refresh]);
 
