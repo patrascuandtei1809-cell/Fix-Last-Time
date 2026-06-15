@@ -47,3 +47,25 @@ export function formatTime(iso) {
     return iso;
   }
 }
+
+export function todayUtcDateString() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+export function dailyPnlFromClosed(closedTrades = []) {
+  const today = todayUtcDateString();
+  return closedTrades.reduce((sum, t) => {
+    const ct = t.close_time || t.closed_at || '';
+    if (!String(ct).startsWith(today)) return sum;
+    const pnl = t.net_pnl ?? t.profit_loss;
+    return sum + (Number(pnl) || 0);
+  }, 0);
+}
+
+export function closedTodayCount(closedTrades = []) {
+  const today = todayUtcDateString();
+  return closedTrades.filter((t) => {
+    const ct = t.close_time || t.closed_at || '';
+    return String(ct).startsWith(today);
+  }).length;
+}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, MetricGrid, SectionTitle, Warnings } from '../Ui';
+import { Card, MetricGrid, SectionTitle } from '../Ui';
 
 export function ScannerTab({ data }) {
   const scanner = data?.scanner;
@@ -9,23 +9,39 @@ export function ScannerTab({ data }) {
   const rejects = payload.rejection_samples || [];
 
   return (
-    <div className="tab-panel">
-      <SectionTitle accent="mexc">Scanner universe</SectionTitle>
-      <Warnings items={scanner?.warnings} />
+    <div className="tab-panel scanner-panel">
+      <div className="scanner-hero mexc">
+        <div className="venue-hero-glow" aria-hidden="true" />
+        <div className="venue-hero-content">
+          <span className="venue-badge mexc">SCANNER</span>
+          <h1 className="venue-title">Universe Scanner</h1>
+          <p className="venue-desc">
+            {payload.updated_at
+              ? `Last run ${payload.updated_at.slice(0, 19)} UTC`
+              : 'Awaiting scanner output'}
+          </p>
+        </div>
+      </div>
+
       <MetricGrid>
-        <Card title="Raw symbols" value={payload.count_raw_total ?? '—'} accent="mexc" />
-        <Card title="Binance raw" value={raw.binance ?? '—'} />
-        <Card title="MEXC raw" value={raw.mexc ?? '—'} accent="mexc" />
-        <Card title="Scored" value={payload.count_scored ?? '—'} />
-        <Card title="Top selected" value={opps.length} accent="mexc" />
-        <Card title="Last run" value={payload.updated_at ? payload.updated_at.slice(0, 19) : '—'} sub={`MEXC scored: ${payload.count_mexc_scored ?? '—'}`} />
+        <Card title="Raw symbols" value={payload.count_raw_total ?? '—'} accent="mexc" glow />
+        <Card title="Binance raw" value={raw.binance ?? '—'} accent="binance" glow />
+        <Card title="MEXC raw" value={raw.mexc ?? '—'} accent="mexc" glow />
+        <Card title="Scored" value={payload.count_scored ?? '—'} glow />
+        <Card title="Top selected" value={opps.length} accent="mexc" glow />
+        <Card
+          title="MEXC scored"
+          value={payload.count_mexc_scored ?? '—'}
+          sub={payload.updated_at ? payload.updated_at.slice(0, 19) : '—'}
+          accent="mexc"
+        />
       </MetricGrid>
 
       <SectionTitle accent="mexc">Top 15 opportunities</SectionTitle>
       {!opps.length ? (
-        <p className="muted">No scanner opportunities in API response.</p>
+        <p className="muted empty-hint">No scanner opportunities in API response.</p>
       ) : (
-        <div className="table-wrap">
+        <div className="table-wrap glow-mexc">
           <table className="data-table">
             <thead>
               <tr>
@@ -40,10 +56,10 @@ export function ScannerTab({ data }) {
             <tbody>
               {opps.map((o, i) => (
                 <tr key={o.symbol || i}>
-                  <td>{i + 1}</td>
+                  <td className="mono muted">{i + 1}</td>
                   <td className="mono bold">{o.symbol}</td>
-                  <td className="up">{o.score ?? '—'}</td>
-                  <td>{o.volatility != null ? `${Number(o.volatility).toFixed(1)}%` : '—'}</td>
+                  <td className="up mono">{o.score ?? '—'}</td>
+                  <td className="mono">{o.volatility != null ? `${Number(o.volatility).toFixed(1)}%` : '—'}</td>
                   <td className="mono">{o.volume != null ? `$${Number(o.volume).toLocaleString()}` : '—'}</td>
                   <td>{o.exchange}</td>
                 </tr>

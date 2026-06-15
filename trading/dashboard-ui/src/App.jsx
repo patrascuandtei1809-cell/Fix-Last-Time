@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { TopBar } from './components/TopBar';
+import { OverviewSkeleton } from './components/Skeleton';
 import { useDashboardData } from './hooks/useDashboardData';
 import { OverviewTab } from './components/tabs/OverviewTab';
 import { BinanceTab } from './components/tabs/BinanceTab';
@@ -21,11 +22,11 @@ const TABS = [
 
 export default function App() {
   const [tab, setTab] = useState('overview');
-  const { data, error, lastFetch } = useDashboardData();
+  const { data, error, lastFetch, isRefreshing, hasLoaded } = useDashboardData();
 
   const renderTab = () => {
-    if (!data && !error) {
-      return <div className="loading">Connecting to FastAPI…</div>;
+    if (!hasLoaded && !error) {
+      return tab === 'overview' ? <OverviewSkeleton /> : <OverviewSkeleton />;
     }
     switch (tab) {
       case 'overview':
@@ -49,7 +50,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <TopBar data={data} lastFetch={lastFetch} error={error} />
+      <TopBar data={data} lastFetch={lastFetch} error={error} isRefreshing={isRefreshing} />
       <nav className="tab-nav">
         {TABS.map((t) => (
           <button
@@ -64,7 +65,7 @@ export default function App() {
       </nav>
       <main className="main-content">{renderTab()}</main>
       <footer className="footer">
-        FastAPI :8000 · Streamlit :8501 (unchanged) · React polls every 3s — no page reload
+        FastAPI :8000 · Streamlit :8501 (unchanged) · React polls every 3s — stale-while-revalidate
       </footer>
     </div>
   );
