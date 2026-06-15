@@ -102,12 +102,6 @@ def _order_fee_usdt(order: dict, coin: str, fill_price: float) -> float:
 
 # ── Page config ───────────────────────────────────────────────────────────────
 
-# ── UI auto-refresh only: refresh dashboard, NOT bot logic ───────────────────
-try:
-    from streamlit_autorefresh import st_autorefresh
-    st_autorefresh(interval=5000, key="ui_live_refresh")
-except Exception:
-    pass
 st.set_page_config(
     page_title="AlphaTrade",
     page_icon="📈",
@@ -132,14 +126,21 @@ div[data-testid="stConnectionStatus"] { display: none !important; }
 .stSpinner > div { background: transparent !important; }
 /* Keep the page from briefly going blank during rerun */
 .main .block-container { transition: none !important; }
+[data-testid="stAppViewContainer"], .main, section.main {
+    opacity: 1 !important; filter: none !important;
+}
+div[data-testid="stLoadingOverlay"], [data-testid="stStatusWidget"] {
+    display: none !important;
+}
+.stApp[data-testscript-state="running"] .main { opacity: 1 !important; }
 
 * { box-sizing: border-box; }
 html, body {
-    background: #0a0c10 !important;
-    color: #d1d4dc !important;
+    background: #0c0e14 !important;
+    color: #e8edf4 !important;
     font-family: 'Inter', -apple-system, sans-serif !important;
 }
-[data-testid="stAppViewContainer"] { background: #0a0c10 !important; overflow-x: hidden; }
+[data-testid="stAppViewContainer"] { background: #0c0e14 !important; overflow-x: hidden; }
 [data-testid="stHeader"]           { display: none !important; }
 [data-testid="stToolbar"]          { display: none !important; }
 [data-testid="stDecoration"]       { display: none !important; }
@@ -214,30 +215,39 @@ section[data-testid="stSidebar"] * { color: #c9d1d9 !important; }
 }
 @media(max-width:900px){ .cards{grid-template-columns:repeat(2,1fr);} }
 .card {
-    background:#0d1117; border:1px solid #1e2736;
-    border-radius:8px; padding:14px 16px;
-    transition:border-color .18s;
+    background: linear-gradient(180deg, #1a2230 0%, #121820 100%);
+    border:1px solid #2d3a4f;
+    border-radius:10px; padding:16px 18px;
+    transition:border-color .18s, box-shadow .18s;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset;
 }
-.card:hover { border-color:#2962ff44; }
+.card:hover {
+    border-color: #f0b90b55;
+    box-shadow: 0 0 0 1px rgba(240,185,11,0.12), 0 6px 20px -8px rgba(0,0,0,0.5);
+}
+.cards-binance .card { border-color:#f0b90b33; }
+.cards-binance .card:hover { border-color:#f0b90b77; }
 .c-lbl {
-    font-size:10px; color:#6e7681; text-transform:uppercase;
-    letter-spacing:.12em; margin-bottom:8px; font-weight:500;
+    font-size:11px; color:#aeb8c4; text-transform:uppercase;
+    letter-spacing:.10em; margin-bottom:8px; font-weight:600;
 }
 .c-val {
-    font-size:20px; font-weight:700; color:#f0f6fc;
-    font-family:'JetBrains Mono',monospace; line-height:1;
+    font-size:22px; font-weight:700; color:#f8fafc;
+    font-family:'JetBrains Mono',monospace; line-height:1.1;
 }
-.c-val.up  { color:#26a69a; }
-.c-val.dn  { color:#ef5350; }
-.c-sub { font-size:10px; color:#484f58; margin-top:5px; }
+.c-val.up  { color:#3dd68c; }
+.c-val.dn  { color:#ff6b6b; }
+.c-sub { font-size:11px; color:#9aa4b2; margin-top:6px; }
 
 /* ── Section label ── */
 .sec-lbl {
-    font-size:10px; font-weight:600; color:#6e7681;
-    text-transform:uppercase; letter-spacing:.12em;
-    margin:18px 0 8px; padding-bottom:6px;
-    border-bottom:1px solid #1e2736;
+    font-size:13px; font-weight:700; color:#e8edf4;
+    text-transform:uppercase; letter-spacing:.08em;
+    margin:20px 0 10px; padding:8px 0 8px 12px;
+    border-bottom:1px solid #2a3344;
+    border-left:3px solid #64748b;
 }
+.sec-lbl.sec-mexc { border-left-color:#6366f1; color:#c4d4ff; }
 
 /* ── Chart header ── */
 .chart-bar {
@@ -260,10 +270,10 @@ section[data-testid="stSidebar"] * { color: #c9d1d9 !important; }
 /* ── Open positions ── */
 .pos-card {
     display:flex; justify-content:space-between; align-items:center;
-    background:#0d1117; border:1px solid #1e273680;
-    border-radius:6px; padding:10px 14px; margin-bottom:8px;
-    font-family:'JetBrains Mono',monospace; font-size:12px;
-    flex-wrap:wrap; gap:8px;
+    background:#141c28; border:1px solid #2d3a4f;
+    border-radius:8px; padding:12px 16px; margin-bottom:10px;
+    font-family:'JetBrains Mono',monospace; font-size:13px;
+    flex-wrap:wrap; gap:10px; color:#e8edf4;
 }
 .pos-buy  { border-left:3px solid #26a69a; }
 .pos-sell { border-left:3px solid #ef5350; }
@@ -344,11 +354,53 @@ section[data-testid="stSidebar"] * { color: #c9d1d9 !important; }
 .chart-title span:first-child {
     font-size: 14px; letter-spacing: -0.2px;
 }
-.sec-lbl {
-    background: linear-gradient(90deg, #6e7681 0%, #484f58 100%);
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-    background-clip: text;
+
+/* ── Venue blocks (Binance / MEXC terminals) ── */
+.venue-block {
+    border:1px solid; border-left-width:5px; border-radius:12px;
+    padding:16px 20px; margin:20px 0 16px;
+    box-shadow: 0 4px 24px -8px rgba(0,0,0,0.45);
 }
+.venue-binance { box-shadow: 0 4px 28px -10px rgba(240,185,11,0.25); }
+.venue-mexc   { box-shadow: 0 4px 28px -10px rgba(99,102,241,0.30); }
+.venue-title  { font-size:22px; font-weight:800; letter-spacing:.06em; }
+.venue-sub    { font-size:12px; color:#b8c4d4; margin-top:4px; line-height:1.45; }
+
+/* ── Health + scanner metric grids ── */
+.health-grid, .scanner-grid {
+    display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:8px;
+}
+@media(max-width:900px){ .health-grid,.scanner-grid{grid-template-columns:repeat(2,1fr);} }
+.health-cell, .scan-cell {
+    background:#141c28; border:1px solid #2d3a4f; border-radius:8px;
+    padding:10px 12px;
+}
+.health-cell.health-ok { border-color:#3dd68c44; }
+.health-cell.health-warn { border-color:#64748b; }
+.scan-cell.accent { border-color:#6366f166; background:#12182a; }
+.h-lbl, .s-lbl { font-size:10px; color:#9aa4b2; text-transform:uppercase;
+    letter-spacing:.08em; font-weight:600; margin-bottom:4px; }
+.h-val, .s-val { font-size:14px; font-weight:700; color:#f8fafc;
+    font-family:'JetBrains Mono',monospace; }
+.health-foot { font-size:11px; color:#8b95a5; margin:4px 0 12px; }
+
+/* ── Wallet panels ── */
+.wallet-panel {
+    border-radius:10px; padding:14px 16px; margin-bottom:8px;
+}
+.wallet-mexc {
+    background:linear-gradient(135deg,#12182a,#0d1220);
+    border:1px solid #6366f155;
+    box-shadow: 0 0 20px -8px rgba(99,102,241,0.35);
+}
+.w-lbl { font-size:10px; font-weight:700; letter-spacing:.1em; color:#818cf8; margin-bottom:6px; }
+.w-val { font-size:22px; font-weight:700; color:#f8fafc; font-family:'JetBrains Mono',monospace; }
+.w-unit { font-size:12px; color:#9aa4b2; font-weight:500; }
+.w-sub  { font-size:11px; color:#b8c4d4; margin-top:6px; font-family:'JetBrains Mono',monospace; }
+
+/* ── DataFrames / tables ── */
+[data-testid="stDataFrame"] { border:1px solid #2d3a4f; border-radius:8px; overflow:hidden; }
+[data-testid="stDataFrame"] div { color:#e8edf4 !important; }
 
 /* ── Market overview strip ── */
 .mkt-strip {
@@ -1136,6 +1188,46 @@ def _mexc_ex():
     return _MX(client=_MXC(*_creds),
                live_orders=bool(st.session_state.get("mexc_live_orders", False)))
 
+
+@st.cache_data(ttl=3, show_spinner=False)
+def _cached_binance_usdt(_key_fp: str, _secret_tag: int):
+    """Short-TTL cache — one balance fetch per refresh window, not per widget."""
+    cl = _cl()
+    if cl is None:
+        return None
+    return cl.get_account_balance("USDT")
+
+
+@st.cache_data(ttl=5, show_spinner=False)
+def _cached_account_value(_key_fp: str, _secret_tag: int, _key8: str):
+    """USDT + coin holdings valuation — cached separately from USDT-only."""
+    cl = _cl()
+    if cl is None:
+        return None
+    return _compute_account_value(cl, _key8)
+
+
+@st.cache_data(ttl=3, show_spinner=False)
+def _cached_mexc_wallet(_live: bool, _creds_fp: str):
+    """MEXC balances — avoids rebuilding client on every panel/rerun."""
+    from exchanges.mexc import (
+        MexcExchange as _MX, MexcClient as _MXC,
+        load_mexc_credentials as _load_mx_creds,
+    )
+    _creds = _load_mx_creds()
+    if not _creds:
+        return None
+    _mx = _MX(client=_MXC(*_creds), live_orders=_live)
+    _all = _mx.client.get_all_balances()
+    _mxb = _all.get("USDT", {"free": 0, "locked": 0, "total": 0})
+    return {
+        "all": _all,
+        "total": float(_mxb.get("total", 0.0)),
+        "free": float(_mxb.get("free", 0.0)),
+        "locked": float(_mxb.get("locked", 0.0)),
+    }
+
+
 def _fmt_p(v, d=4): return f"${v:,.{d}f}" if v is not None else "—"
 
 @st.cache_data(ttl=30, show_spinner=False)
@@ -1200,7 +1292,7 @@ CHART_CANDLES = 2000
 # Cached so we don't re-download 2000 candles on every 5s Streamlit rerun.
 # TTL 10s keeps the chart fresh enough for scalping while collapsing the
 # repeated paginated REST calls into one fetch per symbol/interval window.
-@st.cache_data(ttl=10, show_spinner=False)
+@st.cache_data(ttl=15, show_spinner=False)
 def _deep_chart_df(sym: str, interval: str, use_auth: bool, limit: int):
     if use_auth and _cl():
         raw = _cl().get_klines(sym, interval, limit=limit)
@@ -1348,15 +1440,17 @@ binance_balance_err  = None  # populated on API failure → shown in UI
 _binance_connected   = (st.session_state.connected and _cl() is not None)
 if _binance_connected:
     try:
-        # CALLED EVERY REFRESH (no cache) — this is the live USDT balance
-        _bal = _cl().get_account_balance("USDT")
+        _k = st.session_state.get("api_key") or ""
+        _s = st.session_state.get("api_secret") or ""
+        _bal = _cached_binance_usdt(_k[:8], hash(_s))
+        if _bal is None:
+            raise RuntimeError("Binance client unavailable")
         binance_total_usdt  = _bal["total"]
         binance_free_usdt   = _bal["free"]
         binance_locked_usdt = _bal["locked"]
         balance             = binance_total_usdt
     except Exception as _e:
         binance_balance_err = str(_e)
-        # Failed balance call is critical — surface it, do NOT fall back to fake equity
         balance = 0.0
 
 # ── TRUE account value: USDT + live value of ALL coin holdings ────────────────
@@ -1368,7 +1462,11 @@ account_unpriced   = []
 account_value_err  = None
 if _binance_connected and not binance_balance_err:
     try:
-        _av = _compute_account_value(_cl(), (st.session_state.get("api_key") or "")[:8])
+        _k = st.session_state.get("api_key") or ""
+        _s = st.session_state.get("api_secret") or ""
+        _av = _cached_account_value(_k[:8], hash(_s), _k[:8])
+        if _av is None:
+            raise RuntimeError("account valuation unavailable")
         account_value_usdt = _av["total"]
         account_holdings   = _av["holdings"]
         account_unpriced   = _av.get("unpriced", [])
@@ -3205,11 +3303,10 @@ def _render_health_panel(
     binance_connected: bool,
     mexc_connected: bool,
 ):
-    """24/7 health — real process heartbeats + live connection state."""
+    """24/7 health — compact terminal-style status grid."""
     _sec("🏥 System Health")
     _hb_bot = heartbeats.read("bot", max_age_sec=120)
     _hb_scan = heartbeats.read("scanner", max_age_sec=300)
-    _hb_dash = heartbeats.read("dashboard", max_age_sec=60)
     _scan_payload = dsupport.load_scanner_payload()
     _last_scan = _scan_payload.get("updated_at") or "—"
     try:
@@ -3220,21 +3317,30 @@ def _render_health_panel(
     _last_tick = get_shared_last_tick()
     _last_sig = get_bot_last_signal()
     _ls_msg = (_last_sig.get("message") or "")[:80] if _last_sig else "—"
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Streamlit", "ALIVE")
-    c2.metric("Bot", "RUNNING" if bot_running else "OFF")
-    c3.metric("Binance", "CONNECTED" if binance_connected else "OFF")
-    c4.metric("MEXC", "CONNECTED" if mexc_connected else "OFF")
-    d1, d2, d3, d4 = st.columns(4)
-    d1.metric("Scanner daemon", "ON" if _scan_daemon else "OFF")
-    d2.metric("Last scan", str(_last_scan)[:19])
-    d3.metric("Last bot tick", _fmt_london(_last_tick) if _last_tick else "—")
-    d4.metric("Last decision", _ls_msg[:40])
-    st.caption(
-        f"Heartbeats: bot={'OK' if _hb_bot and not _hb_bot.get('stale') else 'stale/missing'} · "
-        f"scanner={'OK' if _hb_scan and not _hb_scan.get('stale') else 'stale/missing'} · "
-        f"dashboard refresh {int(st.session_state.get('refresh_secs', 3))}s · "
-        f"trades files {_trades_status.get('file_count', 0)}"
+
+    def _hc(lbl, val, ok=True):
+        _cls = "health-ok" if ok else "health-warn"
+        return (f'<div class="health-cell {_cls}">'
+                f'<div class="h-lbl">{lbl}</div>'
+                f'<div class="h-val">{val}</div></div>')
+
+    _hb_b = "OK" if _hb_bot and not _hb_bot.get("stale") else "stale"
+    _hb_s = "OK" if _hb_scan and not _hb_scan.get("stale") else "stale"
+    st.markdown(
+        '<div class="health-grid">'
+        + _hc("Streamlit", "ALIVE")
+        + _hc("Bot", "RUNNING" if bot_running else "OFF", bot_running)
+        + _hc("Binance", "CONNECTED" if binance_connected else "OFF", binance_connected)
+        + _hc("MEXC", "CONNECTED" if mexc_connected else "OFF", mexc_connected)
+        + _hc("Scanner", "ON" if _scan_daemon else "OFF", _scan_daemon)
+        + _hc("Last scan", str(_last_scan)[:16])
+        + _hc("Bot tick", _fmt_london(_last_tick) if _last_tick else "—")
+        + _hc("Decision", _ls_msg[:28])
+        + '</div>'
+        f'<div class="health-foot">Heartbeats bot={_hb_b} · scanner={_hb_s} · '
+        f'refresh {int(st.session_state.get("refresh_secs", 3))}s · '
+        f'trades {_trades_status.get("file_count", 0)} files</div>',
+        unsafe_allow_html=True,
     )
 
 
@@ -3246,16 +3352,26 @@ def _render_scanner_status_panel():
         st.warning(dsupport.scanner_file_missing_message())
         return payload
     raw = payload.get("count_raw") or {}
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Raw symbols", payload.get("count_raw_total", sum(raw.values()) if raw else "—"))
-    c2.metric("Binance raw", raw.get("binance", "—"))
-    c3.metric("MEXC raw", raw.get("mexc", "—"))
-    c4.metric("Scored total", payload.get("count_scored", "—"))
-    c5.metric("Top selected", len(payload.get("opportunities") or []))
-    st.caption(
-        f"Last run: {payload.get('updated_at', '—')} · "
-        f"MEXC scored: {payload.get('count_mexc_scored', '—')} · "
-        f"Max open MEXC trades: {_mexc_cap()}"
+    _raw_t = payload.get("count_raw_total", sum(raw.values()) if raw else "—")
+    _scored = payload.get("count_scored", "—")
+    _top_n = len(payload.get("opportunities") or [])
+    st.markdown(
+        '<div class="scanner-grid">'
+        f'<div class="scan-cell"><div class="s-lbl">Raw symbols</div>'
+        f'<div class="s-val">{_raw_t}</div></div>'
+        f'<div class="scan-cell"><div class="s-lbl">Binance raw</div>'
+        f'<div class="s-val">{raw.get("binance", "—")}</div></div>'
+        f'<div class="scan-cell"><div class="s-lbl">MEXC raw</div>'
+        f'<div class="s-val">{raw.get("mexc", "—")}</div></div>'
+        f'<div class="scan-cell"><div class="s-lbl">Scored total</div>'
+        f'<div class="s-val">{_scored}</div></div>'
+        f'<div class="scan-cell accent"><div class="s-lbl">Top selected</div>'
+        f'<div class="s-val">{_top_n}</div></div>'
+        '</div>'
+        f'<div class="health-foot">Last run: {payload.get("updated_at", "—")} · '
+        f'MEXC scored: {payload.get("count_mexc_scored", "—")} · '
+        f'max open {_mexc_cap()}</div>',
+        unsafe_allow_html=True,
     )
     rejects = payload.get("rejection_samples") or []
     if rejects:
@@ -3436,17 +3552,13 @@ def _sec(title: str):
     st.markdown(f'<div class="sec-lbl">{title}</div>', unsafe_allow_html=True)
 
 
-    st.markdown(f'<div class="sec-lbl">{title}</div>', unsafe_allow_html=True)
-
-
 def _venue_header(title: str, sub: str, color: str, bg: str):
+    _venue_cls = "venue-block venue-binance" if "BINANCE" in title.upper() else "venue-block venue-mexc"
     st.markdown(
-        f'<div style="background:{bg};border:1px solid {color}55;'
-        f'border-left:4px solid {color};border-radius:10px;'
-        f'padding:12px 18px;margin:18px 0 14px;">'
-        f'<div style="font-size:18px;font-weight:800;color:{color};'
-        f'letter-spacing:.05em;">{title}</div>'
-        f'<div style="font-size:11px;color:#8b949e;margin-top:2px;">{sub}</div>'
+        f'<div class="{_venue_cls}" style="background:{bg};border-color:{color}66;'
+        f'border-left-color:{color};">'
+        f'<div class="venue-title" style="color:{color};">{title}</div>'
+        f'<div class="venue-sub">{sub}</div>'
         f'</div>', unsafe_allow_html=True)
 
 
@@ -3686,36 +3798,33 @@ def _render_mexc_wallet():
     """MEXC (MCD) wallet — separate from Binance, real balance via MexcExchange."""
     _mexc_live = bool(st.session_state.get("mexc_live_orders", False))
     _mexc_tag = "⚠️ LIVE" if _mexc_live else "🔒 DRY-RUN"
-    st.markdown(f'<div style="font-size:11px;font-weight:800;color:#3b82f6;'
-                f'letter-spacing:.08em;margin:4px 0 4px;">🔵 MEXC (MCD) '
-                f'WALLET · {_mexc_tag} — separate wallet</div>',
+    st.markdown(f'<div class="sec-lbl sec-mexc">🔵 MEXC Wallet · {_mexc_tag}</div>',
                 unsafe_allow_html=True)
     try:
-        from exchanges.mexc import (
-            MexcExchange as _MX, MexcClient as _MXC,
-            load_mexc_credentials as _load_mx_creds,
-        )
+        from exchanges.mexc import load_mexc_credentials as _load_mx_creds
         _mx_creds = _load_mx_creds()
         if not _mx_creds:
             st.caption("🔵 MEXC: no MEXC keys saved — wallet not connected "
                        "(save `data/.mexc_creds.json` to show balance). "
                        "Binance trading is unaffected.")
         else:
-            _mx = _MX(client=_MXC(*_mx_creds), live_orders=_mexc_live)
-            _all = _mx.client.get_all_balances()
-            _mxb = _all.get("USDT", {"free":0,"locked":0,"total":0})
-            _mx_total = float(_mxb.get("total", 0.0))
-            _mx_free = float(_mxb.get("free", 0.0))
-            _mx_lock = float(_mxb.get("locked", 0.0))
+            _fp = (_mx_creds[0] or "")[:8]
+            _wb = _cached_mexc_wallet(_mexc_live, _fp)
+            if _wb is None:
+                raise RuntimeError("MEXC wallet unavailable")
+            _all = _wb["all"]
+            _mx_total = _wb["total"]
+            _mx_free = _wb["free"]
+            _mx_lock = _wb["locked"]
             st.caption("MEXC assets: " + ", ".join(
-                f"{a}: {v.get('total',0):.8g}" for a,v in _all.items()
-                if float(v.get("total",0) or 0) > 0
+                f"{a}: {v.get('total',0):.8g}" for a, v in _all.items()
+                if float(v.get("total", 0) or 0) > 0
             ))
             st.markdown(f"""
-<div style="background:#0a1020;border:1px solid #3b82f644;border-radius:8px;padding:10px 12px;margin-bottom:6px;">
-  <div style="font-size:9px;color:#3b82f6;font-weight:700;letter-spacing:.1em;margin-bottom:4px;">MEXC WALLET · {_mexc_tag}</div>
-  <div style="font-size:18px;font-weight:700;color:#f0f6fc;font-family:'JetBrains Mono',monospace;">${_mx_total:,.2f} <span style="font-size:11px;color:#6e7681;">USDT total</span></div>
-  <div style="font-size:10px;color:#8b949e;margin-top:4px;font-family:'JetBrains Mono',monospace;">free ${_mx_free:,.2f} · locked ${_mx_lock:,.2f}</div>
+<div class="wallet-panel wallet-mexc">
+  <div class="w-lbl">MEXC WALLET · {_mexc_tag}</div>
+  <div class="w-val">${_mx_total:,.2f} <span class="w-unit">USDT total</span></div>
+  <div class="w-sub">free ${_mx_free:,.2f} · locked ${_mx_lock:,.2f}</div>
 </div>""", unsafe_allow_html=True)
             _mexc_exp = sum((t.get("invested") or 0) for t in open_trades
                             if (t.get("exchange") or "") == "mexc")
@@ -3970,14 +4079,16 @@ def _render_ai_decisions(symbols, acts: dict, accent: str, venue: str = "binance
     head = ("Coin", "ML %", "MACD", "RSI", "Trend", "Vol", "Score", "Decision", "Reason")
     thead = "".join(f"<th>{h}</th>" for h in head)
     st.markdown(
-        "<style>.dec-tbl{width:100%;border-collapse:collapse;font-size:12px;"
-        "font-family:JetBrains Mono,monospace;}"
-        ".dec-tbl th{text-align:left;color:#6e7681;font-size:10px;font-weight:700;"
-        "letter-spacing:.04em;padding:5px 10px;border-bottom:1px solid #21262d;}"
-        ".dec-tbl td{padding:5px 10px;border-bottom:1px solid #161b22;"
-        "vertical-align:middle;}</style>"
-        f'<div style="border-left:3px solid {accent};border-radius:8px;'
-        f'overflow-x:auto;background:#0d111733;">'
+        "<style>.dec-tbl{width:100%;border-collapse:collapse;font-size:13px;"
+        "font-family:JetBrains Mono,monospace;color:#e8edf4;}"
+        ".dec-tbl th{text-align:left;color:#b8c4d4;font-size:11px;font-weight:700;"
+        "letter-spacing:.04em;padding:8px 12px;border-bottom:1px solid #2d3a4f;"
+        "background:#141c28;}"
+        ".dec-tbl td{padding:8px 12px;border-bottom:1px solid #1e2838;"
+        "vertical-align:middle;color:#e8edf4;}"
+        ".dec-tbl tr:hover td{background:#1a2434;}</style>"
+        f'<div class="signal-panel" style="border-left:4px solid {accent};border-radius:10px;'
+        f'overflow-x:auto;background:#121820;border:1px solid #2d3a4f;">'
         f'<table class="dec-tbl"><thead><tr>{thead}</tr></thead>'
         f'<tbody>{"".join(rows)}</tbody></table></div>',
         unsafe_allow_html=True)
@@ -4212,7 +4323,7 @@ with st.container():
 
         _sec("💰 Wallet Overview")
         st.markdown(f"""
-<div class="cards">
+<div class="cards cards-binance">
   <div class="card" style="{_bin_card_style}">
     <div class="c-lbl">Account Value</div>
     <div class="c-val">{_acct_disp}</div>
@@ -5218,7 +5329,7 @@ if st.session_state.get("_last_settings_hash") != _snap_hash:
             st.toast("✅ Settings saved", icon="💾")
         st.session_state._settings_initial_saved = True
 
-# ── Dashboard heartbeat + auto-refresh (Phase 3) ─────────────────────────────
+# ── Dashboard heartbeat + smooth auto-refresh (no st.rerun flicker) ───────────
 try:
     heartbeats.write("dashboard", {
         "refresh_secs": int(st.session_state.get("refresh_secs", 3)),
@@ -5227,11 +5338,30 @@ try:
 except Exception:
     pass
 
-_ref_sec = max(3, int(st.session_state.get("refresh_secs", 3)))
-_now_ar = time.time()
-_last_ar = float(st.session_state.get("_auto_refresh_at") or 0)
-if _last_ar == 0:
-    st.session_state._auto_refresh_at = _now_ar
-elif (_now_ar - _last_ar) >= _ref_sec:
-    st.session_state._auto_refresh_at = _now_ar
-    st.rerun()
+_ref_ms = max(3000, int(st.session_state.get("refresh_secs", 3)) * 1000)
+try:
+    from streamlit_autorefresh import st_autorefresh
+    st_autorefresh(interval=_ref_ms, key="at_ui_refresh")
+except Exception:
+    pass
+
+# Preserve scroll position across Streamlit reruns (reduces scroll-jump pain)
+st_html.html("""
+<script>
+(function(){
+  try {
+    var doc = window.parent.document;
+    var main = doc.querySelector('section.main');
+    if (!main) return;
+    var key = 'at_scroll_y';
+    var saved = sessionStorage.getItem(key);
+    if (saved) main.scrollTop = parseInt(saved, 10) || 0;
+    var t = null;
+    main.addEventListener('scroll', function(){
+      clearTimeout(t);
+      t = setTimeout(function(){ sessionStorage.setItem(key, main.scrollTop); }, 120);
+    }, {passive:true});
+  } catch(e) {}
+})();
+</script>
+""", height=0)
