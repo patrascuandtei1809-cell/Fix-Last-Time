@@ -496,9 +496,21 @@ class MexcExchange(Exchange):
 
     def place_sell_order(self, symbol: str, qty: float) -> Dict:
         price = self.get_price(symbol)
-        qty = self.round_quantity(symbol, qty)
+        raw_qty = float(qty)
+        filters = self.get_symbol_filters(symbol)
+        step = filters.get("step_size") or 0.000001
+        min_qty = float(filters.get("min_qty") or 0)
+        qty = self.round_quantity(symbol, raw_qty)
         if not self.live_orders or not self.client:
             return self._simulate(symbol, "SELL", qty, price)
+        print(f"[MEXC-EX] rounded SELL qty {symbol} raw={raw_qty} "
+              f"rounded={qty} step={step}", flush=True)
+        if qty <= 0:
+            return self._fail(symbol, "SELL", qty,
+                              f"rounded qty {qty} <= 0 (raw={raw_qty})")
+        if min_qty > 0 and qty < min_qty:
+            return self._fail(symbol, "SELL", qty,
+                              f"rounded qty {qty} < min_qty {min_qty}")
         print(f"[MEXC-EX] LIVE SELL {symbol} qty={qty} @ ~${price:.6f}",
               flush=True)
         try:
@@ -524,9 +536,10 @@ class MexcExchange(Exchange):
                 elif f.get("filterType") in ("MIN_NOTIONAL", "NOTIONAL"):
                     minn = float(f.get("minNotional") or f.get("notional") or minn)
             # MEXC exposes precision/min-amount as top-level fields too.
+            # Use the stricter (larger) step so qty never exceeds allowed decimals.
             prec = info.get("baseAssetPrecision")
             if prec is not None:
-                step = min(step, 10 ** (-int(prec)))
+                step = max(step, 10 ** (-int(prec)))
             if info.get("quoteAmountPrecision"):
                 try:
                     minn = float(info["quoteAmountPrecision"])
