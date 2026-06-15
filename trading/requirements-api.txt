@@ -1,0 +1,3 @@
+# AlphaTrade read-only FastAPI API (Phase A) — install alongside main requirements.
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
