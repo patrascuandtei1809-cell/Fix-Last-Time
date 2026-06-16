@@ -1206,6 +1206,23 @@ def _cached_account_value(_key_fp: str, _secret_tag: int, _key8: str):
     return _compute_account_value(cl, _key8)
 
 
+@st.cache_data(ttl=10, show_spinner=False)
+def _fastapi_health():
+    """Read-only ping to local FastAPI (:8000) — display only."""
+    try:
+        import urllib.request
+        req = urllib.request.Request(
+            "http://127.0.0.1:8000/api/health",
+            headers={"Accept": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            if resp.status == 200:
+                return True, "UP"
+    except Exception:
+        pass
+    return False, "OFF"
+
+
 @st.cache_data(ttl=3, show_spinner=False)
 def _cached_mexc_wallet(_live: bool, _creds_fp: str):
     """MEXC balances — avoids rebuilding client on every panel/rerun."""
@@ -3392,6 +3409,153 @@ def _render_open_trades_summary():
                f"MEXC {_mx}/{_mexc_cap()}")
 
 
+def _overview_latest_trade_event() -> str:
+    try:
+        for a in reversed(load_activity()):
+            msg = a.get("message") or ""
+            upl = msg.upper()
+            if any(x in upl for x in ("ORDER", "OPENED", "CLOSED", "BUY", "SELL", "FILLED")):
+                ts = (a.get("time") or "")[:19].replace("T", " ")
+                return f"{ts} — {dsupport.sanitize_log_message(msg, 140)}"
+    except Exception:
+        pass
+    _latest_closed = dsupport.sort_trades_latest_first(closed_trades)
+    if _latest_closed:
+        t = _latest_closed[0]
+        ct = (t.get("close_time") or "")[:19].replace("T", " ")
+        return f"{ct} — Closed {t.get('coin', '?')} · {_fmt_pnl(t.get('profit_loss'))}"
+    if open_trades:
+        t = open_trades[0]
+        ot = (t.get("open_time") or "")[:19].replace("T", " ")
+        return f"{ot} — Open {t.get('coin', '?')} {t.get('side', '')}"
+    return "—"
+
+
+def _overview_ai_decision_summary(acts: dict, mexc_syms) -> str:
+    _ls = get_bot_last_signal()
+    if _ls and _ls.get("message"):
+        return dsupport.sanitize_log_message(_ls["message"], 160)
+    for sym in list(_BIN_MAJORS) + list(mexc_syms or [])[:5]:
+        rec = (acts or {}).get(str(sym).upper())
+        if rec is None:
+            continue
+        d = (getattr(rec, "decision", "") or "HOLD").upper()
+        chg = getattr(rec, "change_pct", None)
+        ml = f" · Market-Low {chg:+.2f}%" if chg is not None else ""
+        return f"{sym.replace('USDT', '')}: {d}{ml}"
+    return "—"
+
+
+def _overview_mexc_free_usdt() -> float | None:
+    try:
+        from exchanges.mexc import load_mexc_credentials as _load_mx_creds
+        _creds = _load_mx_creds()
+        if not _creds:
+            return None
+        _wb = _cached_mexc_wallet(
+            bool(st.session_state.get("mexc_live_orders", False)),
+            (_creds[0] or "")[:8],
+        )
+        return float(_wb["free"]) if _wb else None
+    except Exception:
+        return None
+
+
+def _render_overview_tab(
+    bot_running: bool,
+    binance_connected: bool,
+    mexc_connected: bool,
+    mexc_syms,
+    acts: dict,
+):
+    """Slim operator overview — summary cards only, no duplicate venue panels."""
+    _sec("📊 System Summary")
+    try:
+        import scanner as _sc_mod
+        _scan_daemon = _sc_mod.is_daemon_running()
+    except Exception:
+        _scan_daemon = False
+    _scan_payload = dsupport.load_scanner_payload()
+    _hb_scan = heartbeats.read("scanner", max_age_sec=300)
+    _scan_running = _scan_daemon or bool(
+        _scan_payload.get("scanner_running")) or bool(
+        _hb_scan and not _hb_scan.get("stale"))
+    _api_ok, _api_lbl = _fastapi_health()
+
+    def _pill(lbl, val, ok=True):
+        cls = "health-ok" if ok else "health-warn"
+        return (f'<div class="health-cell {cls}">'
+                f'<div class="h-lbl">{lbl}</div>'
+                f'<div class="h-val">{val}</div></div>')
+
+    st.markdown(
+        '<div class="health-grid">'
+        + _pill("Bot", "RUNNING" if bot_running else "OFF", bot_running)
+        + _pill("Scanner", "RUNNING" if _scan_running else "OFF", _scan_running)
+        + _pill("Binance", "CONNECTED" if binance_connected else "OFF", binance_connected)
+        + _pill("MEXC", "CONNECTED" if mexc_connected else "OFF", mexc_connected)
+        + _pill("FastAPI", _api_lbl, _api_ok)
+        + '</div>',
+        unsafe_allow_html=True,
+    )
+
+    _deployed = sum((t.get("invested") or 0) for t in open_trades)
+    _mx_free = _overview_mexc_free_usdt()
+    _avail = (binance_free_usdt if binance_connected else 0.0)
+    if _mx_free is not None:
+        _avail += _mx_free
+    _equity_disp = account_value_usdt if account_value_usdt is not None else equity
+    _pnl_cls = "up" if total_pnl >= 0 else "dn"
+    _dpnl_cls = "up" if daily_pnl >= 0 else "dn"
+
+    _sec("💼 Portfolio Summary")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Total equity", f"${_equity_disp:,.2f}" if _equity_disp else "—")
+    c2.metric("Deployed USDT", f"${_deployed:,.2f}")
+    c3.metric("Available USDT", f"${_avail:,.2f}")
+    c4.metric("Open trades", len(open_trades))
+    c5, c6, c7, c8 = st.columns(4)
+    c5.metric("Daily P&L", _fmt_pnl(daily_pnl))
+    c6.metric("Total P&L", _fmt_pnl(total_pnl))
+    c7.metric("Binance open", f"{len(_bin_open)}/{_binance_cap()}")
+    c8.metric("MEXC open", f"{len(_mexc_open)}/{_mexc_cap()}")
+
+    _sec("⚡ Current Activity")
+    _last_tick = get_shared_last_tick()
+    _last_scan = (_scan_payload.get("updated_at") if _scan_payload else None) or "—"
+    _eff_syms, _venue_map, _scan_driven = _effective_bot_plan(
+        st.session_state.active_symbols)
+    _managed = ", ".join(s.replace("USDT", "") for s in _eff_syms) or "—"
+    st.markdown(
+        f"- **Last bot tick:** {dsupport.format_age(_last_tick) if _last_tick else '—'}"
+        f"  \n- **Last scan:** {dsupport.format_age(_last_scan) if _last_scan != '—' else '—'}"
+        f"  \n- **Managed symbols:** {_managed}"
+        f"  \n- **Latest trade event:** {_overview_latest_trade_event()}"
+        f"  \n- **Latest AI decision:** {_overview_ai_decision_summary(acts, mexc_syms)}"
+    )
+
+    _sec("🔀 Exchange Split")
+    _scan_sel = len((_scan_payload or {}).get("opportunities") or [])
+    _bin_core = "BTC · ETH · SOL"
+    _mexc_scan_lbl = "RUNNING" if _scan_running else "OFF"
+    ec1, ec2 = st.columns(2)
+    with ec1:
+        _bin_cash = f"${binance_free_usdt:,.2f}" if binance_connected else "—"
+        st.markdown(
+            f"**🟡 Binance**  \n"
+            f"Core markets: {_bin_core}  \n"
+            f"Open trades: {len(_bin_open)}/{_binance_cap()}  \n"
+            f"Wallet cash (USDT free): {_bin_cash}"
+        )
+    with ec2:
+        st.markdown(
+            f"**🔵 MEXC**  \n"
+            f"Scanner: {_mexc_scan_lbl}  \n"
+            f"Selected: {_scan_sel}  \n"
+            f"Slots: {len(_mexc_open)}/{_mexc_cap()}"
+        )
+
+
 def _finite(x, default=0.0):
     try:
         v = float(x)
@@ -3626,7 +3790,8 @@ def _render_trade_diagnostics_panel():
         _topblk = diagnostics.get_block_summary(top=10)
         _cyc = diagnostics.get_cycle_stats()
     except Exception as _diag_err:
-        st.warning(f"Diagnostics unavailable: {_diag_err}")
+        st.warning(f"Diagnostics unavailable: "
+                   f"{dsupport.sanitize_log_message(str(_diag_err))}")
         return
 
     _m1, _m2, _m3, _m4 = st.columns(4)
@@ -3781,36 +3946,118 @@ def _collect_settings_snapshot() -> dict:
 
 
 def _render_diagnostics_tab():
-    """Operator diagnostics — status cards, health, errors; raw JSON hidden."""
+    """Operator diagnostics — readable cards; raw JSON only in Advanced expander."""
     _sec("🔧 Diagnostics")
     try:
         from exchanges.mexc import load_mexc_credentials as _mx_cred_ok
         _mexc_connected = bool(_mx_cred_ok())
     except Exception:
         _mexc_connected = False
-    _render_diagnostics_status_cards(bot_running, _binance_connected, _mexc_connected)
-    st.divider()
-    _render_health_panel(bot_running, _binance_connected, _mexc_connected)
-    st.divider()
-    _render_trade_diagnostics_panel()
-    st.divider()
-    st.markdown("**Recent errors (activity log)**")
+
     try:
-        _acts = load_activity()
-        _errs = [a for a in _acts if (a.get("level") or "").upper() in ("ERROR", "WARNING")][-40:]
-        if _errs:
-            for a in reversed(_errs):
-                ts = _fmt_london(a.get("time"), "%Y-%m-%d %H:%M:%S")
-                st.caption(f"`{ts}` **[{a.get('level')}]** {a.get('message', '')[:200]}")
+        import scanner as _sc_mod
+        _scan_daemon = _sc_mod.is_daemon_running()
+    except Exception:
+        _scan_daemon = False
+    _scan_payload = dsupport.load_scanner_payload()
+    _hb_bot = heartbeats.read("bot", max_age_sec=120)
+    _hb_scan = heartbeats.read("scanner", max_age_sec=300)
+    _hb_dash = heartbeats.read("dashboard", max_age_sec=120)
+    _api_ok, _api_lbl = _fastapi_health()
+    _scan_up = _scan_daemon or bool(
+        (_scan_payload or {}).get("scanner_running")) or bool(
+        _hb_scan and not _hb_scan.get("stale"))
+
+    def _card(lbl, val, ok=True):
+        cls = "health-ok" if ok else "health-warn"
+        return (f'<div class="health-cell {cls}">'
+                f'<div class="h-lbl">{lbl}</div>'
+                f'<div class="h-val">{val}</div></div>')
+
+    _sec("🏥 Health")
+    st.markdown(
+        '<div class="health-grid">'
+        + _card("Streamlit", "ALIVE", True)
+        + _card("Bot", "RUNNING" if bot_running else "OFF", bot_running)
+        + _card("FastAPI", _api_lbl, _api_ok)
+        + _card("Binance", "CONNECTED" if _binance_connected else "OFF", _binance_connected)
+        + _card("MEXC", "CONNECTED" if _mexc_connected else "OFF", _mexc_connected)
+        + _card("Scanner", "RUNNING" if _scan_up else "OFF", _scan_up)
+        + _card("Heartbeats",
+                f"bot {dsupport.format_age(_hb_bot.get('at')) if _hb_bot else '—'}",
+                bool(_hb_bot and not _hb_bot.get("stale")))
+        + '</div>'
+        f'<div class="health-foot">Scanner heartbeat: '
+        f'{dsupport.format_age(_hb_scan.get("at")) if _hb_scan else "—"} · '
+        f'Dashboard heartbeat: '
+        f'{dsupport.format_age(_hb_dash.get("at")) if _hb_dash else "—"}</div>',
+        unsafe_allow_html=True,
+    )
+
+    _sec("⚠️ Latest warnings / errors")
+    try:
+        _log = load_activity()
+        _alert_rows = dsupport.recent_activity_alerts(_log, limit=15)
+        if _alert_rows:
+            st.dataframe(pd.DataFrame(_alert_rows), width="stretch", hide_index=True)
         else:
-            st.caption("No ERROR/WARNING entries in activity.json yet.")
+            st.caption("No ERROR/WARNING entries in the activity log.")
     except Exception as _ae:
-        st.caption(f"Activity log unavailable: {_ae}")
-    with st.expander("Advanced raw settings (debug)", expanded=False):
+        st.caption(f"Activity log unavailable: {dsupport.sanitize_log_message(str(_ae))}")
+
+    _sec("⚙️ Runtime facts")
+    _ex_mode = st.session_state.get("exchange_mode", "multi")
+    _use_scan = bool(st.session_state.get("use_scanner_symbols", False))
+    _, _venue_map, _scan_driven = _effective_bot_plan(st.session_state.active_symbols)
+    _venue_txt = (
+        f"{len(_venue_map)} symbol(s) mapped"
+        if _venue_map else "not configured"
+    )
+    st.markdown(
+        f"- **exchange_mode:** `{_ex_mode}`  \n"
+        f"- **use_scanner_symbols:** {'ON' if _use_scan else 'OFF'}  \n"
+        f"- **symbol_venues:** {_venue_txt}"
+    )
+    if _ex_mode == "multi" and _use_scan and not _venue_map:
+        st.warning(
+            "All active workers are currently routed to Binance because "
+            "symbol_venues is not configured."
+        )
+
+    _sec("📁 Files / data health")
+    import bot as _bot_mod
+    _settings_st = dsupport.settings_file_status(_bot_mod.SETTINGS_FILE)
+    _scan_age = dsupport.format_age(
+        (_scan_payload or {}).get("updated_at")) if _scan_payload else "—"
+    fc1, fc2, fc3, fc4 = st.columns(4)
+    fc1.metric("Trade files", _trades_status.get("file_count", 0))
+    fc2.metric("Scanner payload", _scan_age)
+    fc3.metric("Bot heartbeat", dsupport.format_age(_hb_bot.get("at")) if _hb_bot else "—")
+    fc4.metric("Settings file", _settings_st["status"])
+    st.caption(f"Settings: {_settings_st['detail']}")
+
+    with st.expander("Advanced debug (raw JSON / reports)", expanded=False):
+        st.markdown("**Settings snapshot**")
         try:
             st.json(_collect_settings_snapshot())
         except Exception as _se:
-            st.caption(f"Settings snapshot unavailable: {_se}")
+            st.caption(dsupport.sanitize_log_message(str(_se)))
+        st.markdown("**Diagnostics report**")
+        try:
+            from exchanges.binance import BinanceExchange
+            _client_now = st.session_state.get("client")
+            _ex_now = BinanceExchange(_client_now) if _client_now else None
+            _syms_now = list(st.session_state.active_symbols or _BIN_MAJORS)
+            st.code(diagnostics.build_report(exchange=_ex_now, symbols=_syms_now))
+        except Exception as _re:
+            st.caption(dsupport.sanitize_log_message(str(_re)))
+        st.markdown("**Scanner payload**")
+        if _scan_payload:
+            st.json(_scan_payload)
+        else:
+            st.caption(dsupport.scanner_file_missing_message())
+        st.divider()
+        _render_trade_diagnostics_panel()
 
 
 def trade_pnl_usd(t):
@@ -4751,21 +4998,8 @@ with st.container():
         _at_tab = _pick_main_tab()
 
         if _at_tab == _MAIN_TAB_LABELS[0]:
-            _render_health_panel(bot_running, _binance_connected, _mexc_connected)
-            _render_market_strip()
-            _render_overview_status_strip(
-                _conn_banner_parts, _bot_status_html, _reason_html)
-            _render_bot_symbol_overview()
-            _render_open_trades_summary()
-            _render_ai_decisions(_BIN_MAJORS, _acts, "#f0b90b", venue="binance")
-            if _mexc_syms:
-                st.markdown("**MEXC worker decisions (summary)**")
-                _render_ai_decisions(_mexc_syms, _acts, "#3b82f6", venue="mexc")
-            _render_ai_why_panel()
-            if _alert_events:
-                st.markdown("**Recent trade alerts**")
-                for ev in _alert_events[-5:]:
-                    st.caption(f"{ev.get('title','')} — {ev.get('body','')}")
+            _render_overview_tab(
+                bot_running, _binance_connected, _mexc_connected, _mexc_syms, _acts)
 
         elif _at_tab == _MAIN_TAB_LABELS[1]:
             _venue_header("🟡 BINANCE DASHBOARD",

@@ -646,3 +646,51 @@ def build_rejected_sample_rows(rejects: List[dict], *, limit: int = 30) -> List[
             "Reason": plain_rejection_reason(r.get("rejection") or "—"),
         })
     return rows
+
+
+def sanitize_log_message(msg: str, max_len: int = 200) -> str:
+    """Strip tracebacks — operator-facing activity text only."""
+    if not msg:
+        return "—"
+    lines = [
+        ln for ln in str(msg).splitlines()
+        if ln.strip() and not ln.strip().startswith("Traceback")
+        and "File \"" not in ln and not ln.strip().startswith("  ")
+    ]
+    text = " ".join(lines).strip()
+    if not text:
+        text = str(msg).split("Traceback")[0].strip()
+    return (text[:max_len] + "…") if len(text) > max_len else text
+
+
+def recent_activity_alerts(
+    activities: List[Dict],
+    *,
+    levels: Tuple[str, ...] = ("ERROR", "WARNING"),
+    limit: int = 15,
+) -> List[Dict[str, str]]:
+    rows: List[Dict[str, str]] = []
+    for a in reversed(activities or []):
+        lvl = (a.get("level") or "").upper()
+        if lvl not in levels:
+            continue
+        rows.append({
+            "Time": (a.get("time") or "")[:19].replace("T", " "),
+            "Level": lvl,
+            "Message": sanitize_log_message(a.get("message") or "—"),
+        })
+        if len(rows) >= limit:
+            break
+    return list(reversed(rows))
+
+
+def settings_file_status(path: str) -> Dict[str, str]:
+    if not path:
+        return {"status": "unknown", "detail": "—"}
+    if os.path.isfile(path):
+        try:
+            age = format_age(datetime.fromtimestamp(os.path.getmtime(path), tz=timezone.utc))
+            return {"status": "OK", "detail": f"present · modified {age}"}
+        except Exception:
+            return {"status": "OK", "detail": "present"}
+    return {"status": "missing", "detail": "file not found"}

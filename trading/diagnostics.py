@@ -168,7 +168,7 @@ def record_cycle(*, snaps: List[Dict], score_threshold: int,
         import time as _t
         secs_since = _t.time() - (last_global_trade_at or 0)
         throttle_left = max(0, int(throttle_sec) - int(secs_since))
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         with _LOCK:
             _cycle_count += 1
             _last_cycle_at = now
@@ -211,7 +211,7 @@ def record_dip_decision(*, symbol: str, signal: str, reason: str,
     own ActivityRecord-derived snapshot straight into the same journal that
     powers the 'WHY NO TRADE?' panel. Pure observation — never raises out."""
     try:
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         cat = None if traded else _categorize(reason)
         rec = {
             "ts":           now,
@@ -241,7 +241,7 @@ def record_dip_cycle(traded: bool) -> None:
     try:
         with _LOCK:
             _cycle_count += 1
-            _last_cycle_at = datetime.now()
+            _last_cycle_at = datetime.now(timezone.utc)
             if traded:
                 _traded_count += 1
     except Exception as e:
