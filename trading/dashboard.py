@@ -879,6 +879,102 @@ def _bot_start_blocker():
     return None
 
 
+def _launch_bot_from_plan(fallback_symbols=None):
+    """Build + start the singleton bot from the effective scanner routing plan."""
+    import bot as _bm
+    _fb = fallback_symbols or st.session_state.active_symbols
+    _eff_syms, _eff_venues, _eff_scan = _effective_bot_plan(_fb)
+    if not _eff_syms:
+        return None
+    _per_sym_rm = {}
+    for _s in _eff_syms:
+        _ov = st.session_state.per_symbol_risk.get(_s)
+        _per_sym_rm[_s] = RiskManager(_ov) if _ov else st.session_state.risk_manager
+    _global_rm = GlobalRiskManager(st.session_state.global_risk)
+    ck_val = int(st.session_state.check_every)
+    thr_val = float(st.session_state.threshold)
+    b = _bm.create_bot(
+        client            = st.session_state.client,
+        symbols           = _eff_syms,
+        per_symbol_risk   = _per_sym_rm,
+        global_risk       = _global_rm,
+        strategy          = st.session_state.strategy,
+        risk_manager      = st.session_state.risk_manager,
+        interval          = st.session_state.interval,
+        check_every       = ck_val,
+        threshold         = thr_val / 100,
+        initial_balance   = st.session_state.initial_balance,
+        ai_assist         = True,
+        ai_aggressiveness = "Active Scalper",
+        exchange_mode     = st.session_state.get("exchange_mode", "multi"),
+        mexc_live_orders  = bool(st.session_state.get("mexc_live_orders", False)),
+        symbol_venues     = _eff_venues,
+        scanner_driven    = _eff_scan,
+        rotate_scanner    = _eff_scan,
+        scanner_top_n     = _mexc_cap(),
+        manage_manual_trades = bool(getattr(st.session_state.global_risk,
+                                            "manage_manual_trades", False)),
+    )
+    am.apply_profile_to_bot(b, st.session_state.get("aggressive_mode", am.DEFAULT_MODE))
+    b._initial_balance = st.session_state.initial_balance
+    b.start()
+    st.session_state.bot_was_running = True
+    st.session_state._user_stopped_bot = False
+    print(f"[BOT] started — symbols={_eff_syms} venues={len(_eff_venues)} "
+          f"scanner_driven={_eff_scan}", flush=True)
+    return b
+
+
+def _ensure_scanner_routing():
+    """Rebuild a running bot when scanner routing is ON but workers were built
+    for the old static 3-symbol Binance-only plan.
+
+    create_bot() / rotate_scanner are fixed at launch time. Toggling
+    use_scanner_symbols or loading it from disk does NOT rewire an already-
+    running singleton — this closes that gap without operator Stop/Start."""
+    if st.session_state.get("_user_stopped_bot"):
+        return
+    if not st.session_state.get("use_scanner_symbols", False):
+        return
+    import bot as _bm
+    b = _bm.get_bot()
+    if b is None or not b.is_running():
+        return
+    _syms, _venues, _scan = _effective_bot_plan(st.session_state.active_symbols)
+    if not _scan:
+        return
+    _mexc_planned = sum(1 for v in _venues.values() if v == "mexc")
+    _mexc_live = sum(
+        1 for w in b.workers.values()
+        if getattr(w.exchange, "name", "") == "mexc")
+    if getattr(b, "_scanner_rotation_on", False) and _mexc_live > 0:
+        return
+    if _mexc_planned == 0 and _mexc_live == 0:
+        # Scanner file not ready yet — rotation will pick up alts once written.
+        if getattr(b, "_scanner_rotation_on", False):
+            return
+    if not getattr(b, "_scanner_rotation_on", False):
+        pass  # rebuild below — rotation was never enabled on this instance
+    elif _mexc_planned > 0 and _mexc_live == 0:
+        pass  # rebuild below — plan has MEXC picks but no mexc:* workers
+    else:
+        return
+    try:
+        log_activity(
+            "INFO",
+            "[BOT] Rebuilding workers — scanner routing ON but bot still on "
+            f"legacy plan (workers={len(b.workers)} mexc={_mexc_live} "
+            f"planned_mexc={_mexc_planned})",
+        )
+    except Exception:
+        pass
+    print("[BOT] scanner routing mismatch — rebuilding workers from live plan",
+          flush=True)
+    _bm.stop_bot()
+    time.sleep(0.3)
+    _launch_bot_from_plan()
+
+
 def _maybe_resume_bot():
     """If `bot_was_running` was persisted (user had bot ON before the server
     restarted) AND we just auto-reconnected the LIVE client, rebuild + start
@@ -890,6 +986,7 @@ def _maybe_resume_bot():
     """
     import bot as _bm
     if _bm.get_bot() and _bm.get_bot().is_running():
+        _ensure_scanner_routing()
         return
     mode = st.session_state.get("exchange_mode", "mexc")
     if mode == "mexc":
@@ -901,50 +998,11 @@ def _maybe_resume_bot():
         cfg = _bm.load_settings() or {}
     except Exception:
         return
-    # ACTIVE SCALPER MODE: auto-start the bot whenever the LIVE client is
-    # connected — no longer gated on bot_was_running. Operator can stop with
-    # the ⏹ Stop button; stop sets a session flag so we don't re-launch.
     if st.session_state.get("_user_stopped_bot"):
         return
     _fb = cfg.get("active_symbols") or st.session_state.active_symbols
-    syms, _venues, _scan_driven = _effective_bot_plan(_fb)
-    if not syms:
-        return
-    # Rebuild per-symbol risk managers from persisted overrides
-    _per_sym_rm = {}
-    for _s in syms:
-        _ov = st.session_state.per_symbol_risk.get(_s)
-        _per_sym_rm[_s] = RiskManager(_ov) if _ov else st.session_state.risk_manager
-    _global_rm = GlobalRiskManager(st.session_state.global_risk)
     try:
-        b = _bm.create_bot(
-            client            = st.session_state.client,
-            symbols           = syms,
-            per_symbol_risk   = _per_sym_rm,
-            global_risk       = _global_rm,
-            strategy          = st.session_state.strategy,
-            risk_manager      = st.session_state.risk_manager,
-            interval          = st.session_state.interval,
-            check_every       = st.session_state.check_every,
-            threshold         = float(st.session_state.threshold) / 100,
-            initial_balance   = st.session_state.initial_balance,
-            ai_assist         = True,                 # ACTIVE SCALPER — always on
-            ai_aggressiveness = "Active Scalper",     # ignored — single mode
-            exchange_mode     = st.session_state.get("exchange_mode", "multi"),
-            mexc_live_orders  = bool(st.session_state.get("mexc_live_orders", False)),
-            symbol_venues     = _venues,
-            scanner_driven    = _scan_driven,
-            rotate_scanner    = _scan_driven,
-            scanner_top_n     = _mexc_cap(),          # MEXC alts up to the enforced cap
-            manage_manual_trades = bool(getattr(st.session_state.global_risk,
-                                                "manage_manual_trades", False)),
-        )
-        am.apply_profile_to_bot(b, st.session_state.get("aggressive_mode", am.DEFAULT_MODE))
-        b._initial_balance = st.session_state.initial_balance
-        b.start()
-        st.session_state.bot_was_running = True
-        print(f"[BOT] Auto-started ACTIVE SCALPER bot — symbols={syms}",
-              flush=True)
+        _launch_bot_from_plan(_fb)
     except Exception as _e:
         print(f"[BOT] Auto-resume failed: {_e}", flush=True)
 
@@ -2913,6 +2971,7 @@ with st.sidebar:
                  "volatile alts (Market-Low, rotated as they go quiet). OFF: keep "
                  "your configured active symbols on the default venue only.",
         )
+        _ensure_scanner_routing()
 
         if st.button("🔄 Refresh scan now", width="stretch", key="btn_scan_now"):
             try:
