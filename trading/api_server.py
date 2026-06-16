@@ -1,4 +1,4 @@
-"""AlphaTrade read-only FastAPI dashboard API (Phase A).
+"""AlphaTrade read-only FastAPI dashboard API (Phase A + D1).
 
 Runs side-by-side with Streamlit on port 8000. No trading, no writes.
 """
@@ -19,7 +19,7 @@ import api_support as api
 app = FastAPI(
     title="AlphaTrade API",
     description="Read-only dashboard data API. No trading actions.",
-    version="0.1.0",
+    version="0.2.0",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -37,6 +37,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+_D1_ENDPOINTS = [
+    "/api/wallet/binance",
+    "/api/wallet/mexc",
+    "/api/wallet/summary",
+    "/api/trades/history/rows",
+    "/api/scanner/status",
+    "/api/scanner/config",
+    "/api/rules/global",
+    "/api/status/system",
+    "/api/status/bot",
+    "/api/markets/core",
+    "/api/decisions",
+    "/api/diagnostics/trades",
+    "/api/diagnostics/report",
+    "/api/settings/snapshot",
+    "/api/performance/equity",
+    "/api/performance/details",
+    "/api/chart/candles",
+    "/api/chart/markers",
+]
+
 
 @app.get("/")
 def root():
@@ -53,6 +74,7 @@ def root():
             "/api/scanner",
             "/api/activity",
             "/api/performance",
+            *_D1_ENDPOINTS,
         ],
     }
 
@@ -65,6 +87,11 @@ def get_health():
 @app.get("/api/settings")
 def get_settings():
     return api.load_settings()
+
+
+@app.get("/api/settings/snapshot")
+def get_settings_snapshot():
+    return api.load_settings_snapshot()
 
 
 @app.get("/api/trades/open")
@@ -85,9 +112,26 @@ def get_trades_history(
     return api.load_trades_history(exchange=exchange, status=status)
 
 
+@app.get("/api/trades/history/rows")
+def get_trades_history_rows():
+    return api.load_trades_history_rows()
+
+
 @app.get("/api/scanner")
-def get_scanner():
-    return api.load_scanner()
+def get_scanner(
+    exchange: str | None = Query(None, description="binance or mexc filter"),
+):
+    return api.load_scanner_filtered(exchange=exchange)
+
+
+@app.get("/api/scanner/status")
+def get_scanner_status():
+    return api.load_scanner_status()
+
+
+@app.get("/api/scanner/config")
+def get_scanner_config():
+    return api.load_scanner_config()
 
 
 @app.get("/api/activity")
@@ -98,6 +142,84 @@ def get_activity(limit: int = Query(300, ge=1, le=500)):
 @app.get("/api/performance")
 def get_performance():
     return api.load_performance()
+
+
+@app.get("/api/performance/equity")
+def get_performance_equity():
+    return api.load_performance_equity()
+
+
+@app.get("/api/performance/details")
+def get_performance_details():
+    return api.load_performance_details()
+
+
+@app.get("/api/wallet/binance")
+def get_wallet_binance():
+    return api.load_wallet_binance()
+
+
+@app.get("/api/wallet/mexc")
+def get_wallet_mexc():
+    return api.load_wallet_mexc()
+
+
+@app.get("/api/wallet/summary")
+def get_wallet_summary():
+    return api.load_wallet_summary()
+
+
+@app.get("/api/rules/global")
+def get_rules_global():
+    return api.load_global_rules()
+
+
+@app.get("/api/status/system")
+def get_status_system():
+    return api.load_status_system()
+
+
+@app.get("/api/status/bot")
+def get_status_bot():
+    return api.load_status_bot()
+
+
+@app.get("/api/markets/core")
+def get_markets_core():
+    return api.load_markets_core()
+
+
+@app.get("/api/decisions")
+def get_decisions(
+    venue: str | None = Query(None, description="binance or mexc"),
+    limit: int = Query(100, ge=1, le=500),
+):
+    return api.load_decisions(venue=venue, limit=limit)
+
+
+@app.get("/api/diagnostics/trades")
+def get_diagnostics_trades():
+    return api.load_diagnostics_trades()
+
+
+@app.get("/api/diagnostics/report")
+def get_diagnostics_report():
+    return api.load_diagnostics_report()
+
+
+@app.get("/api/chart/candles")
+def get_chart_candles(
+    symbol: str = Query(..., description="e.g. BTCUSDT"),
+    interval: str = Query("5m"),
+    venue: str = Query("binance", description="binance or mexc"),
+    limit: int = Query(500, ge=1, le=2000),
+):
+    return api.load_chart_candles(symbol=symbol, interval=interval, venue=venue, limit=limit)
+
+
+@app.get("/api/chart/markers")
+def get_chart_markers(symbol: str = Query(..., description="e.g. BTCUSDT")):
+    return api.load_chart_markers(symbol=symbol)
 
 
 if __name__ == "__main__":
