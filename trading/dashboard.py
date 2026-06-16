@@ -1702,7 +1702,7 @@ if _alert_events:
 }})();
 </script>
 """
-    st_html.html(_alert_html, height=0)
+    st_html.html(_alert_html, height=0, key="at_alert_toasts")
 
 # ── Market overview + status context (rendered inside Overview / Diagnostics tabs) ──
 _mkt = _market_overview()
@@ -3027,7 +3027,10 @@ with st.sidebar:
         help="Chart and data refresh automatically at this interval",
     )
     st.session_state.refresh_secs = _ref_choice
-    st.caption(f"Chart auto-refreshes every {_ref_choice}s — no manual action needed")
+    st.caption(
+        f"Use ↺ Refresh Now to update charts (auto-refresh disabled — "
+        f"prevents iframe load errors with {_ref_choice}s polling)."
+    )
     if st.button("↺ Refresh Now", width="stretch"):
         st.rerun()
     if st.button("🗑 Reset All Data", width="stretch"):
@@ -4418,6 +4421,45 @@ def _render_rotation_engine(mexc_syms):
                    "as the scan re-ranks (open positions & majors are never dropped).")
 
 
+_MAIN_TAB_LABELS = (
+    "📊 Overview",
+    "🟡 Binance",
+    "🔵 MEXC",
+    "🛰️ Scanner",
+    "📋 History",
+    "📈 Performance",
+    "🔧 Diagnostics",
+)
+
+
+def _pick_main_tab(labels=_MAIN_TAB_LABELS):
+    """Single active main tab — avoids mounting every tab's Plotly/HTML iframes."""
+    default = labels[0]
+    cur = st.session_state.get("at_main_tab", default)
+    if cur not in labels:
+        cur = default
+    if hasattr(st, "segmented_control"):
+        picked = st.segmented_control(
+            "Dashboard section",
+            list(labels),
+            default=cur,
+            key="at_main_tab_sel",
+            label_visibility="collapsed",
+        )
+    else:
+        picked = st.radio(
+            "Dashboard section",
+            list(labels),
+            index=labels.index(cur),
+            horizontal=True,
+            key="at_main_tab_radio",
+            label_visibility="collapsed",
+        )
+    if picked:
+        st.session_state.at_main_tab = picked
+    return st.session_state.get("at_main_tab", default)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # MAIN — fund cards
 # ─────────────────────────────────────────────────────────────────────────────
@@ -4446,17 +4488,9 @@ with st.container():
         except Exception:
             _mexc_connected = False
 
-        tab_ov, tab_bin, tab_mexc, tab_scan, tab_hist, tab_perf, tab_diag = st.tabs([
-            "📊 Overview",
-            "🟡 Binance",
-            "🔵 MEXC",
-            "🛰️ Scanner",
-            "📋 History",
-            "📈 Performance",
-            "🔧 Diagnostics",
-        ])
+        _at_tab = _pick_main_tab()
 
-        with tab_ov:
+        if _at_tab == _MAIN_TAB_LABELS[0]:
             _render_global_rules_bar()
             _render_health_panel(bot_running, _binance_connected, _mexc_connected)
             _render_market_strip()
@@ -4475,7 +4509,7 @@ with st.container():
                 for ev in _alert_events[-5:]:
                     st.caption(f"{ev.get('title','')} — {ev.get('body','')}")
 
-        with tab_bin:
+        elif _at_tab == _MAIN_TAB_LABELS[1]:
             _venue_header("🟡 BINANCE DASHBOARD",
                       "Pinned majors BTC · ETH · SOL · Market-Low rule · "
                       "never rotated · max 3 open positions",
@@ -5340,7 +5374,7 @@ with st.container():
             _render_positions("binance")
             _render_binance_legacy()
 
-        with tab_mexc:
+        elif _at_tab == _MAIN_TAB_LABELS[2]:
             _venue_header("🔵 MEXC DASHBOARD",
                           "Scanner-selected volatile alts (excl. majors) · Market-Low "
                           "rule · rotated as they go quiet · max 15 positions",
@@ -5354,7 +5388,7 @@ with st.container():
             st.caption("Reconciliation: use **Diagnostics** tab → Verify Binance / "
                        "Reconcile now for ghost-trade cleanup.")
 
-        with tab_scan:
+        elif _at_tab == _MAIN_TAB_LABELS[3]:
             _render_scanner_status_panel()
             st.markdown("**Scanner configuration (read-only)**")
             _ls = st.session_state.get("live_settings")
@@ -5376,13 +5410,13 @@ with st.container():
                 except Exception as _e:
                     st.error(f"Scan failed: {_e}")
 
-        with tab_hist:
+        elif _at_tab == _MAIN_TAB_LABELS[4]:
             _render_history_tab(_fmt_pnl, _fmt_pct)
 
-        with tab_perf:
+        elif _at_tab == _MAIN_TAB_LABELS[5]:
             _render_performance_tab(_fmt_pnl, total_pnl, win_rate, wins)
 
-        with tab_diag:
+        elif _at_tab == _MAIN_TAB_LABELS[6]:
             _render_diagnostics_tab()
 
         st.markdown("<div style='height:48px'></div>", unsafe_allow_html=True)
@@ -5399,7 +5433,7 @@ if st.session_state.get("_last_settings_hash") != _snap_hash:
             st.toast("✅ Settings saved", icon="💾")
         st.session_state._settings_initial_saved = True
 
-# ── Dashboard heartbeat + smooth auto-refresh (no st.rerun flicker) ───────────
+# ── Dashboard heartbeat (auto-refresh iframe removed — see line ~751) ─────────
 try:
     heartbeats.write("dashboard", {
         "refresh_secs": int(st.session_state.get("refresh_secs", 3)),
@@ -5407,31 +5441,3 @@ try:
     })
 except Exception:
     pass
-
-_ref_ms = max(3000, int(st.session_state.get("refresh_secs", 3)) * 1000)
-try:
-    from streamlit_autorefresh import st_autorefresh
-    st_autorefresh(interval=_ref_ms, key="at_ui_refresh")
-except Exception:
-    pass
-
-# Preserve scroll position across Streamlit reruns (reduces scroll-jump pain)
-st_html.html("""
-<script>
-(function(){
-  try {
-    var doc = window.parent.document;
-    var main = doc.querySelector('section.main');
-    if (!main) return;
-    var key = 'at_scroll_y';
-    var saved = sessionStorage.getItem(key);
-    if (saved) main.scrollTop = parseInt(saved, 10) || 0;
-    var t = null;
-    main.addEventListener('scroll', function(){
-      clearTimeout(t);
-      t = setTimeout(function(){ sessionStorage.setItem(key, main.scrollTop); }, 120);
-    }, {passive:true});
-  } catch(e) {}
-})();
-</script>
-""", height=0)
