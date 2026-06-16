@@ -4005,33 +4005,51 @@ def _collect_settings_snapshot() -> dict:
 
 
 def _render_diagnostics_tab():
-    """Operator diagnostics — readable cards; raw JSON only in Advanced expander."""
+    """Operator diagnostics — clean cards/tables, raw payloads collapsed."""
     _sec("🔧 Diagnostics")
-    try:
-        from exchanges.mexc import load_mexc_credentials as _mx_cred_ok
-        _mexc_connected = bool(_mx_cred_ok())
-    except Exception:
-        _mexc_connected = False
-
-    try:
-        import scanner as _sc_mod
-        _scan_daemon = _sc_mod.is_daemon_running()
-    except Exception:
-        _scan_daemon = False
     _scan_payload = dsupport.load_scanner_payload()
     _hb_bot = heartbeats.read("bot", max_age_sec=120)
     _hb_scan = heartbeats.read("scanner", max_age_sec=300)
     _hb_dash = heartbeats.read("dashboard", max_age_sec=120)
     _api_ok, _api_lbl = _fastapi_health()
-    _scan_up = _scan_daemon or bool(
-        (_scan_payload or {}).get("scanner_running")) or bool(
-        _hb_scan and not _hb_scan.get("stale"))
+    try:
+        from exchanges.mexc import load_mexc_credentials as _mx_cred_ok
+        _mexc_connected = bool(_mx_cred_ok())
+    except Exception:
+        _mexc_connected = False
+    try:
+        import scanner as _sc_mod
+        _scan_daemon = _sc_mod.is_daemon_running()
+    except Exception:
+        _scan_daemon = False
+    _scan_up = _scan_daemon or bool((_scan_payload or {}).get("scanner_running")) or bool(
+        _hb_scan and not _hb_scan.get("stale")
+    )
+    _b_now = bot_module.get_bot()
+    _acts = _acts_map()
+    try:
+        _activities = load_activity()
+    except Exception:
+        _activities = []
+    _mexc_live = bool(st.session_state.get("mexc_live_orders", False))
+    _worker_summary = dsupport.bot_worker_summary(_b_now)
+    _scanner_selected = len((_scan_payload or {}).get("opportunities") or [])
+    _proof = dsupport.mexc_operator_proof(
+        _b_now, _acts, open_trades, _activities, _mexc_live
+    )
 
     def _card(lbl, val, ok=True):
         cls = "health-ok" if ok else "health-warn"
         return (f'<div class="health-cell {cls}">'
                 f'<div class="h-lbl">{lbl}</div>'
                 f'<div class="h-val">{val}</div></div>')
+
+    def _ev_text(ev):
+        if not ev:
+            return "—"
+        _t = ev.get("time") or "—"
+        _m = ev.get("message") or "—"
+        return f"{_t} — {_m}"
 
     _sec("🏥 Health")
     st.markdown(
@@ -4042,66 +4060,75 @@ def _render_diagnostics_tab():
         + _card("Binance", "CONNECTED" if _binance_connected else "OFF", _binance_connected)
         + _card("MEXC", "CONNECTED" if _mexc_connected else "OFF", _mexc_connected)
         + _card("Scanner", "RUNNING" if _scan_up else "OFF", _scan_up)
-        + _card("Heartbeats",
-                f"bot {dsupport.format_age(_hb_bot.get('at')) if _hb_bot else '—'}",
-                bool(_hb_bot and not _hb_bot.get("stale")))
-        + '</div>'
-        f'<div class="health-foot">Scanner heartbeat: '
-        f'{dsupport.format_age(_hb_scan.get("at")) if _hb_scan else "—"} · '
-        f'Dashboard heartbeat: '
-        f'{dsupport.format_age(_hb_dash.get("at")) if _hb_dash else "—"}</div>',
+        + _card(
+            "Heartbeats",
+            f"bot {dsupport.format_age(_hb_bot.get('at')) if _hb_bot else '—'}",
+            bool(_hb_bot and not _hb_bot.get("stale")),
+        )
+        + "</div>"
+        f'<div class="health-foot">bot {dsupport.format_age(_hb_bot.get("at")) if _hb_bot else "—"} · '
+        f'scanner {dsupport.format_age(_hb_scan.get("at")) if _hb_scan else "—"} · '
+        f'dashboard {dsupport.format_age(_hb_dash.get("at")) if _hb_dash else "—"}</div>',
         unsafe_allow_html=True,
     )
 
-    _sec("⚠️ Latest warnings / errors")
-    try:
-        _log = load_activity()
-        _alert_rows = dsupport.recent_activity_alerts(_log, limit=15)
-        if _alert_rows:
-            st.dataframe(pd.DataFrame(_alert_rows), width="stretch", hide_index=True)
-        else:
-            st.caption("No ERROR/WARNING entries in the activity log.")
-    except Exception as _ae:
-        st.caption(f"Activity log unavailable: {dsupport.sanitize_log_message(str(_ae))}")
+    _sec("⚙️ Runtime State")
+    _runtime_rows = [
+        {"Field": "exchange_mode", "Value": str(st.session_state.get("exchange_mode", "multi"))},
+        {"Field": "use_scanner_symbols", "Value": "ON" if bool(st.session_state.get("use_scanner_symbols", False)) else "OFF"},
+        {"Field": "mexc_live_orders", "Value": "LIVE" if _mexc_live else "DRY-RUN"},
+        {"Field": "workers count", "Value": str(_worker_summary.get("workers_total", 0))},
+        {"Field": "open trades count", "Value": str(len(open_trades))},
+        {
+            "Field": "active worker symbols",
+            "Value": ", ".join(s.replace("USDT", "") for s in _worker_summary.get("active_symbols", [])) or "—",
+        },
+        {"Field": "scanner selected count", "Value": str(_scanner_selected)},
+    ]
+    st.dataframe(pd.DataFrame(_runtime_rows), width="stretch", hide_index=True)
 
-    _sec("⚙️ Runtime facts")
-    _ex_mode = st.session_state.get("exchange_mode", "multi")
-    _use_scan = bool(st.session_state.get("use_scanner_symbols", False))
-    _, _venue_map, _scan_driven = _effective_bot_plan(st.session_state.active_symbols)
-    _venue_txt = (
-        f"{len(_venue_map)} symbol(s) mapped"
-        if _venue_map else "not configured"
+    _sec("🕒 Latest Activity")
+    _last_bot_tick = get_shared_last_tick()
+    _last_scanner = dsupport.latest_activity_by_pattern(
+        _activities, ["SCAN", "SCANNER", "OPPORTUNITIES", "REFRESH SCAN"]
     )
+    _last_trade_evt = dsupport.latest_activity_by_pattern(
+        _activities, [" BUY ", " SELL ", " STOP", " HOLD ", " ORDER ", "OPENED", "CLOSED", "FILLED"]
+    )
+    _last_rotation_evt = dsupport.latest_activity_by_pattern(_activities, ["[ROTATE]", "ROTATE"])
     st.markdown(
-        f"- **exchange_mode:** `{_ex_mode}`  \n"
-        f"- **use_scanner_symbols:** {'ON' if _use_scan else 'OFF'}  \n"
-        f"- **symbol_venues:** {_venue_txt}"
+        f"- **Last bot tick:** {dsupport.format_age(_last_bot_tick) if _last_bot_tick else '—'}  \n"
+        f"- **Last scanner run:** {_ev_text(_last_scanner)}  \n"
+        f"- **Latest BUY/SELL/STOP/HOLD event:** {_ev_text(_last_trade_evt)}  \n"
+        f"- **Latest rotation event:** {_ev_text(_last_rotation_evt)}"
     )
-    if _ex_mode == "multi" and _use_scan and not _venue_map:
-        st.warning(
-            "All active workers are currently routed to Binance because "
-            "symbol_venues is not configured."
-        )
 
-    _sec("📁 Files / data health")
-    import bot as _bot_mod
-    _settings_st = dsupport.settings_file_status(_bot_mod.SETTINGS_FILE)
-    _scan_age = dsupport.format_age(
-        (_scan_payload or {}).get("updated_at")) if _scan_payload else "—"
-    fc1, fc2, fc3, fc4 = st.columns(4)
-    fc1.metric("Trade files", _trades_status.get("file_count", 0))
-    fc2.metric("Scanner payload", _scan_age)
-    fc3.metric("Bot heartbeat", dsupport.format_age(_hb_bot.get("at")) if _hb_bot else "—")
-    fc4.metric("Settings file", _settings_st["status"])
-    st.caption(f"Settings: {_settings_st['detail']}")
+    _sec("🧱 Why Not Trading")
+    _blk_rows = dsupport.top_block_reasons_plain(top=5)
+    if _blk_rows:
+        st.dataframe(pd.DataFrame(_blk_rows), width="stretch", hide_index=True)
+    else:
+        st.caption("No block reasons recorded yet.")
 
-    with st.expander("Advanced debug (raw JSON / reports)", expanded=False):
-        st.markdown("**Settings snapshot**")
+    _sec("🔵 MEXC Proof")
+    mp1, mp2, mp3 = st.columns(3)
+    mp1.metric("MEXC workers active", _proof.get("mexc_workers_active", "NO"))
+    mp2.metric("MEXC open trades", int(_proof.get("mexc_open_trades_count", 0)))
+    mp3.metric("MEXC mode", _proof.get("mode", "DRY-RUN"))
+    st.markdown(
+        f"- **Latest MEXC decision:** {_proof.get('latest_decision', '—')}  \n"
+        f"- **Latest MEXC BUY/SELL/STOP/HOLD event:** {_ev_text(_proof.get('latest_mexc_event'))}  \n"
+        f"- **Latest MEXC {'LIVE' if _mexc_live else 'dry-run'} trade:** {_ev_text(_proof.get('latest_mexc_trade_event'))}  \n"
+        f"- **Last MEXC blocked reason:** {_ev_text(_proof.get('last_mexc_block_reason'))}"
+    )
+
+    with st.expander("Advanced Debug: Settings JSON", expanded=False):
         try:
             st.json(_collect_settings_snapshot())
         except Exception as _se:
             st.caption(dsupport.sanitize_log_message(str(_se)))
-        st.markdown("**Diagnostics report**")
+
+    with st.expander("Advanced Debug: Full diagnostics report", expanded=False):
         try:
             from exchanges.binance import BinanceExchange
             _client_now = st.session_state.get("client")
@@ -4110,12 +4137,14 @@ def _render_diagnostics_tab():
             st.code(diagnostics.build_report(exchange=_ex_now, symbols=_syms_now))
         except Exception as _re:
             st.caption(dsupport.sanitize_log_message(str(_re)))
-        st.markdown("**Scanner payload**")
+
+    with st.expander("Advanced Debug: Scanner payload JSON", expanded=False):
         if _scan_payload:
             st.json(_scan_payload)
         else:
             st.caption(dsupport.scanner_file_missing_message())
-        st.divider()
+
+    with st.expander("Advanced Debug: Trade diagnostics", expanded=False):
         _render_trade_diagnostics_panel()
 
 
@@ -4469,6 +4498,72 @@ def _render_mexc_wallet():
         st.caption(
             f"MEXC amount left to deploy: **${_mx_left:,.2f}** · "
             f"open positions {_slots}/{_cap}")
+
+
+def _render_mexc_operator_panel(acts: dict, mexc_syms):
+    """MEXC operator truth panel — scanner vs engine vs trades clearly separated."""
+    _sec("🧭 MEXC Operator Truth")
+    _mexc_live = bool(st.session_state.get("mexc_live_orders", False))
+    if _mexc_live:
+        st.success("Mode: LIVE — MEXC orders are real exchange orders.")
+    else:
+        st.warning("Mode: DRY-RUN — simulated MEXC orders only (no real exchange order).")
+
+    _scan_payload = dsupport.load_scanner_payload()
+    _scan_all = (_scan_payload or {}).get("opportunities") or []
+    _scan_mexc = [
+        o for o in _scan_all
+        if str(o.get("exchange") or "").lower() == "mexc"
+        and (o.get("symbol") not in _BIN_MAJORS)
+    ]
+    _b_now = bot_module.get_bot()
+    _ws = dsupport.bot_worker_summary(_b_now)
+    _worker_syms = sorted(set(_ws.get("mexc_symbols") or list(mexc_syms or [])))
+    _decision_rows = dsupport.build_mexc_decision_rows(_worker_syms, acts)
+    try:
+        _activities = load_activity()
+    except Exception:
+        _activities = []
+
+    def _ev_text(ev):
+        if not ev:
+            return "—"
+        return f"{ev.get('time') or '—'} — {ev.get('message') or '—'}"
+
+    _latest_engine_evt = dsupport.latest_activity_by_pattern(
+        _activities,
+        ["MEXC", "BUY", "SELL", "STOP", "HOLD", "SIGNAL", "ORDER"],
+    )
+    _latest_dry_evt = dsupport.latest_activity_by_pattern(
+        _activities,
+        ["DRY-RUN MEXC"],
+    )
+    _latest_live_evt = dsupport.latest_activity_by_pattern(
+        _activities,
+        ["LIVE MEXC"],
+    )
+
+    t1, t2, t3, t4 = st.columns(4)
+    t1.metric("Workers active", len(_worker_syms))
+    t2.metric("Scanner selected", len(_scan_mexc))
+    t3.metric("MEXC open trades", len(_mexc_open))
+    t4.metric("Mode", "LIVE" if _mexc_live else "DRY-RUN")
+
+    st.markdown(
+        f"- **Scanner opportunity (selection pool):** {len(_scan_mexc)} MEXC symbols in scanner payload  \n"
+        f"- **Current worker symbols (engine workers):** {', '.join(s.replace('USDT', '') for s in _worker_syms) or '—'}  \n"
+        f"- **Latest MEXC BUY/SELL/STOP/HOLD event:** {_ev_text(_latest_engine_evt)}  \n"
+        f"- **Latest MEXC dry-run trade (simulated):** {_ev_text(_latest_dry_evt)}  \n"
+        f"- **Latest MEXC live order event:** {_ev_text(_latest_live_evt)}"
+    )
+
+    st.markdown("**Engine decision (per active MEXC worker symbol)**")
+    if _decision_rows:
+        st.dataframe(pd.DataFrame(_decision_rows), width="stretch", hide_index=True)
+    else:
+        st.caption("No active MEXC worker decisions yet.")
+
+    _render_venue_closed_trades("mexc", _fmt_pnl, _fmt_pct)
 
 
 def _close_binance_trade(ot: dict) -> None:
@@ -5934,6 +6029,7 @@ with st.container():
                           "rule · rotated as they go quiet · max 15 positions",
                           "#3b82f6", "#0a1020")
             _render_mexc_wallet()
+            _render_mexc_operator_panel(_acts, _mexc_syms)
             _mexc_top = _render_scanner_table(_acts)
             _render_scanner_charts(_mexc_top or _mexc_syms, _acts)
             _render_positions("mexc", use_table=True)

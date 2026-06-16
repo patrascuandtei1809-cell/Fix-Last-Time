@@ -684,6 +684,173 @@ def recent_activity_alerts(
     return list(reversed(rows))
 
 
+def bot_worker_summary(bot) -> Dict[str, Any]:
+    """Count bot workers by venue and expose symbol lists."""
+    out: Dict[str, Any] = {
+        "workers_total": 0,
+        "mexc_workers": 0,
+        "binance_workers": 0,
+        "active_symbols": [],
+        "mexc_symbols": [],
+        "binance_symbols": [],
+    }
+    if bot is None:
+        return out
+    try:
+        workers = list(getattr(bot, "workers", {}).values())
+    except Exception:
+        workers = []
+    mexc_syms: List[str] = []
+    bin_syms: List[str] = []
+    for w in workers:
+        sym = str(getattr(w, "symbol", "") or "").upper()
+        venue = str(getattr(getattr(w, "exchange", None), "name", "") or "").lower()
+        if not sym:
+            continue
+        if venue == "mexc":
+            mexc_syms.append(sym)
+        else:
+            bin_syms.append(sym)
+    active = sorted(set(mexc_syms + bin_syms))
+    out.update({
+        "workers_total": len(workers),
+        "mexc_workers": len(sorted(set(mexc_syms))),
+        "binance_workers": len(sorted(set(bin_syms))),
+        "active_symbols": active,
+        "mexc_symbols": sorted(set(mexc_syms)),
+        "binance_symbols": sorted(set(bin_syms)),
+    })
+    return out
+
+
+def latest_activity_by_pattern(
+    activities: List[Dict],
+    patterns: List[str],
+    *,
+    level: Optional[str] = None,
+) -> Optional[Dict[str, str]]:
+    """Return newest activity row whose message matches any pattern."""
+    if not activities:
+        return None
+    pats = [str(p or "").upper() for p in patterns if p]
+    lvl = str(level or "").upper()
+    for a in reversed(activities):
+        msg = str(a.get("message") or "")
+        msg_u = msg.upper()
+        if lvl and str(a.get("level") or "").upper() != lvl:
+            continue
+        if pats and not any(p in msg_u for p in pats):
+            continue
+        return {
+            "time": (a.get("time") or "")[:19].replace("T", " "),
+            "level": str(a.get("level") or "").upper(),
+            "message": sanitize_log_message(msg, 180),
+        }
+    return None
+
+
+def top_block_reasons_plain(top: int = 5) -> List[Dict[str, str]]:
+    """Top bot block reasons in plain English for operators."""
+    try:
+        import diagnostics
+        items = diagnostics.get_block_summary(top=top)
+    except Exception:
+        items = []
+
+    def _plain(cat: str) -> str:
+        txt = str(cat or "unknown").replace("_", " ").replace("-", " ").strip().lower()
+        txt = " ".join(txt.split())
+        mapping = {
+            "cooldown": "Re-entry cooldown still active",
+            "max open trades": "Open-trade cap reached",
+            "daily loss": "Daily loss guard triggered",
+            "insufficient balance": "Not enough balance for a valid order",
+            "risk guard": "Risk guard blocked a new entry",
+        }
+        for k, v in mapping.items():
+            if k in txt:
+                return v
+        return txt.capitalize() if txt else "Unknown block reason"
+
+    rows: List[Dict[str, str]] = []
+    for it in items:
+        rows.append({
+            "Reason": _plain(it.get("category")),
+            "Count": str(int(it.get("count") or 0)),
+            "Share": f"{float(it.get('pct') or 0):.1f}%",
+        })
+    return rows
+
+
+def build_mexc_decision_rows(active_symbols: List[str], acts_map: Dict[str, Any]) -> List[Dict[str, str]]:
+    """Latest engine decisions for active MEXC worker symbols."""
+    rows: List[Dict[str, str]] = []
+    for sym in sorted(set(s for s in (active_symbols or []) if s)):
+        rec = (acts_map or {}).get(str(sym).upper())
+        if rec is None:
+            rows.append({
+                "Symbol": sym,
+                "Engine decision": "—",
+                "Market-Low %": "—",
+                "Reason": "Waiting for engine activity",
+                "Updated": "—",
+            })
+            continue
+        chg = getattr(rec, "change_pct", None)
+        at = ensure_utc(getattr(rec, "at", None))
+        rows.append({
+            "Symbol": sym,
+            "Engine decision": str(getattr(rec, "decision", "HOLD") or "HOLD").upper(),
+            "Market-Low %": f"{float(chg):+.2f}%" if chg is not None else "—",
+            "Reason": sanitize_log_message(str(getattr(rec, "reason", "") or "—"), 140),
+            "Updated": at.strftime("%Y-%m-%d %H:%M:%S") if at else "—",
+        })
+    return rows
+
+
+def mexc_operator_proof(
+    bot,
+    acts_map: Dict[str, Any],
+    open_trades: List[Dict],
+    activities: List[Dict],
+    mexc_live: bool,
+) -> Dict[str, Any]:
+    """Operator-proof facts for MEXC truth panel."""
+    ws = bot_worker_summary(bot)
+    mexc_syms = ws.get("mexc_symbols", [])
+    decision_rows = build_mexc_decision_rows(mexc_syms, acts_map)
+    latest_decision = "—"
+    if decision_rows:
+        with_ts = [r for r in decision_rows if r.get("Updated") and r.get("Updated") != "—"]
+        pick = sorted(with_ts, key=lambda r: r["Updated"], reverse=True)[0] if with_ts else decision_rows[0]
+        latest_decision = f"{pick.get('Symbol', '—')} · {pick.get('Engine decision', '—')}"
+    latest_event = latest_activity_by_pattern(
+        activities,
+        [" MEXC ", "MEXC ", " BUY ", " SELL ", " STOP", " HOLD "],
+    )
+    latest_trade_event = latest_activity_by_pattern(
+        activities,
+        ["DRY-RUN MEXC", "LIVE MEXC", "MEXC BUY", "MEXC SELL", "MEXC STOP"],
+    )
+    last_blocked = latest_activity_by_pattern(
+        activities,
+        ["BLOCK", "SKIP", "COOLDOWN", "CAP", "RISK", "REJECT"],
+    )
+    mexc_open = [t for t in (open_trades or []) if (t.get("exchange") or "").lower() == "mexc"]
+    return {
+        "mode": "LIVE" if mexc_live else "DRY-RUN",
+        "workers_active": len(mexc_syms),
+        "mexc_workers_active": "YES" if len(mexc_syms) > 0 else "NO",
+        "mexc_symbols": mexc_syms,
+        "decision_rows": decision_rows,
+        "latest_decision": latest_decision,
+        "latest_mexc_event": latest_event,
+        "latest_mexc_trade_event": latest_trade_event,
+        "mexc_open_trades_count": len(mexc_open),
+        "last_mexc_block_reason": last_blocked,
+    }
+
+
 def settings_file_status(path: str) -> Dict[str, str]:
     if not path:
         return {"status": "unknown", "detail": "—"}
