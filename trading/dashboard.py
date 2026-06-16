@@ -3764,14 +3764,17 @@ def _render_global_rules_bar():
         '<span style="font-size:11px;font-weight:800;color:#f0b90b;'
         'letter-spacing:.1em;">⚙️ GLOBAL RULES</span>'
         + _pill("BUY", f'<span style="color:#26a69a;">≤ {_r["buy"]:.2f}%</span>')
-        + _pill("SELL / TP", f'<span style="color:#26a69a;">+{_r["tp"]:.2f}%</span>')
+        + _pill("SELL/TP", f'<span style="color:#26a69a;">+{_r["tp"]:.2f}%</span>')
         + _pill("STOP", f'<span style="color:#ef5350;">{_r["sl"]:.2f}%</span>')
         + _pill("COOLDOWN", f'<span style="color:#c9d1d9;">{_r["cooldown"]}s</span>')
         + _pill("TREND", _on(_r["trend"]))
         + _pill("VOLUME", _on(_r["vol"]))
         + '</div>', unsafe_allow_html=True)
-    st.caption("One rule, both venues — Binance majors + MEXC scanner alts trade "
-               "the same Market-Low logic. Max 3 Binance + up to 15 MEXC positions.")
+    st.caption(
+        "**BINANCE:** BTCUSDT · ETHUSDT · SOLUSDT (fixed majors) · "
+        f"**MEXC:** Volatile Scanner · Max {_mexc_cap()} trades · "
+        "One Market-Low rule on both venues."
+    )
 
 
 def _render_core_markets(acts: dict):
@@ -4508,10 +4511,10 @@ with st.container():
         except Exception:
             _mexc_connected = False
 
+        _render_global_rules_bar()
         _at_tab = _pick_main_tab()
 
         if _at_tab == _MAIN_TAB_LABELS[0]:
-            _render_global_rules_bar()
             _render_health_panel(bot_running, _binance_connected, _mexc_connected)
             _render_market_strip()
             _render_overview_status_strip(
@@ -4534,7 +4537,6 @@ with st.container():
                       "Pinned majors BTC · ETH · SOL · Market-Low rule · "
                       "never rotated · max 3 open positions",
                       "#f0b90b", "#1a1505")
-            _render_global_rules_bar()
 
             roi_cls  = "up" if roi >= 0  else "dn"
             dpnl_cls = "up" if daily_pnl >= 0 else "dn"
@@ -5404,7 +5406,6 @@ with st.container():
                           "Scanner-selected volatile alts (excl. majors) · Market-Low "
                           "rule · rotated as they go quiet · max 15 positions",
                           "#3b82f6", "#0a1020")
-            _render_global_rules_bar()
             _render_mexc_wallet()
             _mexc_top = _render_scanner_table()
             _render_scanner_charts(_mexc_top or _mexc_syms)
@@ -5425,7 +5426,6 @@ with st.container():
                 )
 
         elif _at_tab == _MAIN_TAB_LABELS[3]:
-            _render_global_rules_bar()
             _render_scanner_status_panel(_mexc_syms)
             _render_rotation_engine(_mexc_syms)
             _dr = _dip_rules()
