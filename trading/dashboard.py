@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as st_html
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -1605,108 +1604,14 @@ st.caption(
     "on port **3000** (read-only API poll; controls stay here)."
 )
 
-# ── Alert toasts + audio (injected into browser, height=0 so invisible) ───────
+# ── Alert toasts (native Streamlit) ───────────────────────────────────────────
 if _alert_events:
-    import json as _json
-    _events_json = _json.dumps(_alert_events)
-    _alert_html = f"""
-<style>
-.at-toast-wrap {{
-    position:fixed; top:64px; right:18px; z-index:99999;
-    display:flex; flex-direction:column; gap:10px; pointer-events:none;
-}}
-.at-toast {{
-    display:flex; align-items:flex-start; gap:12px;
-    background:#161b22; border:1px solid var(--tc);
-    border-radius:8px; padding:12px 16px;
-    box-shadow:0 8px 32px rgba(0,0,0,.55);
-    min-width:260px; max-width:340px;
-    animation: atSlideIn .3s ease forwards;
-    pointer-events:all;
-    font-family:'Inter',-apple-system,sans-serif;
-}}
-.at-toast.fade-out {{ animation: atFadeOut .4s ease forwards; }}
-.at-toast-icon {{ font-size:22px; line-height:1; margin-top:1px; }}
-.at-toast-body {{ flex:1; }}
-.at-toast-title {{ font-size:13px; font-weight:700; color:#f0f6fc; margin-bottom:3px; }}
-.at-toast-msg   {{ font-size:12px; color:#8b949e; font-family:'JetBrains Mono',monospace; }}
-.at-toast-bar   {{
-    height:3px; border-radius:0 0 8px 8px;
-    margin:-12px -16px -12px; margin-top:10px;
-    background:var(--tc); opacity:.6;
-    animation: atBar linear forwards;
-}}
-@keyframes atSlideIn {{
-    from {{ opacity:0; transform:translateX(40px); }}
-    to   {{ opacity:1; transform:translateX(0); }}
-}}
-@keyframes atFadeOut {{
-    from {{ opacity:1; transform:translateX(0); }}
-    to   {{ opacity:0; transform:translateX(40px); }}
-}}
-@keyframes atBar {{
-    from {{ width:100%; }}
-    to   {{ width:0%; }}
-}}
-</style>
-<div class="at-toast-wrap" id="atToastWrap"></div>
-<script>
-(function(){{
-  var events = {_events_json};
-  var wrap = document.getElementById('atToastWrap');
-  if (!wrap) return;
-
-  function playSound(kind) {{
-    try {{
-      var ctx = new (window.AudioContext || window.webkitAudioContext)();
-      function tone(freq, start, dur, vol) {{
-        var osc  = ctx.createOscillator();
-        var gain = ctx.createGain();
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
-        gain.gain.setValueAtTime(vol, ctx.currentTime + start);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
-        osc.start(ctx.currentTime + start);
-        osc.stop(ctx.currentTime + start + dur + 0.05);
-      }}
-      if (kind === 'buy')  {{ tone(520,0,.12,.18); tone(660,.11,.18,.14); }}
-      if (kind === 'sell') {{ tone(440,0,.12,.18); tone(330,.11,.18,.14); }}
-      if (kind === 'win')  {{ tone(520,0,.10,.15); tone(660,.09,.10,.12); tone(780,.18,.20,.10); }}
-      if (kind === 'loss') {{ tone(440,0,.15,.15); tone(330,.14,.20,.12); }}
-    }} catch(e) {{}}
-  }}
-
-  function showToast(ev) {{
-    var icon = ev.kind==='open'
-      ? (ev.side==='BUY' ? '▲' : '▼')
-      : (ev.side==='WIN' ? '✦' : '✕');
-
-    var el = document.createElement('div');
-    el.className = 'at-toast';
-    el.style.setProperty('--tc', ev.color);
-    el.innerHTML =
-      '<div class="at-toast-icon" style="color:'+ev.color+'">'+icon+'</div>'+
-      '<div class="at-toast-body">'+
-        '<div class="at-toast-title">'+ev.title+'</div>'+
-        '<div class="at-toast-msg">'+ev.body+'</div>'+
-      '</div>'+
-      '<div class="at-toast-bar" style="animation-duration:4s;"></div>';
-
-    wrap.appendChild(el);
-    playSound(ev.sound);
-
-    setTimeout(function() {{
-      el.classList.add('fade-out');
-      setTimeout(function() {{ if(el.parentNode) el.parentNode.removeChild(el); }}, 420);
-    }}, 4000);
-  }}
-
-  events.forEach(function(ev) {{ showToast(ev); }});
-}})();
-</script>
-"""
-    st_html.html(_alert_html, height=0, key="at_alert_toasts")
+    for _ev in _alert_events:
+        if _ev.get("kind") == "open":
+            _icon = "▲" if _ev.get("side") == "BUY" else "▼"
+        else:
+            _icon = "✦" if _ev.get("side") == "WIN" else "✕"
+        st.toast(f"{_ev['title']} — {_ev['body']}", icon=_icon)
 
 # ── Market overview + status context (rendered inside Overview / Diagnostics tabs) ──
 _mkt = _market_overview()
