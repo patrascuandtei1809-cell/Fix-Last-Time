@@ -3148,13 +3148,22 @@ def _render_health_panel(
     )
 
 
-def _render_scanner_status_panel(mexc_syms=None):
-    """Scanner overview — human-readable operator view (real file only)."""
-    _sec("🛰️ Scanner · operator view")
+def _render_scanner_tab(mexc_syms=None, acts: dict = None):
+    """Scanner tab — status, selection, rejections, managed symbols, refresh."""
+    _sec("🛰️ Scanner Status")
     payload = dsupport.load_scanner_payload()
+    opps = (payload.get("opportunities") or []) if payload else []
+
     if not payload:
         st.warning(dsupport.scanner_file_missing_message())
-        return payload
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Status", "Offline")
+        c2.metric("Last run", "—")
+        c3.metric("Raw symbols", "—")
+        c4.metric("Scored", "—")
+        _render_scanner_managed_symbols(mexc_syms, opps)
+        _render_scanner_refresh_block(None)
+        return
 
     raw = payload.get("count_raw") or {}
     _bin_raw = raw.get("binance", "—")
@@ -3162,7 +3171,8 @@ def _render_scanner_status_panel(mexc_syms=None):
     _raw_t = payload.get("count_raw_total", sum(raw.values()) if raw else "—")
     _scored = payload.get("count_scored", "—")
     opps = payload.get("opportunities") or []
-    _top_n = len(opps)
+    _selected = len(opps)
+    _mexc_scored = payload.get("count_mexc_scored", "—")
     _last = payload.get("updated_at") or "—"
     _last_age = dsupport.format_age(_last)
 
@@ -3171,67 +3181,123 @@ def _render_scanner_status_panel(mexc_syms=None):
         _scan_daemon = _sc_mod.is_daemon_running()
     except Exception:
         _scan_daemon = False
+    try:
+        _hb_scan = heartbeats.read("scanner", max_age_sec=300)
+    except Exception:
+        _hb_scan = None
+    _hb_ok = bool(_hb_scan and not _hb_scan.get("stale"))
+    _running = _scan_daemon or bool(payload.get("scanner_running")) or _hb_ok
+    _status_txt = "Running" if _running else "Offline"
+    _status_col = "#26a69a" if _running else "#ef5350"
 
-    _mode = "LIVE MEXC orders" if st.session_state.get("mexc_live_orders") else "DRY-RUN (no live orders)"
-    _rot_on = bool(st.session_state.get("use_scanner_symbols", False))
-    b = bot_module.get_bot()
-    _rot_sec = int(getattr(b, "_rotation_interval_sec", dsupport.GLOBAL_COOLDOWN_SEC)) if b else dsupport.GLOBAL_COOLDOWN_SEC
-    _managed = sorted(set((mexc_syms or [])) | {t.get("coin") for t in _mexc_open if t.get("coin")})
-    _managed_txt = ", ".join(s.replace("USDT", "") for s in _managed) or "—"
+    stale_msg = dsupport.scanner_stale_message(payload)
+    if stale_msg:
+        st.warning(stale_msg)
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Scanner mode", _mode)
-    c2.metric("Daemon", "Running" if _scan_daemon else "Off")
-    c3.metric("Rotation", f"Every {_rot_sec}s" if _rot_on else "Static")
-    c4.metric("Last scan", _last_age)
+    c1.metric("Status", _status_txt)
+    c2.metric("Last run", _last_age)
+    c3.metric("Raw symbols", _raw_t)
+    c4.metric("Scored", _scored)
 
     st.markdown(
         '<div class="scanner-grid">'
-        f'<div class="scan-cell"><div class="s-lbl">Binance scanned</div>'
-        f'<div class="s-val">{_bin_raw}</div></div>'
-        f'<div class="scan-cell"><div class="s-lbl">MEXC scanned</div>'
+        f'<div class="scan-cell"><div class="s-lbl">Selected</div>'
+        f'<div class="s-val">{_selected}</div></div>'
+        f'<div class="scan-cell"><div class="s-lbl">MEXC candidates</div>'
+        f'<div class="s-val">{_mexc_scored}</div></div>'
+        f'<div class="scan-cell"><div class="s-lbl">MEXC raw</div>'
         f'<div class="s-val">{_mexc_raw}</div></div>'
-        f'<div class="scan-cell"><div class="s-lbl">Raw total</div>'
-        f'<div class="s-val">{_raw_t}</div></div>'
-        f'<div class="scan-cell"><div class="s-lbl">Scored</div>'
-        f'<div class="s-val">{_scored}</div></div>'
-        f'<div class="scan-cell accent"><div class="s-lbl">Selected (top {_mexc_cap()})</div>'
-        f'<div class="s-val">{_top_n}</div></div>'
+        f'<div class="scan-cell"><div class="s-lbl">Binance raw</div>'
+        f'<div class="s-val">{_bin_raw}</div></div>'
+        f'<div class="scan-cell accent"><div class="s-lbl">Core markets</div>'
+        f'<div class="s-val">BTC · ETH · SOL</div></div>'
+        f'<div class="scan-cell"><div class="s-lbl">Engine</div>'
+        f'<div class="s-val" style="color:{_status_col};">{_status_txt}</div></div>'
         '</div>'
-        f'<div class="health-foot">Last run: {_last} · MEXC scored: '
-        f'{payload.get("count_mexc_scored", "—")} · '
-        f'currently managed: {_managed_txt}</div>',
+        f'<div class="health-foot">Last run: {_last} · '
+        f'Binance/core: pinned majors always on Binance · '
+        f'daemon {"on" if _scan_daemon else "off"}'
+        f'{" · heartbeat OK" if _hb_ok else ""}</div>',
         unsafe_allow_html=True,
     )
 
+    _sec("📋 Current Selection · top 15")
     if opps:
-        st.markdown("**Top selected (MEXC scanner)**")
+        sel_rows = dsupport.build_current_selection_rows(opps, acts or {}, limit=15)
         st.dataframe(
-            pd.DataFrame([{
-                "Coin": (o.get("symbol") or "—").replace("USDT", ""),
-                "Score": int(o.get("score", 0) or 0),
-                "Vol%": f"{float(o.get('volatility') or 0):.1f}",
-                "24h%": f"{float(o.get('change') or 0):+.1f}",
-                "Why selected": (o.get("reason") or "—")[:100],
-            } for o in opps[:15]]),
+            pd.DataFrame(sel_rows),
             width="stretch", hide_index=True,
-            height=min(40 + 36 * min(len(opps), 15), 420),
+            height=min(40 + 36 * min(len(sel_rows), 15), 420),
         )
+    else:
+        st.caption("No scanner selections in the payload yet.")
 
     rejects = payload.get("rejection_samples") or []
+    _sec("🚫 Rejected Samples")
     if rejects:
-        st.markdown(f"**Rejected sample ({len(rejects)}) — why not selected**")
+        st.caption(f"Sample of {len(rejects)} coins filtered out by scanner rules.")
         st.dataframe(
-            pd.DataFrame([{
-                "Coin": (r.get("symbol") or "—").replace("USDT", ""),
-                "Exchange": r.get("exchange") or "—",
-                "Reason": r.get("rejection") or "—",
-                "Vol $": f"${float(r.get('volume') or 0):,.0f}",
-                "Vol%": f"{float(r.get('volatility') or 0):.1f}",
-            } for r in rejects[:30]]),
+            pd.DataFrame(dsupport.build_rejected_sample_rows(rejects)),
             width="stretch", hide_index=True,
         )
-    return payload
+    else:
+        st.caption("No rejection samples in the latest scan payload.")
+
+    _render_scanner_managed_symbols(mexc_syms, opps)
+    _render_scanner_refresh_block(payload)
+
+
+def _render_scanner_managed_symbols(mexc_syms, opps):
+    """Binance fixed majors + MEXC scanner selections."""
+    _sec("🎯 Managed Symbols")
+    _bin_fixed = ", ".join(s.replace("USDT", "") for s in _BIN_MAJORS)
+    _mexc_selected = sorted(set(
+        [o.get("symbol") for o in (opps or []) if o.get("symbol")]
+        + list(mexc_syms or [])
+    ))
+    _mexc_txt = ", ".join(s.replace("USDT", "") for s in _mexc_selected) or "—"
+    st.markdown(
+        f'<div class="card"><div style="font-size:11px;color:#8b949e;">'
+        f'<b style="color:#f0b90b;">Binance (fixed)</b> · {_bin_fixed} — never rotated<br>'
+        f'<b style="color:#3b82f6;">MEXC (scanner)</b> · {_mexc_txt}</div></div>',
+        unsafe_allow_html=True,
+    )
+    _ex_mode = st.session_state.get("exchange_mode", "multi")
+    _use_scan = bool(st.session_state.get("use_scanner_symbols", False))
+    _, _venue_map, _scan_driven = _effective_bot_plan(st.session_state.active_symbols)
+    if _ex_mode == "multi" and _use_scan and not _venue_map:
+        st.warning(
+            "exchange_mode=multi but symbol_venues is empty — workers may default "
+            "to Binance until the scanner live plan resolves."
+        )
+    elif _ex_mode == "multi" and not _scan_driven:
+        st.caption(
+            "Scanner-driven routing is OFF — managed symbols follow the static "
+            "active list until use_scanner_symbols is enabled."
+        )
+
+
+def _render_scanner_refresh_block(payload):
+    """Manual refresh + last updated warnings."""
+    _sec("🔄 Refresh / Last Updated")
+    _last = (payload or {}).get("updated_at") if payload else None
+    if _last:
+        st.caption(f"Last payload timestamp: **{_last}** ({dsupport.format_age(_last)} ago)")
+    elif payload:
+        st.caption("Last payload timestamp: unavailable")
+    else:
+        st.caption("No scanner payload loaded.")
+
+    if st.button("🔄 Refresh scan now", key="btn_scan_tab", width="stretch"):
+        try:
+            import scanner as _sc
+            with st.spinner("Scanning Binance + MEXC…"):
+                _sc.scan(write=True)
+            st.success("Scan updated.")
+            st.rerun()
+        except Exception as _e:
+            st.error(f"Scan failed: {_e}")
 
 
 def _render_venue_closed_trades(venue: str, fmt_pnl_fn, fmt_pct_fn):
@@ -5583,22 +5649,7 @@ with st.container():
             _render_rotation_engine(_mexc_syms)
 
         elif _at_tab == _MAIN_TAB_LABELS[3]:
-            _render_scanner_status_panel(_mexc_syms)
-            _dr = _dip_rules()
-            st.caption(
-                f"Market-Low rule: BUY ≤ {_dr['buy']:.2f}% · TP +{_dr['tp']:.2f}% · "
-                f"SL {_dr['sl']:.2f}% · cooldown {_dr['cooldown']}s · "
-                f"scanner cap {_mexc_cap()} MEXC positions."
-            )
-            if st.button("🔄 Refresh scan now", key="btn_scan_tab", width="stretch"):
-                try:
-                    import scanner as _sc
-                    with st.spinner("Scanning Binance + MEXC…"):
-                        _sc.scan(write=True)
-                    st.success("Scan updated.")
-                    st.rerun()
-                except Exception as _e:
-                    st.error(f"Scan failed: {_e}")
+            _render_scanner_tab(_mexc_syms, _acts)
 
         elif _at_tab == _MAIN_TAB_LABELS[4]:
             _render_history_tab(_fmt_pnl, _fmt_pct)

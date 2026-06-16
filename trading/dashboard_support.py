@@ -550,3 +550,99 @@ def trend_label(trend_ok) -> str:
     if trend_ok is False:
         return "DOWN"
     return "—"
+
+
+SCANNER_STALE_SEC = 600
+
+
+def scanner_payload_age_sec(payload: Dict[str, Any]) -> Optional[float]:
+    """Seconds since scanner payload updated_at (UTC-aware), or None."""
+    dt = ensure_utc((payload or {}).get("updated_at"))
+    if not dt:
+        return None
+    return max(0.0, (datetime.now(timezone.utc) - dt).total_seconds())
+
+
+def scanner_stale_message(payload: Dict[str, Any], max_age_sec: int = SCANNER_STALE_SEC) -> Optional[str]:
+    if not payload:
+        return None
+    age = scanner_payload_age_sec(payload)
+    if age is None:
+        return "Scanner payload has no valid timestamp."
+    if age > max_age_sec:
+        return f"Scanner data is stale ({format_age(payload.get('updated_at'))} old). Refresh recommended."
+    return None
+
+
+def human_selection_reason(opp: dict) -> str:
+    """Plain-language selection reason — not raw score breakdown text."""
+    parts: List[str] = []
+    qv = float(opp.get("volume") or 0)
+    vol = float(opp.get("volatility") or 0)
+    chg = float(opp.get("change") or 0)
+    sc = float(opp.get("score") or 0)
+    if qv >= 1_000_000:
+        parts.append("High liquidity")
+    elif qv >= 100_000:
+        parts.append("Adequate liquidity")
+    if vol >= 8:
+        parts.append(f"Strong volatility ({vol:.1f}% daily range)")
+    elif vol >= 3:
+        parts.append(f"Moderate volatility ({vol:.1f}% daily range)")
+    if chg >= 5:
+        parts.append(f"Strong upward momentum ({chg:+.1f}% 24h)")
+    elif chg >= 0:
+        parts.append(f"Positive 24h move ({chg:+.1f}%)")
+    else:
+        parts.append(f"Pullback opportunity ({chg:+.1f}% 24h)")
+    if sc >= 75:
+        parts.append("Top-ranked scanner pick")
+    elif sc >= 50:
+        parts.append("Above-average scanner score")
+    return " · ".join(parts) if parts else "Passed scanner filters"
+
+
+def plain_rejection_reason(reason: str) -> str:
+    """Operator-facing rejection text — never raw score breakdown."""
+    r = (reason or "—").strip()
+    if not r or r == "—":
+        return "—"
+    if "liq " in r and "/40" in r:
+        return "Did not meet scanner quality thresholds"
+    return r[0].upper() + r[1:] if len(r) > 1 else r
+
+
+def build_current_selection_rows(
+    opps: List[dict],
+    acts: dict,
+    *,
+    limit: int = 15,
+) -> List[Dict[str, str]]:
+    """Top selected scanner coins for operator table."""
+    rows: List[Dict[str, str]] = []
+    for o in (opps or [])[:limit]:
+        sym = o.get("symbol") or "—"
+        sym_u = str(sym).upper()
+        rec = (acts or {}).get(sym_u)
+        chg = getattr(rec, "change_pct", None) if rec else None
+        rows.append({
+            "Coin": sym.replace("USDT", ""),
+            "Exchange": str(o.get("exchange") or "mexc").upper(),
+            "Score": str(int(o.get("score") or 0)),
+            "Market-Low %": f"{chg:+.2f}%" if chg is not None else "—",
+            "Volume": format_quote_volume(o.get("volume")),
+            "Trend": scanner_trend_for_symbol(sym_u, acts, o.get("change")),
+            "Reason": human_selection_reason(o),
+        })
+    return rows
+
+
+def build_rejected_sample_rows(rejects: List[dict], *, limit: int = 30) -> List[Dict[str, str]]:
+    rows: List[Dict[str, str]] = []
+    for r in (rejects or [])[:limit]:
+        rows.append({
+            "Coin": (r.get("symbol") or "—").replace("USDT", ""),
+            "Exchange": str(r.get("exchange") or "—").upper(),
+            "Reason": plain_rejection_reason(r.get("rejection") or "—"),
+        })
+    return rows
