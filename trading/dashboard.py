@@ -1608,9 +1608,9 @@ st.caption(
 if _alert_events:
     for _ev in _alert_events:
         if _ev.get("kind") == "open":
-            _icon = "▲" if _ev.get("side") == "BUY" else "▼"
+            _icon = "🟢" if _ev.get("side") == "BUY" else "🔴"
         else:
-            _icon = "✦" if _ev.get("side") == "WIN" else "✕"
+            _icon = "✅" if _ev.get("side") == "WIN" else "❌"
         st.toast(f"{_ev['title']} — {_ev['body']}", icon=_icon)
 
 # ── Market overview + status context (rendered inside Overview / Diagnostics tabs) ──
