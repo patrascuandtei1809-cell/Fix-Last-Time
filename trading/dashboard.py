@@ -4122,30 +4122,59 @@ def _render_diagnostics_tab():
         f"- **Last MEXC blocked reason:** {_ev_text(_proof.get('last_mexc_block_reason'))}"
     )
 
-    with st.expander("Advanced Debug: Settings JSON", expanded=False):
-        try:
-            st.json(_collect_settings_snapshot())
-        except Exception as _se:
-            st.caption(dsupport.sanitize_log_message(str(_se)))
+    st.divider()
+    _show_adv = st.checkbox(
+        "Show advanced debug data",
+        value=False,
+        key="diag_show_advanced_debug",
+        help="Off by default. Raw JSON, full reports, and trade-debug tools render only when enabled.",
+    )
+    if _show_adv:
+        with st.expander(
+            "Advanced Debug: Settings JSON",
+            expanded=False,
+            key="adv_debug_settings_json_v2",
+        ):
+            try:
+                st.json(_collect_settings_snapshot())
+            except Exception as _se:
+                st.caption(dsupport.sanitize_log_message(str(_se)))
 
-    with st.expander("Advanced Debug: Full diagnostics report", expanded=False):
-        try:
-            from exchanges.binance import BinanceExchange
-            _client_now = st.session_state.get("client")
-            _ex_now = BinanceExchange(_client_now) if _client_now else None
-            _syms_now = list(st.session_state.active_symbols or _BIN_MAJORS)
-            st.code(diagnostics.build_report(exchange=_ex_now, symbols=_syms_now))
-        except Exception as _re:
-            st.caption(dsupport.sanitize_log_message(str(_re)))
+        with st.expander(
+            "Advanced Debug: Full diagnostics report",
+            expanded=False,
+            key="adv_debug_full_report_v2",
+        ):
+            try:
+                from exchanges.binance import BinanceExchange
+                _client_now = st.session_state.get("client")
+                _ex_now = BinanceExchange(_client_now) if _client_now else None
+                _syms_now = list(st.session_state.active_symbols or _BIN_MAJORS)
+                st.code(diagnostics.build_report(exchange=_ex_now, symbols=_syms_now))
+            except Exception as _re:
+                st.caption(dsupport.sanitize_log_message(str(_re)))
 
-    with st.expander("Advanced Debug: Scanner payload JSON", expanded=False):
-        if _scan_payload:
-            st.json(_scan_payload)
-        else:
-            st.caption(dsupport.scanner_file_missing_message())
+        with st.expander(
+            "Advanced Debug: Scanner payload JSON",
+            expanded=False,
+            key="adv_debug_scanner_payload_v2",
+        ):
+            if _scan_payload:
+                st.json(_scan_payload)
+            else:
+                st.caption(dsupport.scanner_file_missing_message())
 
-    with st.expander("Advanced Debug: Trade diagnostics", expanded=False):
-        _render_trade_diagnostics_panel()
+        with st.expander(
+            "Advanced Debug: Trade diagnostics",
+            expanded=False,
+            key="adv_debug_trade_diagnostics_v2",
+        ):
+            _render_trade_diagnostics_panel()
+    else:
+        st.caption(
+            "Advanced debug hidden. Enable **Show advanced debug data** above to "
+            "inspect raw JSON and full reports."
+        )
 
 
 def trade_pnl_usd(t):
