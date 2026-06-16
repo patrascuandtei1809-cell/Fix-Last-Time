@@ -99,6 +99,26 @@ def _order_fee_usdt(order: dict, coin: str, fill_price: float) -> float:
     return total
 
 
+def _dip_rules() -> dict:
+    """The ONE Market-Low rule both venues obey — from persisted live_settings."""
+    _s = st.session_state.get("live_settings")
+
+    def _g(name, default):
+        try:
+            v = getattr(_s, name)
+            return v if v is not None else default
+        except Exception:  # noqa: BLE001
+            return default
+    return {
+        "buy":      float(_g("buy_threshold_pct", dsupport.GLOBAL_BUY_PCT)),
+        "tp":       float(_g("take_profit_pct", dsupport.GLOBAL_TP_PCT)),
+        "sl":       float(_g("stop_loss_pct", dsupport.GLOBAL_SL_PCT)),
+        "cooldown": int(_g("reentry_cooldown_sec", dsupport.GLOBAL_COOLDOWN_SEC)),
+        "trend":    bool(_g("trend_filter_on", True)),
+        "vol":      bool(_g("volume_filter_on", True)),
+    }
+
+
 # ── Page config ───────────────────────────────────────────────────────────────
 
 st.set_page_config(
@@ -3050,26 +3070,6 @@ with st.sidebar:
 _BIN_MAJORS = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
 _BIN_SLOTS  = 3       # one open trade per pinned major (display denominator)
 _MEXC_SLOTS = 15      # max concurrent MEXC scanner trades (display denominator)
-
-
-def _dip_rules() -> dict:
-    """The ONE Market-Low rule both venues obey — from persisted live_settings."""
-    _s = st.session_state.get("live_settings")
-
-    def _g(name, default):
-        try:
-            v = getattr(_s, name)
-            return v if v is not None else default
-        except Exception:  # noqa: BLE001
-            return default
-    return {
-        "buy":      float(_g("buy_threshold_pct", dsupport.GLOBAL_BUY_PCT)),
-        "tp":       float(_g("take_profit_pct", dsupport.GLOBAL_TP_PCT)),
-        "sl":       float(_g("stop_loss_pct", dsupport.GLOBAL_SL_PCT)),
-        "cooldown": int(_g("reentry_cooldown_sec", dsupport.GLOBAL_COOLDOWN_SEC)),
-        "trend":    bool(_g("trend_filter_on", True)),
-        "vol":      bool(_g("volume_filter_on", True)),
-    }
 
 
 def _acts_map() -> dict:
