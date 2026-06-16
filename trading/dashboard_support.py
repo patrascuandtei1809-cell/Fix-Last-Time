@@ -7,7 +7,7 @@ from __future__ import annotations
 import glob
 import os
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -33,6 +33,51 @@ def trades_dir_status() -> Dict[str, Any]:
         "file_count": len(files),
         "files": [os.path.basename(f) for f in files],
     }
+
+
+def ensure_utc(dt) -> Optional[datetime]:
+    """Coerce ISO string or datetime to timezone-aware UTC."""
+    if dt is None or dt == "":
+        return None
+    if isinstance(dt, str):
+        try:
+            dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
+        except Exception:
+            try:
+                dt = datetime.strptime(dt[:19], "%Y-%m-%d %H:%M:%S")
+            except Exception:
+                return None
+    if not isinstance(dt, datetime):
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def trade_sort_ts(t: Dict) -> datetime:
+    """Best timestamp for ordering trades (closed → close_time, else open_time)."""
+    raw = t.get("close_time") if t.get("status") == "closed" else t.get("open_time")
+    return ensure_utc(raw) or datetime.min.replace(tzinfo=timezone.utc)
+
+
+def sort_trades_latest_first(trades: List[Dict]) -> List[Dict]:
+    return sorted(trades, key=trade_sort_ts, reverse=True)
+
+
+def format_age(iso_or_dt, now: Optional[datetime] = None) -> str:
+    """Human-readable age, e.g. '42s ago' or '3m ago'."""
+    dt = ensure_utc(iso_or_dt)
+    if dt is None:
+        return "—"
+    now = ensure_utc(now) or datetime.now(timezone.utc)
+    secs = max(0, int((now - dt).total_seconds()))
+    if secs < 60:
+        return f"{secs}s ago"
+    if secs < 3600:
+        return f"{secs // 60}m ago"
+    if secs < 86400:
+        return f"{secs // 3600}h ago"
+    return f"{secs // 86400}d ago"
 
 
 def group_trades_by_exchange(trades: List[Dict]) -> Dict[str, List[Dict]]:
@@ -157,7 +202,7 @@ def trades_dir_missing_message() -> str:
 
 def build_history_rows(trades: List[Dict], fmt_pnl, fmt_pct) -> List[Dict]:
     rows = []
-    for t in reversed(trades):
+    for t in sort_trades_latest_first(trades):
         pnl = t.get("profit_loss")
         pct = t.get("profit_loss_pct")
         net = t.get("net_pnl")

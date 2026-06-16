@@ -1339,8 +1339,12 @@ open_trades    = get_open_trades()
 closed_trades  = [t for t in all_trades if t.get("status") == "closed"]
 _trades_status = dsupport.trades_dir_status()
 _trades_by_ex   = dsupport.group_trades_by_exchange(all_trades)
-_bin_closed     = [t for t in _trades_by_ex.get("binance", []) if t.get("status") == "closed"]
-_mexc_closed    = [t for t in _trades_by_ex.get("mexc", []) if t.get("status") == "closed"]
+_bin_closed     = dsupport.sort_trades_latest_first(
+    [t for t in _trades_by_ex.get("binance", []) if t.get("status") == "closed"])
+_mexc_closed    = dsupport.sort_trades_latest_first(
+    [t for t in _trades_by_ex.get("mexc", []) if t.get("status") == "closed"])
+_bin_open       = [t for t in open_trades if (t.get("exchange") or "binance") == "binance"]
+_mexc_open      = [t for t in open_trades if t.get("exchange") == "mexc"]
 realized_pnl   = sum((t.get("profit_loss") or 0) for t in closed_trades)
 today_str      = datetime.now(_TZ).strftime("%Y-%m-%d")
 daily_realized = sum(
@@ -2351,7 +2355,9 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     st.caption("BUY when market-low change ≤ −0.05% with volume + trend "
-               "confirmation, SELL at +1.00%, STOP at −0.30%, 2-min cooldown. "
+               f"confirmation, SELL at +{dsupport.GLOBAL_TP_PCT:.2f}%, "
+               f"STOP at {dsupport.GLOBAL_SL_PCT:.2f}%, "
+               f"{dsupport.GLOBAL_COOLDOWN_SEC}s cooldown. "
                "MEXC is the trading venue; Binance is display/reconciliation only.")
 
     st.markdown('<hr class="s-div"/>', unsafe_allow_html=True)
@@ -2611,11 +2617,12 @@ with st.sidebar:
     # ── 🔥 Aggressive Mode ────────────────────────────────────────────────────
     with st.expander("💧 Market Low Strategy (LIVE)", expanded=True):
         _ls = st.session_state.get("live_settings") or live_settings.LiveSettings()
+        _dr = _dip_rules()
         st.caption(
             f"**The only live strategy.** BUY when the market-low change ≤ "
-            f"**{_ls.buy_threshold_pct:.2f}%** · SELL at "
-            f"**+{_ls.take_profit_pct:.2f}%** profit · STOP-LOSS at "
-            f"**{_ls.stop_loss_pct:.2f}%** · then a **{_ls.reentry_cooldown_sec}s** cooldown after "
+            f"**{_dr['buy']:.2f}%** · SELL at "
+            f"**+{_dr['tp']:.2f}%** profit · STOP-LOSS at "
+            f"**{_dr['sl']:.2f}%** · then a **{_dr['cooldown']}s** cooldown after "
             f"BOTH a stop-loss and a sell. BUY also needs volume ≥ "
             f"**{_ls.min_volume_multiple:.1f}×** avg + trend filter."
         )
@@ -3113,10 +3120,10 @@ def _dip_rules() -> dict:
         except Exception:  # noqa: BLE001
             return default
     return {
-        "buy":      float(_g("buy_threshold_pct", -0.05)),
-        "tp":       float(_g("take_profit_pct", 1.00)),
-        "sl":       float(_g("stop_loss_pct", -0.30)),
-        "cooldown": int(_g("reentry_cooldown_sec", 120)),
+        "buy":      float(_g("buy_threshold_pct", dsupport.GLOBAL_BUY_PCT)),
+        "tp":       float(_g("take_profit_pct", dsupport.GLOBAL_TP_PCT)),
+        "sl":       float(_g("stop_loss_pct", dsupport.GLOBAL_SL_PCT)),
+        "cooldown": int(_g("reentry_cooldown_sec", dsupport.GLOBAL_COOLDOWN_SEC)),
         "trend":    bool(_g("trend_filter_on", True)),
         "vol":      bool(_g("volume_filter_on", True)),
     }
@@ -3215,49 +3222,154 @@ def _render_health_panel(
     )
 
 
-def _render_scanner_status_panel():
-    """Scanner counters + rejection samples — real file only."""
-    _sec("🛰️ Scanner Status · MEXC universe")
+def _render_scanner_status_panel(mexc_syms=None):
+    """Scanner overview — human-readable operator view (real file only)."""
+    _sec("🛰️ Scanner · operator view")
     payload = dsupport.load_scanner_payload()
     if not payload:
         st.warning(dsupport.scanner_file_missing_message())
         return payload
+
     raw = payload.get("count_raw") or {}
+    _bin_raw = raw.get("binance", "—")
+    _mexc_raw = raw.get("mexc", "—")
     _raw_t = payload.get("count_raw_total", sum(raw.values()) if raw else "—")
     _scored = payload.get("count_scored", "—")
-    _top_n = len(payload.get("opportunities") or [])
+    opps = payload.get("opportunities") or []
+    _top_n = len(opps)
+    _last = payload.get("updated_at") or "—"
+    _last_age = dsupport.format_age(_last)
+
+    try:
+        import scanner as _sc_mod
+        _scan_daemon = _sc_mod.is_daemon_running()
+    except Exception:
+        _scan_daemon = False
+
+    _mode = "LIVE MEXC orders" if st.session_state.get("mexc_live_orders") else "DRY-RUN (no live orders)"
+    _rot_on = bool(st.session_state.get("use_scanner_symbols", False))
+    b = bot_module.get_bot()
+    _rot_sec = int(getattr(b, "_rotation_interval_sec", dsupport.GLOBAL_COOLDOWN_SEC)) if b else dsupport.GLOBAL_COOLDOWN_SEC
+    _managed = sorted(set((mexc_syms or [])) | {t.get("coin") for t in _mexc_open if t.get("coin")})
+    _managed_txt = ", ".join(s.replace("USDT", "") for s in _managed) or "—"
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Scanner mode", _mode)
+    c2.metric("Daemon", "Running" if _scan_daemon else "Off")
+    c3.metric("Rotation", f"Every {_rot_sec}s" if _rot_on else "Static")
+    c4.metric("Last scan", _last_age)
+
     st.markdown(
         '<div class="scanner-grid">'
-        f'<div class="scan-cell"><div class="s-lbl">Raw symbols</div>'
+        f'<div class="scan-cell"><div class="s-lbl">Binance scanned</div>'
+        f'<div class="s-val">{_bin_raw}</div></div>'
+        f'<div class="scan-cell"><div class="s-lbl">MEXC scanned</div>'
+        f'<div class="s-val">{_mexc_raw}</div></div>'
+        f'<div class="scan-cell"><div class="s-lbl">Raw total</div>'
         f'<div class="s-val">{_raw_t}</div></div>'
-        f'<div class="scan-cell"><div class="s-lbl">Binance raw</div>'
-        f'<div class="s-val">{raw.get("binance", "—")}</div></div>'
-        f'<div class="scan-cell"><div class="s-lbl">MEXC raw</div>'
-        f'<div class="s-val">{raw.get("mexc", "—")}</div></div>'
-        f'<div class="scan-cell"><div class="s-lbl">Scored total</div>'
+        f'<div class="scan-cell"><div class="s-lbl">Scored</div>'
         f'<div class="s-val">{_scored}</div></div>'
-        f'<div class="scan-cell accent"><div class="s-lbl">Top selected</div>'
+        f'<div class="scan-cell accent"><div class="s-lbl">Selected (top {_mexc_cap()})</div>'
         f'<div class="s-val">{_top_n}</div></div>'
         '</div>'
-        f'<div class="health-foot">Last run: {payload.get("updated_at", "—")} · '
-        f'MEXC scored: {payload.get("count_mexc_scored", "—")} · '
-        f'max open {_mexc_cap()}</div>',
+        f'<div class="health-foot">Last run: {_last} · MEXC scored: '
+        f'{payload.get("count_mexc_scored", "—")} · '
+        f'currently managed: {_managed_txt}</div>',
         unsafe_allow_html=True,
     )
+
+    if opps:
+        st.markdown("**Top selected (MEXC scanner)**")
+        st.dataframe(
+            pd.DataFrame([{
+                "Coin": (o.get("symbol") or "—").replace("USDT", ""),
+                "Score": int(o.get("score", 0) or 0),
+                "Vol%": f"{float(o.get('volatility') or 0):.1f}",
+                "24h%": f"{float(o.get('change') or 0):+.1f}",
+                "Why selected": (o.get("reason") or "—")[:100],
+            } for o in opps[:15]]),
+            width="stretch", hide_index=True,
+            height=min(40 + 36 * min(len(opps), 15), 420),
+        )
+
     rejects = payload.get("rejection_samples") or []
     if rejects:
-        with st.expander(f"Why rejected (sample {len(rejects)})", expanded=False):
-            st.dataframe(
-                pd.DataFrame([{
-                    "Coin": (r.get("symbol") or "—").replace("USDT", ""),
-                    "Exchange": r.get("exchange"),
-                    "Reason": r.get("rejection"),
-                    "Vol $": f"${float(r.get('volume') or 0):,.0f}",
-                    "Vol%": f"{float(r.get('volatility') or 0):.1f}",
-                } for r in rejects[:30]]),
-                width="stretch", hide_index=True,
-            )
+        st.markdown(f"**Rejected sample ({len(rejects)}) — why not selected**")
+        st.dataframe(
+            pd.DataFrame([{
+                "Coin": (r.get("symbol") or "—").replace("USDT", ""),
+                "Exchange": r.get("exchange") or "—",
+                "Reason": r.get("rejection") or "—",
+                "Vol $": f"${float(r.get('volume') or 0):,.0f}",
+                "Vol%": f"{float(r.get('volatility') or 0):.1f}",
+            } for r in rejects[:30]]),
+            width="stretch", hide_index=True,
+        )
     return payload
+
+
+def _render_venue_closed_trades(venue: str, fmt_pnl_fn, fmt_pct_fn):
+    """Closed trades for one venue — latest first from data/trades."""
+    label = "Binance" if venue == "binance" else "MEXC"
+    closed = _bin_closed if venue == "binance" else _mexc_closed
+    _sec(f"📜 Closed {label} Trades · {len(closed)}")
+    if not closed:
+        st.caption(f"No closed {label} trades in data/trades/*.json yet.")
+        return
+    st.dataframe(
+        pd.DataFrame(dsupport.build_history_rows(closed, fmt_pnl_fn, fmt_pct_fn)),
+        width="stretch", hide_index=True,
+        height=min(40 + 36 * min(len(closed), 12), 360),
+        column_config={
+            "Open Reason": st.column_config.TextColumn(width="medium"),
+            "Close Reason": st.column_config.TextColumn(width="medium"),
+        },
+    )
+
+
+def _render_diagnostics_status_cards(
+    bot_running: bool,
+    binance_connected: bool,
+    mexc_connected: bool,
+):
+    """Compact operator status cards — no raw JSON."""
+    _scan_payload = dsupport.load_scanner_payload()
+    _last_scan = _scan_payload.get("updated_at")
+    try:
+        import scanner as _sc_mod
+        _scan_daemon = _sc_mod.is_daemon_running()
+    except Exception:
+        _scan_daemon = False
+    _last_tick = get_shared_last_tick()
+    _last_err = "—"
+    try:
+        _acts = load_activity()
+        _errs = [a for a in _acts if (a.get("level") or "").upper() in ("ERROR", "WARNING")]
+        if _errs:
+            _e = _errs[-1]
+            _last_err = f"[{_e.get('level')}] {( _e.get('message') or '')[:80]}"
+    except Exception:
+        pass
+
+    def _card(lbl, val, ok=True):
+        _cls = "health-ok" if ok else "health-warn"
+        return (f'<div class="health-cell {_cls}">'
+                f'<div class="h-lbl">{lbl}</div>'
+                f'<div class="h-val">{val}</div></div>')
+
+    st.markdown(
+        '<div class="health-grid">'
+        + _card("Bot status", "RUNNING" if bot_running else "OFF", bot_running)
+        + _card("Scanner", "ON" if _scan_daemon else "OFF", _scan_daemon)
+        + _card("API (Streamlit)", "ALIVE", True)
+        + _card("Binance", "CONNECTED" if binance_connected else "OFF", binance_connected)
+        + _card("MEXC", "CONNECTED" if mexc_connected else "OFF", mexc_connected)
+        + _card("Last scan age", dsupport.format_age(_last_scan))
+        + _card("Last bot tick", dsupport.format_age(_last_tick) if _last_tick else "—")
+        + _card("Last error", _last_err[:28], _last_err == "—")
+        + '</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def _render_open_trades_summary():
@@ -3597,7 +3709,8 @@ def _render_trade_diagnostics_panel():
                 st.error("⚠️ Pre-flight found issues: " +
                          "; ".join(_pf["errors"]) if _pf["errors"]
                          else "Not connected.")
-            st.json(_pf)
+            with st.expander("Pre-flight details (debug)", expanded=False):
+                st.json(_pf)
         if _recon:
             _rc = diagnostics.reconcile_ghost_trades(_ex_now)
             if _rc.get("errors"):
@@ -3608,7 +3721,8 @@ def _render_trade_diagnostics_panel():
                 st.success(f"✅ Reconcile complete — checked {_rc['checked']} open trade(s).")
             if _rc.get("mismatches"):
                 st.info(f"{len(_rc['mismatches'])} partial mismatch(es) left OPEN.")
-                st.json(_rc["mismatches"])
+                with st.expander("Mismatch details (debug)", expanded=False):
+                    st.json(_rc["mismatches"])
         if _report:
             st.code(diagnostics.build_report(exchange=_ex_now, symbols=_syms_now))
 
@@ -3675,13 +3789,15 @@ def _collect_settings_snapshot() -> dict:
 
 
 def _render_diagnostics_tab():
-    """Heartbeats, health, activity errors, settings snapshot."""
+    """Operator diagnostics — status cards, health, errors; raw JSON hidden."""
     _sec("🔧 Diagnostics")
     try:
         from exchanges.mexc import load_mexc_credentials as _mx_cred_ok
         _mexc_connected = bool(_mx_cred_ok())
     except Exception:
         _mexc_connected = False
+    _render_diagnostics_status_cards(bot_running, _binance_connected, _mexc_connected)
+    st.divider()
     _render_health_panel(bot_running, _binance_connected, _mexc_connected)
     st.divider()
     _render_trade_diagnostics_panel()
@@ -3698,12 +3814,11 @@ def _render_diagnostics_tab():
             st.caption("No ERROR/WARNING entries in activity.json yet.")
     except Exception as _ae:
         st.caption(f"Activity log unavailable: {_ae}")
-    st.divider()
-    st.markdown("**Settings snapshot** (persisted on change)")
-    try:
-        st.json(_collect_settings_snapshot())
-    except Exception as _se:
-        st.caption(f"Settings snapshot unavailable: {_se}")
+    with st.expander("Advanced raw settings (debug)", expanded=False):
+        try:
+            st.json(_collect_settings_snapshot())
+        except Exception as _se:
+            st.caption(f"Settings snapshot unavailable: {_se}")
 
 
 def trade_pnl_usd(t):
@@ -4514,6 +4629,7 @@ with st.container():
                       "Pinned majors BTC · ETH · SOL · Market-Low rule · "
                       "never rotated · max 3 open positions",
                       "#f0b90b", "#1a1505")
+            _render_global_rules_bar()
 
             roi_cls  = "up" if roi >= 0  else "dn"
             dpnl_cls = "up" if daily_pnl >= 0 else "dn"
@@ -4557,7 +4673,7 @@ with st.container():
       <div class="card">
         <div class="c-lbl">Locked (USDT)</div>
         <div class="c-val">{f"${binance_locked_usdt:,.2f}" if _binance_connected else "—"}</div>
-        <div class="c-sub">{f"In open orders · {len(open_trades)} positions" if _binance_connected else "Connect to Binance"}</div>
+        <div class="c-sub">{f"In open orders · {len(_bin_open)} Binance positions" if _binance_connected else "Connect to Binance"}</div>
       </div>
       <div class="card">
         <div class="c-lbl">Realized PnL</div>
@@ -4580,7 +4696,7 @@ with st.container():
             # ── Bot spending limit meter: how much of YOUR money is in play ─────────
             _bot_limit   = float(getattr(st.session_state.global_risk,
                                          "max_total_exposure_usdt", 0) or 0)
-            _bot_in_play = sum((t.get("invested") or 0) for t in open_trades)
+            _bot_in_play = sum((t.get("invested") or 0) for t in _bin_open)
             if _bot_limit > 0:
                 _bot_avail = max(0.0, _bot_limit - _bot_in_play)
                 _bot_frac  = min(1.0, _bot_in_play / _bot_limit) if _bot_limit else 0.0
@@ -4604,7 +4720,9 @@ with st.container():
                 st.caption(
                     f"💵 Binance amount left to deploy (after limits): "
                     f"**${_left_trade:,.2f}** USDT · free ${binance_free_usdt:,.2f} · "
-                    f"locked ${binance_locked_usdt:,.2f}")
+                    f"locked ${binance_locked_usdt:,.2f} · "
+                    f"deployed ${sum((t.get('invested') or 0) for t in _bin_open):,.2f} "
+                    f"in {len(_bin_open)} open position(s)")
 
             # Equity curve moved to Performance tab (no duplicate sparkline here).
 
@@ -5370,8 +5488,10 @@ with st.container():
                 with st.spinner("Loading chart data from Binance…"):
                     st.info("Chart will appear here once data loads. No API key required.")
 
-            # ── Binance active trades + legacy holdings (chart AI table is on Overview) ──
+            # ── Binance active trades, decisions, closed history, legacy ──
             _render_positions("binance")
+            _render_ai_decisions(_BIN_MAJORS, _acts, "#f0b90b", venue="binance")
+            _render_venue_closed_trades("binance", _fmt_pnl, _fmt_pct)
             _render_binance_legacy()
 
         elif _at_tab == _MAIN_TAB_LABELS[2]:
@@ -5379,27 +5499,36 @@ with st.container():
                           "Scanner-selected volatile alts (excl. majors) · Market-Low "
                           "rule · rotated as they go quiet · max 15 positions",
                           "#3b82f6", "#0a1020")
+            _render_global_rules_bar()
             _render_mexc_wallet()
             _mexc_top = _render_scanner_table()
             _render_scanner_charts(_mexc_top or _mexc_syms)
             _render_positions("mexc")
             _render_ai_decisions((_mexc_syms or _mexc_top), _acts, "#3b82f6", venue="mexc")
-            _render_rotation_engine(_mexc_syms)
-            st.caption("Reconciliation: use **Diagnostics** tab → Verify Binance / "
-                       "Reconcile now for ghost-trade cleanup.")
+            _render_venue_closed_trades("mexc", _fmt_pnl, _fmt_pct)
+            _scan_payload = dsupport.load_scanner_payload()
+            _rejects = (_scan_payload.get("rejection_samples") or []) if _scan_payload else []
+            if _rejects:
+                _sec("🚫 Scanner rejections · why not selected")
+                st.dataframe(
+                    pd.DataFrame([{
+                        "Coin": (r.get("symbol") or "—").replace("USDT", ""),
+                        "Reason": r.get("rejection") or "—",
+                        "Vol%": f"{float(r.get('volatility') or 0):.1f}",
+                    } for r in _rejects[:20]]),
+                    width="stretch", hide_index=True,
+                )
 
         elif _at_tab == _MAIN_TAB_LABELS[3]:
-            _render_scanner_status_panel()
-            st.markdown("**Scanner configuration (read-only)**")
-            _ls = st.session_state.get("live_settings")
-            if _ls:
-                st.json({
-                    "use_scanner_symbols": bool(st.session_state.get("use_scanner_symbols")),
-                    "mexc_live_orders": bool(st.session_state.get("mexc_live_orders")),
-                    "exchange_mode": st.session_state.get("exchange_mode"),
-                    "scanner_top_n_cap": _mexc_cap(),
-                    "rotation_interval_sec": 120,
-                })
+            _render_global_rules_bar()
+            _render_scanner_status_panel(_mexc_syms)
+            _render_rotation_engine(_mexc_syms)
+            _dr = _dip_rules()
+            st.caption(
+                f"Market-Low rule: BUY ≤ {_dr['buy']:.2f}% · TP +{_dr['tp']:.2f}% · "
+                f"SL {_dr['sl']:.2f}% · cooldown {_dr['cooldown']}s · "
+                f"scanner cap {_mexc_cap()} MEXC positions."
+            )
             if st.button("🔄 Refresh scan now", key="btn_scan_tab", width="stretch"):
                 try:
                     import scanner as _sc

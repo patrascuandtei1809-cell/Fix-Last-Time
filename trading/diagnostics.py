@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import threading
 from collections import deque, Counter
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -288,16 +288,25 @@ def get_cycle_stats() -> Dict:
 # ─────────────────────────────────────────────────────────────────────────────
 # Trade-frequency statistics (reads local trade journal via bot persistence)
 # ─────────────────────────────────────────────────────────────────────────────
+def _ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:
+    """Normalize any datetime to timezone-aware UTC before arithmetic."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
 def _parse_dt(s) -> Optional[datetime]:
     if not s:
         return None
     if isinstance(s, datetime):
-        return s
+        return _ensure_utc(s)
     try:
-        return datetime.fromisoformat(str(s))
+        return _ensure_utc(datetime.fromisoformat(str(s).replace("Z", "+00:00")))
     except Exception:
         try:
-            return datetime.strptime(str(s)[:19], "%Y-%m-%d %H:%M:%S")
+            return _ensure_utc(datetime.strptime(str(s)[:19], "%Y-%m-%d %H:%M:%S"))
         except Exception:
             return None
 
@@ -306,7 +315,7 @@ def trade_frequency_stats() -> Dict:
     """trades today, average trades/day, last trade time, minutes since last."""
     import bot as _bot
     trades = _bot.load_trades()
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     today = now.strftime("%Y-%m-%d")
 
     open_dts = [_parse_dt(t.get("open_time")) for t in trades]
