@@ -1,4 +1,8 @@
-# AlphaTrade React Dashboard (Phase B)
+# AlphaTrade React Dashboard (Phase B) — **EXPERIMENTAL**
+
+> **Experimental read-only preview.** Production operator terminal is Streamlit
+> (`trading/dashboard.py` on port **8501**). This React UI is optional and may
+> lag behind Streamlit; do not use it for trading controls.
 
 Read-only professional crypto trading terminal. **Data source: FastAPI only** (`:8000`).
 
