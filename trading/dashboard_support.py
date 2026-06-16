@@ -399,14 +399,79 @@ def legacy_holding_status(
     return "LEGACY HOLD"
 
 
+def volume_label(volume_ratio) -> str:
+    if volume_ratio is None:
+        return "—"
+    try:
+        vr = float(volume_ratio)
+    except (TypeError, ValueError):
+        return "—"
+    if vr >= 1.0:
+        return "HIGH"
+    return f"{vr:.2f}×"
+
+
+def format_quote_volume(volume) -> str:
+    """Scanner 24h quote (USDT) volume for operator tables."""
+    try:
+        v = float(volume or 0)
+    except (TypeError, ValueError):
+        return "—"
+    if v >= 1_000_000:
+        return f"${v / 1_000_000:.2f}M"
+    if v >= 1_000:
+        return f"${v / 1_000:.1f}K"
+    return f"${v:,.0f}"
+
+
+def scanner_trend_for_symbol(symbol: str, acts: dict, opp_change=None) -> str:
+    """Trend for scanner row — engine data first, else 24h change sign."""
+    sym = str(symbol or "").upper()
+    rec = (acts or {}).get(sym)
+    if rec is not None and getattr(rec, "trend_ok", None) is not None:
+        return trend_label(rec.trend_ok)
+    if opp_change is not None:
+        try:
+            return "UP" if float(opp_change) >= 0 else "DOWN"
+        except (TypeError, ValueError):
+            pass
+    return "—"
+
+
+def sort_scanner_opportunities(opps: List[dict]) -> List[dict]:
+    """Score desc, then quote volume desc."""
+    def _key(o):
+        sc = float(o.get("score") or 0)
+        vol = float(o.get("volume") or 0)
+        return (sc, vol)
+    return sorted(opps, key=_key, reverse=True)
+
+
+def build_scanner_table_rows(opps: List[dict], acts: dict) -> List[Dict[str, str]]:
+    """Live scanner operator table: Coin, Volatility, Volume, Trend, Score."""
+    rows: List[Dict[str, str]] = []
+    for o in sort_scanner_opportunities(opps):
+        sym = o.get("symbol") or "—"
+        rows.append({
+            "Coin": sym.replace("USDT", ""),
+            "Volatility": f"{float(o.get('volatility') or 0):.1f}%",
+            "Volume": format_quote_volume(o.get("volume")),
+            "Trend": scanner_trend_for_symbol(sym, acts, o.get("change")),
+            "Score": str(int(o.get("score") or 0)),
+        })
+    return rows
+
+
 def build_active_trades_table_rows(
     trades: List[Dict],
     price_fn,
     stop_loss_fn,
     take_profit_fn,
     fmt_pnl,
+    *,
+    include_reconciliation: bool = False,
 ) -> List[Dict[str, str]]:
-    """Operator table: Coin, Entry, Current, PnL, Target, Stop."""
+    """Operator table: Coin, Entry, Current, PnL, Target, Stop (+ optional Reconcile)."""
     rows: List[Dict[str, str]] = []
     for ot in trades:
         coin = ot.get("coin", "—")
@@ -423,15 +488,60 @@ def build_active_trades_table_rows(
             inv = float(ot.get("invested") or 0)
             u = ((cp_f - ep) / ep * inv if side == "BUY"
                  else (ep - cp_f) / ep * inv)
-        rows.append({
+        row: Dict[str, str] = {
             "Coin": coin,
             "Entry": f"${ep:.4f}" if ep else "—",
             "Current": f"${cp_f:.4f}" if cp_f else "—",
             "PnL": fmt_pnl(u) if u is not None else "—",
             "Target": f"${float(tp):.4f}" if tp else "—",
             "Stop": f"${float(sl):.4f}" if sl else "—",
-        })
+        }
+        if include_reconciliation:
+            rs = ot.get("reconciliation_status")
+            row["Reconcile"] = str(rs) if rs else "—"
+        rows.append(row)
     return rows
+
+
+def _parse_rotation_list(token: str) -> List[str]:
+    token = (token or "").strip()
+    if not token or token in ("-", "[]", "None"):
+        return []
+    if token.startswith("[") and token.endswith("]"):
+        inner = token[1:-1].strip()
+        if not inner:
+            return []
+        parts = [p.strip().strip("'\"") for p in inner.split(",") if p.strip()]
+        return [p for p in parts if p and p != "-"]
+    return [token.strip("'\"")]
+
+
+def parse_rotation_events(
+    activities: List[Dict],
+    *,
+    limit: int = 20,
+) -> Tuple[List[Dict[str, str]], List[Dict[str, str]]]:
+    """Parse [ROTATE] activity into Added / Removed operator tables."""
+    import re
+    added_rows: List[Dict[str, str]] = []
+    removed_rows: List[Dict[str, str]] = []
+    rot = [a for a in activities if "[ROTATE]" in (a.get("message") or "")]
+    for a in reversed(rot[-limit:]):
+        msg = a.get("message") or ""
+        ts = (a.get("time") or "")[:19].replace("T", " ")
+        m_add = re.search(r"added=([^ ]+)", msg)
+        m_drop = re.search(r"dropped=([^ ]+)", msg)
+        for sym in _parse_rotation_list(m_add.group(1) if m_add else ""):
+            added_rows.append({
+                "Time": ts or "—",
+                "Coin": sym.replace("USDT", ""),
+            })
+        for sym in _parse_rotation_list(m_drop.group(1) if m_drop else ""):
+            removed_rows.append({
+                "Time": ts or "—",
+                "Coin": sym.replace("USDT", ""),
+            })
+    return added_rows, removed_rows
 
 
 def trend_label(trend_ok) -> str:
@@ -440,15 +550,3 @@ def trend_label(trend_ok) -> str:
     if trend_ok is False:
         return "DOWN"
     return "—"
-
-
-def volume_label(volume_ratio) -> str:
-    if volume_ratio is None:
-        return "—"
-    try:
-        vr = float(volume_ratio)
-    except (TypeError, ValueError):
-        return "—"
-    if vr >= 1.0:
-        return "HIGH"
-    return f"{vr:.2f}×"

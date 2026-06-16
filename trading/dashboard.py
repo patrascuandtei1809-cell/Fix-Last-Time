@@ -1399,6 +1399,15 @@ _bin_closed_today = len(
 _bin_exposure = sum((t.get("invested") or 0) for t in _bin_open)
 _bin_roi = (_bin_unrealized / _bin_exposure * 100) if _bin_exposure else 0.0
 
+_mexc_realized = dsupport.venue_realized_pnl(closed_trades, "mexc")
+_mexc_daily_realized = dsupport.venue_daily_realized(closed_trades, "mexc", today_str)
+_mexc_unrealized = dsupport.venue_unrealized_pnl(open_trades, "mexc")
+_mexc_total_pnl = _mexc_realized + _mexc_unrealized
+_mexc_daily_pnl = _mexc_daily_realized + _mexc_unrealized
+_mexc_wins = sum(1 for t in _mexc_closed if (t.get("profit_loss") or 0) >= 0)
+_mexc_win_rate = (_mexc_wins / len(_mexc_closed) * 100) if _mexc_closed else 0.0
+_mexc_exposure = sum((t.get("invested") or 0) for t in _mexc_open)
+
 
 @st.cache_data(ttl=15, show_spinner=False)
 def _compute_account_value(_client, bust: str) -> dict:
@@ -4016,48 +4025,78 @@ def _render_binance_legacy():
 
 
 def _render_mexc_wallet():
-    """MEXC (MCD) wallet — separate from Binance, real balance via MexcExchange."""
+    """MEXC wallet overview — balance, PnL, active trades, slots (display-only)."""
     _mexc_live = bool(st.session_state.get("mexc_live_orders", False))
-    _mexc_tag = "⚠️ LIVE" if _mexc_live else "🔒 DRY-RUN"
-    st.markdown(f'<div class="sec-lbl sec-mexc">🔵 MEXC Wallet · {_mexc_tag}</div>',
-                unsafe_allow_html=True)
+    _mexc_tag = "LIVE" if _mexc_live else "DRY-RUN"
+    _sec("💰 Wallet Overview")
+    _mx_total = _mx_free = _mx_lock = None
+    _mx_connected = False
     try:
         from exchanges.mexc import load_mexc_credentials as _load_mx_creds
         _mx_creds = _load_mx_creds()
-        if not _mx_creds:
-            st.caption("🔵 MEXC: no MEXC keys saved — wallet not connected "
-                       "(save `data/.mexc_creds.json` to show balance). "
-                       "Binance trading is unaffected.")
-        else:
+        if _mx_creds:
             _fp = (_mx_creds[0] or "")[:8]
             _wb = _cached_mexc_wallet(_mexc_live, _fp)
-            if _wb is None:
-                raise RuntimeError("MEXC wallet unavailable")
-            _all = _wb["all"]
-            _mx_total = _wb["total"]
-            _mx_free = _wb["free"]
-            _mx_lock = _wb["locked"]
-            st.caption("MEXC assets: " + ", ".join(
-                f"{a}: {v.get('total',0):.8g}" for a, v in _all.items()
-                if float(v.get("total", 0) or 0) > 0
-            ))
-            st.markdown(f"""
-<div class="wallet-panel wallet-mexc">
-  <div class="w-lbl">MEXC WALLET · {_mexc_tag}</div>
-  <div class="w-val">${_mx_total:,.2f} <span class="w-unit">USDT total</span></div>
-  <div class="w-sub">free ${_mx_free:,.2f} · locked ${_mx_lock:,.2f}</div>
-</div>""", unsafe_allow_html=True)
-            _mexc_exp = sum((t.get("invested") or 0) for t in open_trades
-                            if (t.get("exchange") or "") == "mexc")
-            _mexc_lim = float(getattr(st.session_state.global_risk,
-                                      "max_total_exposure_usdt", 0) or 0)
-            _mx_left = dsupport.amount_left_to_trade(_mx_free, _mexc_lim, _mexc_exp)
-            st.caption(
-                f"MEXC amount left to deploy: **${_mx_left:,.2f}** · "
-                f"open MEXC positions {sum(1 for t in open_trades if t.get('exchange')=='mexc')}"
-                f"/{_mexc_cap()}")
+            if _wb is not None:
+                _mx_total = _wb["total"]
+                _mx_free = _wb["free"]
+                _mx_lock = _wb["locked"]
+                _mx_connected = True
     except Exception as _mxe:  # noqa: BLE001
-        st.caption(f"🔵 MEXC ({_mexc_tag}) — balance unavailable: {_mxe}")
+        st.caption(f"MEXC balance unavailable: {_mxe}")
+
+    _slots = len(_mexc_open)
+    _cap = _mexc_cap()
+    _u_cls = "up" if _mexc_unrealized >= 0 else "dn"
+    _r_cls = "up" if _mexc_realized >= 0 else "dn"
+    _dpnl_cls = "up" if _mexc_daily_pnl >= 0 else "dn"
+    _tot_cls = "up" if _mexc_total_pnl >= 0 else "dn"
+    _mx_card_style = 'border-color:#3b82f655;' if _mx_connected else 'opacity:.55;'
+    _acct_disp = f"${_mx_total:,.2f}" if _mx_total is not None else "—"
+    _free_disp = f"${_mx_free:,.2f}" if _mx_free is not None else "—"
+    _lock_disp = f"${_mx_lock:,.2f}" if _mx_lock is not None else "—"
+
+    st.markdown(f"""
+<div class="cards cards-mexc">
+  <div class="card" style="{_mx_card_style}">
+    <div class="c-lbl">Account Value</div>
+    <div class="c-val">{_acct_disp}</div>
+    <div class="c-sub">{'🟢 MEXC · ' + _mexc_tag if _mx_connected else 'Not connected'}</div>
+  </div>
+  <div class="card" style="{_mx_card_style}">
+    <div class="c-lbl">Available (USDT)</div>
+    <div class="c-val">{_free_disp}</div>
+    <div class="c-sub">{'Free for new orders' if _mx_connected else 'Save MEXC API keys'}</div>
+  </div>
+  <div class="card">
+    <div class="c-lbl">Total PnL</div>
+    <div class="c-val {_tot_cls}">{_fmt_pnl(_mexc_total_pnl)}</div>
+    <div class="c-sub">R {_fmt_pnl(_mexc_realized)} · U {_fmt_pnl(_mexc_unrealized)}</div>
+  </div>
+  <div class="card">
+    <div class="c-lbl">Realized PnL</div>
+    <div class="c-val {_r_cls}">{_fmt_pnl(_mexc_realized)}</div>
+    <div class="c-sub">{len(_mexc_closed)} closed · Win {_mexc_win_rate:.1f}%</div>
+  </div>
+  <div class="card">
+    <div class="c-lbl">Daily P&L</div>
+    <div class="c-val {_dpnl_cls}">{_fmt_pnl(_mexc_daily_pnl)}</div>
+    <div class="c-sub">R {_fmt_pnl(_mexc_daily_realized)} · exposure ${_mexc_exposure:,.2f}</div>
+  </div>
+  <div class="card">
+    <div class="c-lbl">Active Trades</div>
+    <div class="c-val">{_slots}/{_cap}</div>
+    <div class="c-sub">Slots used · locked {_lock_disp}</div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+    if _mx_connected and _mx_free is not None:
+        _mexc_lim = float(getattr(st.session_state.global_risk,
+                                  "max_total_exposure_usdt", 0) or 0)
+        _mx_left = dsupport.amount_left_to_trade(_mx_free, _mexc_lim, _mexc_exposure)
+        st.caption(
+            f"MEXC amount left to deploy: **${_mx_left:,.2f}** · "
+            f"open positions {_slots}/{_cap}")
 
 
 def _close_binance_trade(ot: dict) -> None:
@@ -4141,6 +4180,18 @@ def _render_positions(venue: str, *, use_table: bool = False):
                 if st.button(f"✕ Close {_coin}", key=f"cl_tbl_{ot.get('id')}",
                              width="stretch"):
                     _close_binance_trade(ot)
+        return
+    if use_table and venue == "mexc":
+        _rm = st.session_state.risk_manager
+        tbl = dsupport.build_active_trades_table_rows(
+            rows,
+            _cur_price_for,
+            _rm.stop_loss_price,
+            _rm.take_profit_price,
+            _fmt_pnl,
+            include_reconciliation=True,
+        )
+        st.dataframe(pd.DataFrame(tbl), width="stretch", hide_index=True)
         return
     for ot in rows:
         ep = ot.get("entry_price", 0)
@@ -4296,12 +4347,19 @@ def _render_ai_decisions_narrative(symbols, acts: dict, venue: str = "binance"):
         chg = getattr(rec, "change_pct", None)
         tr = dsupport.trend_label(getattr(rec, "trend_ok", None))
         vol = dsupport.volume_label(getattr(rec, "volume_ratio", None))
+        _sym_lbl = str(sym).replace("USDT", "")
         if label in ("BUY READY", "BUY"):
-            headline = f"**{sym} BUY**"
-        elif "BLOCKED" in label or label in ("HOLD",):
-            headline = f"**{sym} REJECTED**" if "BLOCKED" in label else f"**{sym} {label}**"
+            headline = f"**{_sym_lbl} BUY**"
+        elif label in ("SELL TARGET", "SELL", "TAKE_PROFIT"):
+            headline = f"**{_sym_lbl} SELL**"
+        elif label in ("STOP LOSS", "STOP_LOSS"):
+            headline = f"**{_sym_lbl} STOP**"
+        elif "BLOCKED" in label:
+            headline = f"**{_sym_lbl} REJECTED**"
+        elif label in ("HOLD", "WAIT"):
+            headline = f"**{_sym_lbl} WAIT**"
         else:
-            headline = f"**{sym} {label}**"
+            headline = f"**{_sym_lbl} {label}**"
         st.markdown(headline)
         if chg is not None:
             st.caption(f"Market-Low = {chg:+.2f}%")
@@ -4309,6 +4367,10 @@ def _render_ai_decisions_narrative(symbols, acts: dict, venue: str = "binance"):
         st.caption(f"Volume = {vol}")
         if label == "BUY READY":
             st.caption("Cooldown = OK")
+        elif label in ("SELL TARGET", "SELL", "TAKE_PROFIT") and rsn:
+            st.caption(rsn[:160])
+        elif label in ("STOP LOSS", "STOP_LOSS") and rsn:
+            st.caption(rsn[:160])
         elif "cooldown" in (rsn or "").lower():
             st.caption(f"Cooldown = {rsn[:80]}")
         if "REJECTED" in headline or "BLOCKED" in label:
@@ -4381,13 +4443,11 @@ def _render_ai_decisions(symbols, acts: dict, accent: str, venue: str = "binance
         unsafe_allow_html=True)
 
 
-def _render_scanner_table():
-    """MEXC live scanner — real ranked opportunities. Returns top symbols."""
-    _sec("🛰️ Live Scanner · MEXC volatile alts (top 15)")
+def _load_mexc_scanner_opps():
+    """MEXC scanner opportunities (excl. pinned majors). Returns (list, payload)."""
     payload = dsupport.load_scanner_payload()
     if not payload:
-        st.warning(dsupport.scanner_file_missing_message())
-        return []
+        return [], payload
     try:
         import scanner as _sc
         opps = _sc.load_opportunities("mexc")
@@ -4396,20 +4456,21 @@ def _render_scanner_table():
     mexc = [o for o in opps
             if str(o.get("exchange", "")).lower() == "mexc"
             and o.get("symbol") and o.get("symbol") not in _BIN_MAJORS]
-    if not mexc:
-        st.caption("Scanner file exists but has no MEXC opportunities — press "
-                   "“🔄 Refresh scan now” in the sidebar.")
+    return dsupport.sort_scanner_opportunities(mexc), payload
+
+
+def _render_scanner_table(acts: dict):
+    """MEXC live scanner — Coin, Volatility, Volume, Trend, Score. Returns top symbols."""
+    _sec("🛰️ Live Scanner")
+    mexc, payload = _load_mexc_scanner_opps()
+    if not payload:
+        st.warning(dsupport.scanner_file_missing_message())
         return []
-    rows = [{
-        "Coin":  o.get("symbol", "—").replace("USDT", ""),
-        "Price": f"${o.get('price', 0):,.6g}",
-        "Vol%":  f"{o.get('volatility', 0):.1f}",
-        "24h%":  f"{o.get('change', 0):+.1f}",
-        "Liq $": f"${o.get('volume', 0):,.0f}",
-        "Spread": (f"{o.get('spread'):.2f}%" if o.get("spread") is not None else "—"),
-        "Score": int(o.get("score", 0)),
-        "Why selected": (o.get("reason") or "")[:80],
-    } for o in mexc[:15]]
+    if not mexc:
+        st.caption("Scanner file exists but has no MEXC opportunities — use "
+                   "🔄 Refresh scan now on the Scanner tab.")
+        return []
+    rows = dsupport.build_scanner_table_rows(mexc, acts)
     st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True,
                  height=min(40 + 36 * len(rows), 420))
     return [o.get("symbol") for o in mexc[:4]]
@@ -4480,11 +4541,9 @@ def _mini_candle_fig(symbol: str, venue: str, interval: str = "5m",
     return fig
 
 
-def _render_scanner_charts(symbols, interval: str = "5m"):
-    """Row of compact REAL MEXC candlestick charts for the top scanner coins,
-    each overlaid with BUY (▲) / SELL (▼) / STOP (✕) markers from real trades."""
-    _sec("📈 Scanner Coin Charts · live MEXC candles · "
-         "BUY \u25b2 / SELL \u25bc / STOP \u2715")
+def _render_scanner_charts(symbols, acts: dict, interval: str = "5m"):
+    """Compact MEXC candlestick charts with Market-Low / Volume / Trend captions."""
+    _sec("📈 Scanner Coin Charts")
     syms = [s for s in (symbols or []) if s][:4]
     if not syms:
         st.caption("No scanner coins to chart yet.")
@@ -4508,11 +4567,17 @@ def _render_scanner_charts(symbols, interval: str = "5m"):
                                 config={"displayModeBar": False})
             else:
                 st.caption("chart unavailable")
+            rec = (acts or {}).get(str(sym).upper())
+            chg = getattr(rec, "change_pct", None) if rec else None
+            tr = dsupport.trend_label(getattr(rec, "trend_ok", None)) if rec else "—"
+            vol = dsupport.volume_label(getattr(rec, "volume_ratio", None)) if rec else "—"
+            ml_txt = f"{chg:+.2f}%" if chg is not None else "—"
+            st.caption(f"Market-Low {ml_txt} · Volume {vol} · Trend {tr}")
 
 
 def _render_rotation_engine(mexc_syms):
-    """MEXC scanner rotation status + recent [ROTATE] events (real activity log)."""
-    _sec("🔁 Rotation Engine · MEXC scanner")
+    """MEXC scanner rotation — status + Added / Removed operator tables."""
+    _sec("🔁 Rotation Engine")
     b = bot_module.get_bot()
     pinned = ", ".join(s.replace("USDT", "") for s in _BIN_MAJORS)
     interval = int(getattr(b, "_rotation_interval_sec", 120)) if b else 120
@@ -4530,18 +4595,21 @@ def _render_rotation_engine(mexc_syms):
         acts = load_activity()
     except Exception:  # noqa: BLE001
         acts = []
-    rot = [a for a in acts if "[ROTATE]" in (a.get("message") or "")][-8:]
-    if rot:
-        lines = []
-        for a in reversed(rot):
-            ts = _fmt_london(a.get("time"), "%H:%M:%S")
-            msg = (a.get("message", "").replace("&", "&amp;")
-                   .replace("<", "&lt;").replace(">", "&gt;"))
-            lines.append(f'<div class="log-line"><span class="l-ts">{ts}</span>'
-                         f'<span class="l-msg lINFO">{msg}</span></div>')
-        st.markdown('<div class="log-wrap">' + "".join(lines) + '</div>',
-                    unsafe_allow_html=True)
-    else:
+    added_rows, removed_rows = dsupport.parse_rotation_events(acts)
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("**Added coins**")
+        if added_rows:
+            st.dataframe(pd.DataFrame(added_rows), width="stretch", hide_index=True)
+        else:
+            st.caption("No additions logged yet.")
+    with c2:
+        st.markdown("**Removed coins**")
+        if removed_rows:
+            st.dataframe(pd.DataFrame(removed_rows), width="stretch", hide_index=True)
+        else:
+            st.caption("No removals logged yet.")
+    if not added_rows and not removed_rows:
         st.caption("No rotations logged yet — the engine swaps idle MEXC picks "
                    "as the scan re-ranks (open positions & majors are never dropped).")
 
@@ -5507,27 +5575,15 @@ with st.container():
                           "rule · rotated as they go quiet · max 15 positions",
                           "#3b82f6", "#0a1020")
             _render_mexc_wallet()
-            _mexc_top = _render_scanner_table()
-            _render_scanner_charts(_mexc_top or _mexc_syms)
-            _render_positions("mexc")
-            _render_ai_decisions((_mexc_syms or _mexc_top), _acts, "#3b82f6", venue="mexc")
-            _render_venue_closed_trades("mexc", _fmt_pnl, _fmt_pct)
-            _scan_payload = dsupport.load_scanner_payload()
-            _rejects = (_scan_payload.get("rejection_samples") or []) if _scan_payload else []
-            if _rejects:
-                _sec("🚫 Scanner rejections · why not selected")
-                st.dataframe(
-                    pd.DataFrame([{
-                        "Coin": (r.get("symbol") or "—").replace("USDT", ""),
-                        "Reason": r.get("rejection") or "—",
-                        "Vol%": f"{float(r.get('volatility') or 0):.1f}",
-                    } for r in _rejects[:20]]),
-                    width="stretch", hide_index=True,
-                )
+            _mexc_top = _render_scanner_table(_acts)
+            _render_scanner_charts(_mexc_top or _mexc_syms, _acts)
+            _render_positions("mexc", use_table=True)
+            _dec_syms = sorted(set((_mexc_syms or []) + (_mexc_top or [])))
+            _render_ai_decisions_narrative(_dec_syms, _acts, venue="mexc")
+            _render_rotation_engine(_mexc_syms)
 
         elif _at_tab == _MAIN_TAB_LABELS[3]:
             _render_scanner_status_panel(_mexc_syms)
-            _render_rotation_engine(_mexc_syms)
             _dr = _dip_rules()
             st.caption(
                 f"Market-Low rule: BUY ≤ {_dr['buy']:.2f}% · TP +{_dr['tp']:.2f}% · "
