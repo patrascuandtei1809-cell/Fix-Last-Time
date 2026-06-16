@@ -59,10 +59,13 @@ LIVE-only Binance Mainnet trading dashboard. **Every BUY/SELL is a real order on
 ## How to run on DigitalOcean
 
 1. SSH into your droplet
-2. `git clone <your-repo> && cd your-repo/trading`
-3. `pip install -r requirements.txt`
-4. `nohup streamlit run dashboard.py --server.port 80 &` (or use nginx + gunicorn proxy)
-5. Or: run inside `screen` or `tmux` so it persists after disconnect
+2. `git clone <your-repo> /root/trading-bot-clean && cd /root/trading-bot-clean`
+3. `python3 -m venv venv && trading/deploy/install-deps.sh`
+   - Installs **both** Streamlit and FastAPI deps into `/root/trading-bot-clean/venv`
+   - `requirements.txt` includes `-r requirements-api.txt` (fastapi, uvicorn)
+4. Streamlit dashboard: `/root/trading-bot-clean/venv/bin/streamlit run trading/dashboard.py --server.port 8501 --server.address 0.0.0.0`
+5. FastAPI (React dashboard data): enable `trading/deploy/alphatrade-api.service` — uses the **same venv**
+6. After every `git pull`, re-run `trading/deploy/install-deps.sh` before restarting services
 
 ## LIVE trading safety checklist
 

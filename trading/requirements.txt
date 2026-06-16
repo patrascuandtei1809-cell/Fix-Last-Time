@@ -6,3 +6,6 @@ numpy>=1.24.0
 requests>=2.31.0
 python-dateutil>=2.8.2
 pytest>=8.0.0
+
+# Read-only FastAPI dashboard API (alphatrade-api.service).
+-r requirements-api.txt

@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.11"
 dependencies = [
+    "fastapi>=0.110.0",
     "numpy>=2.4.6",
     "pandas>=3.0.3",
     "plotly>=6.7.0",
@@ -13,4 +14,5 @@ dependencies = [
     "python-dateutil>=2.9.0.post0",
     "requests>=2.34.2",
     "streamlit>=1.57.0",
+    "uvicorn[standard]>=0.27.0",
 ]
