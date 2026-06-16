@@ -1387,6 +1387,18 @@ for _ot in open_trades:
 total_pnl = realized_pnl + unrealized_pnl
 daily_pnl = daily_realized + unrealized_pnl  # today's realized + currently-open marks
 
+_bin_realized = dsupport.venue_realized_pnl(closed_trades, "binance")
+_bin_daily_realized = dsupport.venue_daily_realized(closed_trades, "binance", today_str)
+_bin_unrealized = dsupport.venue_unrealized_pnl(open_trades, "binance")
+_bin_total_pnl = _bin_realized + _bin_unrealized
+_bin_daily_pnl = _bin_daily_realized + _bin_unrealized
+_bin_wins = sum(1 for t in _bin_closed if (t.get("profit_loss") or 0) >= 0)
+_bin_win_rate = (_bin_wins / len(_bin_closed) * 100) if _bin_closed else 0.0
+_bin_closed_today = len(
+    [t for t in _bin_closed if (t.get("close_time") or "").startswith(today_str)])
+_bin_exposure = sum((t.get("invested") or 0) for t in _bin_open)
+_bin_roi = (_bin_unrealized / _bin_exposure * 100) if _bin_exposure else 0.0
+
 
 @st.cache_data(ttl=15, show_spinner=False)
 def _compute_account_value(_client, bust: str) -> dict:
@@ -3777,6 +3789,28 @@ def _render_global_rules_bar():
     )
 
 
+def _render_core_markets_table(acts: dict):
+    """BTC/ETH/SOL operator table — Binance tab only."""
+    _sec("📊 Core Markets · BTC · ETH · SOL only")
+    rows = []
+    for sym in _BIN_MAJORS:
+        rec = acts.get(sym)
+        px = _cur_price_for(sym)
+        chg = getattr(rec, "change_pct", None) if rec else None
+        ai_lbl, _ = _decision_state(rec) if rec else ("—", "#484f58")
+        rows.append({
+            "Coin": sym,
+            "Price": f"${px:,.2f}" if px else "—",
+            "Market-Low": f"{chg:+.2f}%" if chg is not None else "—",
+            "Volume": dsupport.volume_label(
+                getattr(rec, "volume_ratio", None) if rec else None),
+            "Trend": dsupport.trend_label(
+                getattr(rec, "trend_ok", None) if rec else None),
+            "AI": ai_lbl,
+        })
+    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+
+
 def _render_core_markets(acts: dict):
     """BTC/ETH/SOL — the pinned Binance auto-trade universe (real engine data)."""
     _sec("📊 Core Markets · BTC · ETH · SOL")
@@ -3850,15 +3884,13 @@ def _render_binance_legacy():
             continue
         _amt = float(_h.get("amount", 0) or 0)
         _val = float(_h.get("value", 0) or 0)
-        _pnl = _pnl_by_coin.get(f"{_a}USDT")          # trades key by full symbol
-        if f"{_a}USDT" in _pnl_by_coin:
-            _status = "📈 Open position"
-        elif _val < 10.0:
-            _status = "🪙 Dust (below ~$10 min)"
-        elif _val >= 10.0:
-            _status = "🚪 EXIT CANDIDATE (legacy — manual/convert only)"
-        else:
-            _status = "💼 Holding"
+        _pnl = _pnl_by_coin.get(f"{_a}USDT")
+        _has_open = f"{_a}USDT" in _pnl_by_coin
+        _status = dsupport.legacy_holding_status(
+            has_open_position=_has_open,
+            value_usd=_val,
+            has_price=True,
+        )
         _legacy_rows.append({
             "Coin":   _a,
             "Qty":    f"{_amt:,.8g}",
@@ -3871,13 +3903,17 @@ def _render_binance_legacy():
         if not _is_legacy(_a):
             continue
         _amt = float(_u.get("amount", 0) or 0)
-        _pnl = _pnl_by_coin.get(f"{_a}USDT")          # trades key by full symbol
+        _pnl = _pnl_by_coin.get(f"{_a}USDT")
         _legacy_rows.append({
             "Coin":   _a,
             "Qty":    f"{_amt:,.8g}",
             "Value":  "—",
             "PnL":    (f"{_pnl:+,.2f}" if _pnl is not None else "—"),
-            "Status": "⚠️ No price feed",
+            "Status": dsupport.legacy_holding_status(
+                has_open_position=f"{_a}USDT" in _pnl_by_coin,
+                value_usd=0.0,
+                has_price=False,
+            ),
         })
 
     if _legacy_rows:
@@ -4024,7 +4060,62 @@ def _render_mexc_wallet():
         st.caption(f"🔵 MEXC ({_mexc_tag}) — balance unavailable: {_mxe}")
 
 
-def _render_positions(venue: str):
+def _close_binance_trade(ot: dict) -> None:
+    """Manual close UI handler — existing execution path, unchanged."""
+    c = _cl()
+    if c is None:
+        st.error("❌ Connect to Binance first — closes require a real counter-order.")
+        return
+    _coin = ot["coin"]
+    _qty = float(ot.get("quantity") or 0)
+    _side = ot.get("side", "BUY")
+    if _qty <= 0:
+        st.error("❌ Position has zero quantity — cannot place counter-order.")
+        return
+    try:
+        _q_rnd = c.round_quantity(_coin, _qty)
+    except Exception:
+        _q_rnd = round(_qty, 6)
+    from binance_client import extract_fill as _extract_fill
+    try:
+        _counter_side = "SELL" if _side == "BUY" else "BUY"
+        _order = c.place_market_order(_coin, _counter_side, _q_rnd)
+        _exec_q, xp = _extract_fill(_order)
+        _exit_fee = _order_fee_usdt(_order, _coin, xp)
+    except Exception as _e:
+        st.error(f"❌ LIVE close order failed (NOT recorded): {_e}")
+        log_activity("ERROR", f"👤 Close {ot['id']} FAILED on Binance: {_e}")
+        st.stop()
+    if xp <= 0 or _exec_q <= 0:
+        st.error("❌ Close response missing execution data — trade NOT closed.")
+        log_activity("ERROR",
+            f"👤 Close {ot['id']} aborted — invalid execution data "
+            f"(qty={_exec_q}, price={xp}).")
+        st.stop()
+    _dev = abs(_exec_q - _q_rnd) / _q_rnd if _q_rnd > 0 else 1.0
+    if _dev > 0.05:
+        st.error(
+            f"❌ Fill size mismatch — intended {_q_rnd}, "
+            f"filled {_exec_q} (Δ {_dev*100:.2f}%). Trade "
+            f"left OPEN for manual reconciliation.")
+        log_activity("ERROR",
+            f"👤 Close {ot['id']} qty mismatch — intended {_q_rnd}, "
+            f"filled {_exec_q} (Δ {_dev*100:.2f}%). Trade OPEN.")
+        st.stop()
+    _closed = close_trade(ot["id"], xp, "Manual close via dashboard (LIVE)", _exit_fee)
+    if not _closed:
+        st.error("❌ Counter-order filled but persistence failed — manual reconciliation required.")
+        log_activity("ERROR",
+            f"👤 Close {ot['id']} — Binance filled {_counter_side} "
+            f"{_exec_q} @ ${xp:.4f} but close_trade returned no record.")
+        st.stop()
+    log_activity("ORDER",
+        f"👤 Closed {ot['id']} | LIVE {_counter_side} {_exec_q:.6f} "
+        f"{_coin} @ ${xp:.4f}")
+    st.rerun()
+
+
+def _render_positions(venue: str, *, use_table: bool = False):
     """Active trades for ONE venue. Binance positions get a LIVE close button
     (real Binance counter-order); MEXC positions are display-only (the bot
     manages SL/TP on MEXC — a Binance counter-order would be wrong)."""
@@ -4033,6 +4124,23 @@ def _render_positions(venue: str):
     _sec(f"💼 Active Trades · {len(rows)}/{cap}")
     if not rows:
         st.caption("No open positions on this venue yet.")
+        return
+    if use_table and venue == "binance":
+        _rm = st.session_state.risk_manager
+        tbl = dsupport.build_active_trades_table_rows(
+            rows,
+            _cur_price_for,
+            _rm.stop_loss_price,
+            _rm.take_profit_price,
+            _fmt_pnl,
+        )
+        st.dataframe(pd.DataFrame(tbl), width="stretch", hide_index=True)
+        with st.expander("Close a Binance position", expanded=False):
+            for ot in rows:
+                _coin = ot.get("coin", "?")
+                if st.button(f"✕ Close {_coin}", key=f"cl_tbl_{ot.get('id')}",
+                             width="stretch"):
+                    _close_binance_trade(ot)
         return
     for ot in rows:
         ep = ot.get("entry_price", 0)
@@ -4150,57 +4258,7 @@ def _render_positions(venue: str):
             st.markdown(_card, unsafe_allow_html=True)
         with pc2:
             if st.button("✕ Close", key=f"cl_{ot.get('id')}", width="stretch"):
-                c = _cl()
-                if c is None:
-                    st.error("❌ Connect to Binance first — closes require a real counter-order.")
-                else:
-                    _coin = ot["coin"]
-                    _qty = float(ot.get("quantity") or 0)
-                    _side = ot.get("side", "BUY")
-                    if _qty <= 0:
-                        st.error("❌ Position has zero quantity — cannot place counter-order.")
-                    else:
-                        try:
-                            _q_rnd = c.round_quantity(_coin, _qty)
-                        except Exception:
-                            _q_rnd = round(_qty, 6)
-                        from binance_client import extract_fill as _extract_fill
-                        try:
-                            _counter_side = "SELL" if _side == "BUY" else "BUY"
-                            _order = c.place_market_order(_coin, _counter_side, _q_rnd)
-                            _exec_q, xp = _extract_fill(_order)
-                            _exit_fee = _order_fee_usdt(_order, _coin, xp)
-                        except Exception as _e:
-                            st.error(f"❌ LIVE close order failed (NOT recorded): {_e}")
-                            log_activity("ERROR", f"👤 Close {ot['id']} FAILED on Binance: {_e}")
-                            st.stop()
-                        if xp <= 0 or _exec_q <= 0:
-                            st.error("❌ Close response missing execution data — trade NOT closed.")
-                            log_activity("ERROR",
-                                f"👤 Close {ot['id']} aborted — invalid execution data "
-                                f"(qty={_exec_q}, price={xp}).")
-                            st.stop()
-                        _dev = abs(_exec_q - _q_rnd) / _q_rnd if _q_rnd > 0 else 1.0
-                        if _dev > 0.05:
-                            st.error(
-                                f"❌ Fill size mismatch — intended {_q_rnd}, "
-                                f"filled {_exec_q} (Δ {_dev*100:.2f}%). Trade "
-                                f"left OPEN for manual reconciliation.")
-                            log_activity("ERROR",
-                                f"👤 Close {ot['id']} qty mismatch — intended {_q_rnd}, "
-                                f"filled {_exec_q} (Δ {_dev*100:.2f}%). Trade OPEN.")
-                            st.stop()
-                        _closed = close_trade(ot["id"], xp, "Manual close via dashboard (LIVE)", _exit_fee)
-                        if not _closed:
-                            st.error("❌ Counter-order filled but persistence failed — manual reconciliation required.")
-                            log_activity("ERROR",
-                                f"👤 Close {ot['id']} — Binance filled {_counter_side} "
-                                f"{_exec_q} @ ${xp:.4f} but close_trade returned no record.")
-                            st.stop()
-                        log_activity("ORDER",
-                            f"👤 Closed {ot['id']} | LIVE {_counter_side} {_exec_q:.6f} "
-                            f"{_coin} @ ${xp:.4f}")
-                        st.rerun()
+                _close_binance_trade(ot)
 
 
 @st.cache_data(ttl=30, show_spinner=False)
@@ -4215,6 +4273,50 @@ def _indicator_snapshot(sym: str, venue: str):
         return get_indicators(df)
     except Exception:
         return None
+
+
+def _render_ai_decisions_narrative(symbols, acts: dict, venue: str = "binance"):
+    """Human-readable AI / Market-Low decision blocks."""
+    _sec("🧠 AI Decisions")
+    syms = [s for s in (symbols or []) if s]
+    if not syms:
+        st.caption("No symbols to show.")
+        return
+    _r = _dip_rules()
+    buy_thr = float(_r["buy"])
+    for sym in syms:
+        rec = acts.get(str(sym).upper())
+        if rec is None:
+            st.markdown(f"**{sym}** — waiting for engine data")
+            st.caption("Start the bot to populate decisions.")
+            continue
+        df_ind = _indicator_snapshot(sym, venue)
+        macd_l, rsi_l, ai_conf = dsupport.macd_rsi_state(df_ind)
+        label, _, rsn = dsupport.classify_decision(rec, buy_thr, macd_l, rsi_l, ai_conf)
+        chg = getattr(rec, "change_pct", None)
+        tr = dsupport.trend_label(getattr(rec, "trend_ok", None))
+        vol = dsupport.volume_label(getattr(rec, "volume_ratio", None))
+        if label in ("BUY READY", "BUY"):
+            headline = f"**{sym} BUY**"
+        elif "BLOCKED" in label or label in ("HOLD",):
+            headline = f"**{sym} REJECTED**" if "BLOCKED" in label else f"**{sym} {label}**"
+        else:
+            headline = f"**{sym} {label}**"
+        st.markdown(headline)
+        if chg is not None:
+            st.caption(f"Market-Low = {chg:+.2f}%")
+        st.caption(f"Trend = {tr}")
+        st.caption(f"Volume = {vol}")
+        if label == "BUY READY":
+            st.caption("Cooldown = OK")
+        elif "cooldown" in (rsn or "").lower():
+            st.caption(f"Cooldown = {rsn[:80]}")
+        if "REJECTED" in headline or "BLOCKED" in label:
+            if chg is not None and chg > buy_thr:
+                st.caption(f"Does not meet BUY threshold ({buy_thr:.2f}%)")
+            elif rsn:
+                st.caption(rsn[:160])
+        st.divider()
 
 
 def _render_ai_decisions(symbols, acts: dict, accent: str, venue: str = "binance"):
@@ -4520,7 +4622,6 @@ with st.container():
             _render_overview_status_strip(
                 _conn_banner_parts, _bot_status_html, _reason_html)
             _render_bot_symbol_overview()
-            _render_core_markets(_acts)
             _render_open_trades_summary()
             _render_ai_decisions(_BIN_MAJORS, _acts, "#f0b90b", venue="binance")
             if _mexc_syms:
@@ -4538,11 +4639,11 @@ with st.container():
                       "never rotated · max 3 open positions",
                       "#f0b90b", "#1a1505")
 
-            roi_cls  = "up" if roi >= 0  else "dn"
-            dpnl_cls = "up" if daily_pnl >= 0 else "dn"
+            roi_cls  = "up" if _bin_roi >= 0  else "dn"
+            dpnl_cls = "up" if _bin_daily_pnl >= 0 else "dn"
 
-            _u_cls = "up" if unrealized_pnl >= 0 else "dn"
-            _r_cls = "up" if realized_pnl   >= 0 else "dn"
+            _u_cls = "up" if _bin_unrealized >= 0 else "dn"
+            _r_cls = "up" if _bin_realized   >= 0 else "dn"
             _bin_card_style = 'border-color:#26a69a55;' if _binance_connected else 'opacity:.55;'
 
             if binance_balance_err:
@@ -4584,18 +4685,18 @@ with st.container():
       </div>
       <div class="card">
         <div class="c-lbl">Realized PnL</div>
-        <div class="c-val {_r_cls}">{_fmt_pnl(realized_pnl)}</div>
-        <div class="c-sub">{len(closed_trades)} closed · Win {win_rate:.1f}%</div>
+        <div class="c-val {_r_cls}">{_fmt_pnl(_bin_realized)}</div>
+        <div class="c-sub">{len(_bin_closed)} closed · Win {_bin_win_rate:.1f}%</div>
       </div>
       <div class="card">
         <div class="c-lbl">Unrealized PnL</div>
-        <div class="c-val {_u_cls}">{_fmt_pnl(unrealized_pnl)}</div>
-        <div class="c-sub">Exposure {(sum((t.get('invested') or 0) for t in open_trades)/equity*100 if equity else 0):.1f}% · ROI {roi:+.2f}%</div>
+        <div class="c-val {_u_cls}">{_fmt_pnl(_bin_unrealized)}</div>
+        <div class="c-sub">Exposure {(_bin_exposure / equity * 100 if equity else 0):.1f}% · ROI {_bin_roi:+.2f}%</div>
       </div>
       <div class="card">
         <div class="c-lbl">Daily P&L</div>
-        <div class="c-val {dpnl_cls}">{_fmt_pnl(daily_pnl)}</div>
-        <div class="c-sub">R {_fmt_pnl(daily_realized)} · {len([t for t in closed_trades if (t.get('close_time') or '').startswith(today_str)])} today</div>
+        <div class="c-val {dpnl_cls}">{_fmt_pnl(_bin_daily_pnl)}</div>
+        <div class="c-sub">R {_fmt_pnl(_bin_daily_realized)} · {_bin_closed_today} today</div>
       </div>
     </div>
     """, unsafe_allow_html=True)
@@ -4631,11 +4732,11 @@ with st.container():
                     f"deployed ${sum((t.get('invested') or 0) for t in _bin_open):,.2f} "
                     f"in {len(_bin_open)} open position(s)")
 
-            # Equity curve moved to Performance tab (no duplicate sparkline here).
+            _render_core_markets_table(_acts)
 
             _bmaj = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
             _bcur = st.session_state.symbol if st.session_state.symbol in _bmaj else "BTCUSDT"
-            st.markdown('<div class="sec-lbl" style="margin-top:12px;">📈 Binance Chart</div>',
+            st.markdown('<div class="sec-lbl" style="margin-top:12px;">📈 Selected Coin Chart</div>',
                         unsafe_allow_html=True)
             if hasattr(st, "segmented_control"):
                 _bpick = st.segmented_control(
@@ -5395,11 +5496,10 @@ with st.container():
                 with st.spinner("Loading chart data from Binance…"):
                     st.info("Chart will appear here once data loads. No API key required.")
 
-            # ── Binance active trades, decisions, closed history, legacy ──
-            _render_positions("binance")
-            _render_ai_decisions(_BIN_MAJORS, _acts, "#f0b90b", venue="binance")
-            _render_venue_closed_trades("binance", _fmt_pnl, _fmt_pct)
+            # ── Binance active trades, legacy, AI narrative (closed → History tab) ──
+            _render_positions("binance", use_table=True)
             _render_binance_legacy()
+            _render_ai_decisions_narrative(_BIN_MAJORS, _acts, venue="binance")
 
         elif _at_tab == _MAIN_TAB_LABELS[2]:
             _venue_header("🔵 MEXC DASHBOARD",

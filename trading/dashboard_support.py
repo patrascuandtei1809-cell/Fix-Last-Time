@@ -353,3 +353,102 @@ def amount_left_to_trade(
     if max_exposure and max_exposure > 0:
         return max(0.0, min(free_usdt, max_exposure - current_exposure))
     return max(0.0, free_usdt * 0.75)
+
+
+def _venue_match(trade: Dict, venue: str) -> bool:
+    ex = (trade.get("exchange") or "binance").lower()
+    return ex == venue.lower()
+
+
+def venue_realized_pnl(closed: List[Dict], venue: str) -> float:
+    return sum(
+        float(t.get("profit_loss") or 0)
+        for t in closed
+        if _venue_match(t, venue)
+    )
+
+
+def venue_daily_realized(closed: List[Dict], venue: str, today_str: str) -> float:
+    return sum(
+        float(t.get("profit_loss") or 0)
+        for t in closed
+        if _venue_match(t, venue) and (t.get("close_time") or "").startswith(today_str)
+    )
+
+
+def venue_unrealized_pnl(open_trades: List[Dict], venue: str) -> float:
+    return sum(
+        float(t.get("_unrealized") or 0)
+        for t in open_trades
+        if _venue_match(t, venue)
+    )
+
+
+def legacy_holding_status(
+    *,
+    has_open_position: bool,
+    value_usd: float,
+    has_price: bool,
+) -> str:
+    if not has_price:
+        return "WAIT CONFIRMATION"
+    if has_open_position:
+        return "LEGACY HOLD"
+    if value_usd >= 10.0:
+        return "LEGACY EXIT CANDIDATE"
+    return "LEGACY HOLD"
+
+
+def build_active_trades_table_rows(
+    trades: List[Dict],
+    price_fn,
+    stop_loss_fn,
+    take_profit_fn,
+    fmt_pnl,
+) -> List[Dict[str, str]]:
+    """Operator table: Coin, Entry, Current, PnL, Target, Stop."""
+    rows: List[Dict[str, str]] = []
+    for ot in trades:
+        coin = ot.get("coin", "—")
+        ep = float(ot.get("entry_price") or 0)
+        side = ot.get("side", "BUY")
+        cp = ot.get("_cur_price")
+        if cp is None and price_fn:
+            cp = price_fn(coin)
+        cp_f = float(cp) if cp else None
+        sl = ot.get("stop_loss") or (stop_loss_fn(ep, side) if ep else None)
+        tp = ot.get("take_profit") or (take_profit_fn(ep, side) if ep else None)
+        u = ot.get("_unrealized")
+        if u is None and cp_f and ep:
+            inv = float(ot.get("invested") or 0)
+            u = ((cp_f - ep) / ep * inv if side == "BUY"
+                 else (ep - cp_f) / ep * inv)
+        rows.append({
+            "Coin": coin,
+            "Entry": f"${ep:.4f}" if ep else "—",
+            "Current": f"${cp_f:.4f}" if cp_f else "—",
+            "PnL": fmt_pnl(u) if u is not None else "—",
+            "Target": f"${float(tp):.4f}" if tp else "—",
+            "Stop": f"${float(sl):.4f}" if sl else "—",
+        })
+    return rows
+
+
+def trend_label(trend_ok) -> str:
+    if trend_ok is True:
+        return "UP"
+    if trend_ok is False:
+        return "DOWN"
+    return "—"
+
+
+def volume_label(volume_ratio) -> str:
+    if volume_ratio is None:
+        return "—"
+    try:
+        vr = float(volume_ratio)
+    except (TypeError, ValueError):
+        return "—"
+    if vr >= 1.0:
+        return "HIGH"
+    return f"{vr:.2f}×"
