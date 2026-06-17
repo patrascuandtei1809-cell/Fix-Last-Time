@@ -975,7 +975,7 @@ def _ensure_scanner_routing():
     _launch_bot_from_plan()
 
 
-def _mexc_workers_live_mode(bot) -> Optional[bool]:
+def _mexc_workers_live_mode(bot) -> bool | None:
     """True/False if bot has MEXC workers; None if no MEXC workers."""
     try:
         mexc = [
