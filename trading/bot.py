@@ -1654,7 +1654,7 @@ def create_bot(
     global_risk:           Optional[GlobalRiskManager] = None,
     exchange:              Optional[Exchange] = None,
     exchange_mode:         str = "binance",   # "binance" | "mexc" | "multi"
-    mexc_live_orders:      bool = False,       # MEXC stays DRY-RUN until True
+    mexc_live_orders:      bool = True,        # MEXC LIVE orders by default
     symbol_venues:         Optional[Dict[str, str]] = None,  # {symbol: "binance"|"mexc"} for per-worker routing
     scanner_driven:        bool = False,       # True ⇒ ungated scalper path (never V2-gated)
     rotate_scanner:        bool = False,       # True ⇒ periodically swap stale MEXC scanner picks (Task #41)

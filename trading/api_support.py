@@ -399,7 +399,7 @@ def load_scanner_config() -> Dict[str, Any]:
         "data": {
             "exchange_mode": persisted.get("exchange_mode", "mexc"),
             "use_scanner_symbols": bool(persisted.get("use_scanner_symbols", False)),
-            "mexc_live_orders": bool(persisted.get("mexc_live_orders", False)),
+            "mexc_live_orders": bool(persisted.get("mexc_live_orders", True)),
             "max_open_trades_binance": gr.get("max_open_trades_binance", 3),
             "max_open_trades_mexc": gr.get("max_open_trades_mexc", 15),
             "max_open_trades_total": gr.get("max_open_trades_total", 18),

@@ -694,13 +694,13 @@ def _init():
         "show_sl_tp":          True,
         # ── Multi-exchange + scanner (June 2026) ─────────────────────────────
         # Execution venue: "binance" (default, unchanged) | "mexc" | "multi".
-        # MEXC stays DRY-RUN until the operator explicitly flips mexc_live_orders.
+        # MEXC live orders ON by default (real exchange orders when creds present).
         # use_scanner_symbols=ON makes the bot trade the scanner's top picks
         # (scoped to the active venue) instead of the static BTC/ETH/SOL set.
         # MEXC = sole auto-trading venue. Binance is DISPLAY/RECONCILIATION ONLY
-        # and must NOT auto-trade. MEXC stays DRY-RUN until mexc_live_orders is on.
+        # and must NOT auto-trade except pinned majors when split routing is on.
         "exchange_mode":       "mexc",
-        "mexc_live_orders":    False,
+        "mexc_live_orders":    True,
         "use_scanner_symbols": True,
     }
     for k, v in defaults.items():
@@ -975,6 +975,54 @@ def _ensure_scanner_routing():
     _launch_bot_from_plan()
 
 
+def _mexc_workers_live_mode(bot) -> Optional[bool]:
+    """True/False if bot has MEXC workers; None if no MEXC workers."""
+    try:
+        mexc = [
+            w for w in bot.workers.values()
+            if getattr(getattr(w, "exchange", None), "name", "") == "mexc"
+        ]
+    except Exception:
+        return None
+    if not mexc:
+        return None
+    return any(bool(getattr(w.exchange, "live_orders", False)) for w in mexc)
+
+
+def _ensure_mexc_live_mode():
+    """Rebuild a running bot when mexc_live_orders and MexcExchange mode disagree."""
+    if st.session_state.get("_user_stopped_bot"):
+        return
+    want_live = bool(st.session_state.get("mexc_live_orders", True))
+    import bot as _bm
+    b = _bm.get_bot()
+    if b is None or not b.is_running():
+        return
+    have_live = _mexc_workers_live_mode(b)
+    if have_live is None:
+        return
+    if want_live == have_live:
+        return
+    try:
+        log_activity(
+            "INFO",
+            "[BOT] Rebuilding workers — mexc_live_orders="
+            f"{'LIVE' if want_live else 'DRY-RUN'} but MexcExchange is "
+            f"{'LIVE' if have_live else 'DRY-RUN'}",
+        )
+    except Exception:
+        pass
+    print(
+        "[BOT] mexc_live_orders mismatch — rebuilding MexcExchange "
+        f"(want={'LIVE' if want_live else 'DRY-RUN'} "
+        f"have={'LIVE' if have_live else 'DRY-RUN'})",
+        flush=True,
+    )
+    _bm.stop_bot()
+    time.sleep(0.3)
+    _launch_bot_from_plan()
+
+
 def _maybe_resume_bot():
     """If `bot_was_running` was persisted (user had bot ON before the server
     restarted) AND we just auto-reconnected the LIVE client, rebuild + start
@@ -987,6 +1035,7 @@ def _maybe_resume_bot():
     import bot as _bm
     if _bm.get_bot() and _bm.get_bot().is_running():
         _ensure_scanner_routing()
+        _ensure_mexc_live_mode()
         return
     mode = st.session_state.get("exchange_mode", "mexc")
     if mode == "mexc":
@@ -1192,6 +1241,10 @@ if not st.session_state.get("_settings_loaded"):
     except Exception as _e:
         print(f"[LIVE-SETTINGS] filter invariant snap failed: {_e}", flush=True)
 
+    if not bool(st.session_state.get("mexc_live_orders", False)):
+        st.session_state.mexc_live_orders = True
+        print("[SETTINGS] upgraded mexc_live_orders → True (MEXC LIVE)", flush=True)
+
     st.session_state._settings_loaded = True
     if _persisted:
         print(f"[SETTINGS] loaded {len(_persisted)} keys from disk "
@@ -1377,6 +1430,8 @@ except Exception:
 # 2. Chart data — prefer bot's continuously-updated shared df when bot is running
 bot_inst    = bot_module.get_bot()
 bot_running = bot_inst.is_running() if bot_inst else False
+if bot_running:
+    _ensure_mexc_live_mode()
 
 # Chart history depth — fetch a deep candle set so "Zoom out" can reveal the
 # full available history, not just the last few hours. Binance is paginated
@@ -2951,16 +3006,16 @@ with st.sidebar:
         )
         st.session_state.mexc_live_orders = st.checkbox(
             "⚠️ Enable LIVE MEXC orders (max 15 USDT/trade)",
-            value=bool(st.session_state.get("mexc_live_orders", False)),
+            value=bool(st.session_state.get("mexc_live_orders", True)),
             key="cb_mexc_live",
-            help="OFF (default): MEXC orders are simulated (DRY-RUN) — nothing "
-                 "is sent. ON: real MEXC orders, hard-capped at 15 USDT/buy and "
-                 "blocked if MEXC USDT balance < 5.",
+            help="ON (default): real MEXC orders, hard-capped at 15 USDT/buy. "
+                 "OFF: simulated DRY-RUN — nothing is sent to the exchange.",
         )
         if st.session_state.mexc_live_orders:
             st.caption("⚠️ LIVE MEXC orders ON — capped at 15 USDT/trade.")
         else:
             st.caption("🔒 MEXC in DRY-RUN — no real orders sent.")
+        _ensure_mexc_live_mode()
 
         st.session_state.use_scanner_symbols = st.checkbox(
             "Split routing: BTC/ETH/SOL on Binance + scanner alts on MEXC",
