@@ -63,6 +63,7 @@ import telegram_notifier as tg
 from binance_client import public_klines, public_price, public_24h
 import dashboard_support as dsupport
 import heartbeats
+from typing import Optional
 
 # ── Real commission → USDT (P2) ─────────────────────────────────────────────
 # Manual trades hit the raw Binance client (place_market_order) which returns the
@@ -1034,22 +1035,28 @@ def _maybe_resume_bot():
     """
     import bot as _bm
     if _bm.get_bot() and _bm.get_bot().is_running():
+        print("[BOT-DEBUG] existing bot running", flush=True)
         _ensure_scanner_routing()
         _ensure_mexc_live_mode()
         return
     mode = st.session_state.get("exchange_mode", "mexc")
+    print(f"[BOT-DEBUG] mode={mode} client={bool(st.session_state.get("client"))} mexc_ready={_mexc_ready()} stopped={bool(st.session_state.get("_user_stopped_bot"))}", flush=True)
     if mode == "mexc":
         if not _mexc_ready():
+            print("[BOT-DEBUG] return: mexc not ready", flush=True)
             return
     elif not st.session_state.get("client"):
+        print("[BOT-DEBUG] return: no client for non-mexc mode", flush=True)
         return
     try:
         cfg = _bm.load_settings() or {}
     except Exception:
         return
     if st.session_state.get("_user_stopped_bot"):
+        print("[BOT-DEBUG] return: user stopped bot", flush=True)
         return
     _fb = cfg.get("active_symbols") or st.session_state.active_symbols
+    print(f"[BOT-DEBUG] launching with fallback={_fb} settings_scan={st.session_state.get('use_scanner_symbols')} mexc_live={st.session_state.get('mexc_live_orders')}", flush=True)
     try:
         _launch_bot_from_plan(_fb)
     except Exception as _e:
@@ -2183,7 +2190,19 @@ def _render_ai_why_panel():
         )
 
 
-# ── Sticky "last action" banner — survives st.rerun() so the user always
+
+def _safe_rerun():
+    """Do not rerun while user is viewing History; prevents table/page shake."""
+    try:
+        sec = str(st.session_state.get("section", st.session_state.get("tab", ""))).lower()
+        if sec == "history":
+            return
+    except Exception:
+        pass
+    _safe_rerun()
+
+
+# ── Sticky "last action" banner — survives _safe_rerun() so the user always
 # sees the result of the most recent button click (success or error).
 # Buttons set st.session_state.last_action = {"kind":"ok|err","msg":"..."}.
 # Cleared by the small ✕ button.
@@ -2206,7 +2225,7 @@ if _la and isinstance(_la, dict) and _la.get("msg"):
     with _lcol2:
         if st.button("✕", key="dismiss_last_action", help="Dismiss"):
             st.session_state.last_action = None
-            st.rerun()
+            _safe_rerun()
 
 # Bot symbol cards + WHY NO TRADE diagnostics render inside Overview / Diagnostics tabs.
 
@@ -2287,7 +2306,7 @@ with st.sidebar:
                 st.session_state.api_secret        = ""
                 st.session_state.creds_from_disk   = False
                 st.session_state.manual_disconnect = True  # block auto-reload from disk
-                st.rerun()
+                _safe_rerun()
         with _dc2:
             _has_saved = _has_saved_creds()
             if st.button("🧹 Clear saved", width="stretch",
@@ -2301,7 +2320,7 @@ with st.sidebar:
                 st.session_state.creds_from_disk   = False
                 st.session_state.manual_disconnect = True
                 log_activity("INFO", "🧹 Cleared saved Binance credentials from backend")
-                st.rerun()
+                _safe_rerun()
     else:
         # Surface auto-connect failure (e.g. -1022/-2015) so user sees the exact Binance error
         _auto_err = st.session_state.pop("_auto_conn_err", None)
@@ -2366,7 +2385,7 @@ with st.sidebar:
                                 log_activity("INFO",
                                     f"🔌 Connected LIVE (session only) — key {api_key[:6]}…")
                             st.success("✅ Connected to LIVE Mainnet!")
-                            st.rerun()
+                            _safe_rerun()
                         else:
                             st.session_state.client    = None
                             st.session_state.connected = False
@@ -2382,7 +2401,7 @@ with st.sidebar:
                          help="Delete persisted backend credentials file."):
                 _clear_creds()
                 log_activity("INFO", "🧹 Cleared saved Binance credentials from backend")
-                st.rerun()
+                _safe_rerun()
 
     st.markdown('<hr class="s-div"/>', unsafe_allow_html=True)
 
@@ -2498,7 +2517,7 @@ with st.sidebar:
                 # next cold start.
                 st.session_state.bot_was_running   = True
                 st.session_state._user_stopped_bot = False
-                st.rerun()
+                _safe_rerun()
     with bc2:
         if st.button("⏹ Stop", width="stretch", disabled=not bot_running):
             bot_module.stop_bot()
@@ -2506,7 +2525,7 @@ with st.sidebar:
             # ACTIVE SCALPER auto-resume: explicit Stop suppresses auto-launch
             # on next cold start. ▶ Start clears this flag.
             st.session_state._user_stopped_bot = True
-            st.rerun()
+            _safe_rerun()
 
     if st.button("🚨 Emergency Stop", width="stretch", type="secondary"):
         st.session_state.risk.emergency_stop = True
@@ -2517,14 +2536,14 @@ with st.sidebar:
         st.session_state._user_stopped_bot = True
         log_activity("WARNING", "🚨 EMERGENCY STOP activated — all trading halted")
         tg.bot_event("emergency", "All trading halted by user")
-        st.rerun()
+        _safe_rerun()
 
     if st.session_state.risk.emergency_stop:
         st.error("🚨 Emergency stop ACTIVE")
         if st.button("✅ Clear Emergency Stop", width="stretch"):
             st.session_state.risk.emergency_stop = False
             log_activity("INFO", "✅ Emergency stop cleared — trading resumed")
-            st.rerun()
+            _safe_rerun()
 
     # ── Bot performance stats ──────────────────────────────────────────────
     _all_tr   = load_trades()
@@ -2901,7 +2920,7 @@ with st.sidebar:
                 # Snap the widget back to the persisted mode → no mixed state.
                 st.session_state.aggro_intensity_sel = _persisted
                 st.session_state["_aggro_save_error"] = True
-            st.rerun()
+            _safe_rerun()
 
         # Description is driven by the SAME persisted value the selectbox shows.
         _cur_mode = am.normalize_mode(st.session_state.get("aggressive_mode"))
@@ -3116,10 +3135,10 @@ with st.sidebar:
         f"prevents iframe load errors with {_ref_choice}s polling)."
     )
     if st.button("↺ Refresh Now", width="stretch"):
-        st.rerun()
+        _safe_rerun()
     if st.button("🗑 Reset All Data", width="stretch"):
         reset_all_data()
-        st.rerun()
+        _safe_rerun()
 
     st.markdown('<hr class="s-div"/>', unsafe_allow_html=True)
 
@@ -3426,7 +3445,7 @@ def _render_scanner_refresh_block(payload):
             with st.spinner("Scanning Binance + MEXC…"):
                 _sc.scan(write=True)
             st.success("Scan updated.")
-            st.rerun()
+            _safe_rerun()
         except Exception as _e:
             st.error(f"Scan failed: {_e}")
 
@@ -3786,7 +3805,7 @@ def _render_history_tab(fmt_pnl_fn, fmt_pct_fn):
         with ac2:
             if st.button("🗑 Clear log", key="clear_activity_btn"):
                 clear_activity()
-                st.rerun()
+                _safe_rerun()
         activity = load_activity()
         if not activity:
             st.info("No activity log yet — expected at trading/data/activity.json")
@@ -4506,7 +4525,7 @@ def _render_binance_legacy():
                                 f"(manual, confirmed).")
                             st.success(f"✅ Sold {_exec_q:,.8g} {_asset} for "
                                        f"≈${_proceeds:,.2f} USDT.")
-                            st.rerun()
+                            _safe_rerun()
 
 
 def _render_mexc_wallet():
@@ -4702,7 +4721,7 @@ def _close_binance_trade(ot: dict) -> None:
     log_activity("ORDER",
         f"👤 Closed {ot['id']} | LIVE {_counter_side} {_exec_q:.6f} "
         f"{_coin} @ ${xp:.4f}")
-    st.rerun()
+    _safe_rerun()
 
 
 def _render_positions(venue: str, *, use_table: bool = False):
@@ -4853,7 +4872,7 @@ def _render_positions(venue: str, *, use_table: bool = False):
                         log_activity("ORDER",
                             f"👤 Closed {ot['id']} | {_tag} MEXC {_counter_side} "
                             f"{_exec_q:.6f} {_coin} @ ${xp:.4f}")
-                        st.rerun()
+                        _safe_rerun()
             continue
         pc1, pc2 = st.columns([9, 1])
         with pc1:
@@ -5358,7 +5377,7 @@ with st.container():
                     label_visibility="collapsed")
             if _bpick and _bpick != st.session_state.symbol:
                 st.session_state.symbol = _bpick
-                st.rerun()
+                _safe_rerun()
 
             # ── Chart toolbar ─────────────────────────────────────────────────────
             # Manual BUY/SELL controls were removed — the Market Low bot is the
@@ -5442,10 +5461,10 @@ with st.container():
                             am.apply_profile_to_bot(b, st.session_state.aggressive_mode)
                             b._initial_balance = st.session_state.initial_balance
                             b.start()
-                    st.rerun()
+                    _safe_rerun()
             with tb6:
                 if st.button("↺", width="stretch", help="Refresh"):
-                    st.rerun()
+                    _safe_rerun()
 
             if emg_btn:
                 st.session_state.risk.emergency_stop = True
@@ -5453,7 +5472,7 @@ with st.container():
                 st.session_state.bot_was_running   = False
                 st.session_state._user_stopped_bot = True
                 log_activity("WARNING", "🚨 EMERGENCY STOP activated")
-                st.rerun()
+                _safe_rerun()
 
             # ── Chart (3-panel: Candles+EMA | Stochastic | RSI) ───────────────────
             # ── Active Levels strip (replaces in-chart annotations) ─────────────────
@@ -5508,7 +5527,7 @@ with st.container():
                                      type="primary" if _active else "secondary",
                                      width="stretch"):
                             st.session_state.interval = _val
-                            st.rerun()
+                            _safe_rerun()
                 with _tfcols[-1]:
                     st.markdown(
                         f'<div style="text-align:right;font-size:11px;color:#6e7681;'
@@ -5591,25 +5610,25 @@ with st.container():
                                  help="Halve the visible window"):
                         st.session_state[_win_key] = max(0.25, st.session_state[_win_key] / 2)
                         st.session_state[_nonce_key] += 1
-                        st.rerun()
+                        _safe_rerun()
                 with _zo:
                     if st.button("➖ Zoom out", key="chart_zoom_out_btn", width="stretch",
                                  help="Double the visible window"):
                         st.session_state[_win_key] = min(720, st.session_state[_win_key] * 2)
                         st.session_state[_nonce_key] += 1
-                        st.rerun()
+                        _safe_rerun()
                 with _zr2:
                     if st.button("⟲ Reset 2h", key="chart_reset_2h_btn", width="stretch",
                                  help="Reset view to the last 2 hours"):
                         st.session_state[_win_key]   = 2
                         st.session_state[_nonce_key] += 1
-                        st.rerun()
+                        _safe_rerun()
                 with _zr24:
                     if st.button("⟲ Reset 24h", key="chart_reset_24h_btn", width="stretch",
                                  help="Reset view to the last 24 hours"):
                         st.session_state[_win_key]   = 24
                         st.session_state[_nonce_key] += 1
-                        st.rerun()
+                        _safe_rerun()
                 with _mo:
                     _moff_val = min(0.20, max(0.01, float(st.session_state[_moff_key])))
                     st.session_state[_moff_key] = st.slider(

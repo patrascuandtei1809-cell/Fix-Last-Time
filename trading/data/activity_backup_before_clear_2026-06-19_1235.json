@@ -1,0 +1,2502 @@
+[
+  {
+    "time": "2026-06-19T12:29:08.538453",
+    "level": "SCAN",
+    "message": "[SCAN] BEATUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:08.638800",
+    "level": "WARNING",
+    "message": "[XPLUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:08.653224",
+    "level": "SCAN",
+    "message": "[SCAN] XPLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:08.765605",
+    "level": "WARNING",
+    "message": "[BCHUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:08.781506",
+    "level": "SCAN",
+    "message": "[SCAN] BCHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:08.887935",
+    "level": "WARNING",
+    "message": "[BNBUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:08.901026",
+    "level": "SCAN",
+    "message": "[SCAN] BNBUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:08.993034",
+    "level": "WARNING",
+    "message": "[HYPEUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:09.006421",
+    "level": "SCAN",
+    "message": "[SCAN] HYPEUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:09.105977",
+    "level": "WARNING",
+    "message": "[VELVETUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:09.118448",
+    "level": "SCAN",
+    "message": "[SCAN] VELVETUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:09.215417",
+    "level": "WARNING",
+    "message": "[LABUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:09.228869",
+    "level": "SCAN",
+    "message": "[SCAN] LABUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:09.348101",
+    "level": "WARNING",
+    "message": "[UPCUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:09.362778",
+    "level": "SCAN",
+    "message": "[SCAN] UPCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:09.473139",
+    "level": "WARNING",
+    "message": "[BTWUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:09.488989",
+    "level": "SCAN",
+    "message": "[SCAN] BTWUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:09.589923",
+    "level": "WARNING",
+    "message": "[DNUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:09.605472",
+    "level": "SCAN",
+    "message": "[SCAN] DNUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:12.215578",
+    "level": "ERROR",
+    "message": "[BTCUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:12.226284",
+    "level": "SCAN",
+    "message": "[SCAN] BTCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:12.525609",
+    "level": "ERROR",
+    "message": "[ETHUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:12.534749",
+    "level": "SCAN",
+    "message": "[SCAN] ETHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:12.836551",
+    "level": "ERROR",
+    "message": "[SOLUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:12.848543",
+    "level": "SCAN",
+    "message": "[SCAN] SOLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:12.925150",
+    "level": "WARNING",
+    "message": "[ASTERUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:12.940314",
+    "level": "SCAN",
+    "message": "[SCAN] ASTERUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:13.019793",
+    "level": "WARNING",
+    "message": "[XRPUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:13.035597",
+    "level": "SCAN",
+    "message": "[SCAN] XRPUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:13.122322",
+    "level": "WARNING",
+    "message": "[BEATUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:13.135758",
+    "level": "SCAN",
+    "message": "[SCAN] BEATUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:13.221681",
+    "level": "WARNING",
+    "message": "[XPLUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:13.236136",
+    "level": "SCAN",
+    "message": "[SCAN] XPLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:13.330085",
+    "level": "WARNING",
+    "message": "[BCHUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:13.343228",
+    "level": "SCAN",
+    "message": "[SCAN] BCHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:13.436519",
+    "level": "WARNING",
+    "message": "[BNBUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:13.446659",
+    "level": "SCAN",
+    "message": "[SCAN] BNBUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:13.527802",
+    "level": "WARNING",
+    "message": "[HYPEUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:13.538017",
+    "level": "SCAN",
+    "message": "[SCAN] HYPEUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:13.625119",
+    "level": "WARNING",
+    "message": "[VELVETUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:13.639025",
+    "level": "SCAN",
+    "message": "[SCAN] VELVETUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:13.725535",
+    "level": "WARNING",
+    "message": "[LABUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:13.737159",
+    "level": "SCAN",
+    "message": "[SCAN] LABUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:13.824170",
+    "level": "WARNING",
+    "message": "[UPCUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:13.835190",
+    "level": "SCAN",
+    "message": "[SCAN] UPCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:13.925087",
+    "level": "WARNING",
+    "message": "[BTWUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:13.938655",
+    "level": "SCAN",
+    "message": "[SCAN] BTWUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:14.033481",
+    "level": "WARNING",
+    "message": "[DNUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:14.044876",
+    "level": "SCAN",
+    "message": "[SCAN] DNUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:16.562725",
+    "level": "ERROR",
+    "message": "[BTCUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:16.576132",
+    "level": "SCAN",
+    "message": "[SCAN] BTCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:16.885959",
+    "level": "ERROR",
+    "message": "[ETHUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:16.896839",
+    "level": "SCAN",
+    "message": "[SCAN] ETHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:17.183211",
+    "level": "ERROR",
+    "message": "[SOLUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:17.193922",
+    "level": "SCAN",
+    "message": "[SCAN] SOLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:17.266598",
+    "level": "WARNING",
+    "message": "[ASTERUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:17.276522",
+    "level": "SCAN",
+    "message": "[SCAN] ASTERUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:17.358013",
+    "level": "WARNING",
+    "message": "[XRPUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:17.368291",
+    "level": "SCAN",
+    "message": "[SCAN] XRPUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:17.450116",
+    "level": "WARNING",
+    "message": "[BEATUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:17.459205",
+    "level": "SCAN",
+    "message": "[SCAN] BEATUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:17.532243",
+    "level": "WARNING",
+    "message": "[XPLUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:17.538620",
+    "level": "SCAN",
+    "message": "[SCAN] XPLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:17.625646",
+    "level": "WARNING",
+    "message": "[BCHUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:17.636601",
+    "level": "SCAN",
+    "message": "[SCAN] BCHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:17.719080",
+    "level": "WARNING",
+    "message": "[BNBUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:17.729334",
+    "level": "SCAN",
+    "message": "[SCAN] BNBUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:17.803207",
+    "level": "WARNING",
+    "message": "[HYPEUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:17.812076",
+    "level": "SCAN",
+    "message": "[SCAN] HYPEUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:17.896605",
+    "level": "WARNING",
+    "message": "[VELVETUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:17.906724",
+    "level": "SCAN",
+    "message": "[SCAN] VELVETUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:17.970083",
+    "level": "WARNING",
+    "message": "[LABUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:17.981792",
+    "level": "SCAN",
+    "message": "[SCAN] LABUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:18.047199",
+    "level": "WARNING",
+    "message": "[UPCUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:18.054870",
+    "level": "SCAN",
+    "message": "[SCAN] UPCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:18.128151",
+    "level": "WARNING",
+    "message": "[BTWUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:18.139738",
+    "level": "SCAN",
+    "message": "[SCAN] BTWUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:18.221659",
+    "level": "WARNING",
+    "message": "[DNUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:18.233091",
+    "level": "SCAN",
+    "message": "[SCAN] DNUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:20.784549",
+    "level": "ERROR",
+    "message": "[BTCUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:20.793067",
+    "level": "SCAN",
+    "message": "[SCAN] BTCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:21.091978",
+    "level": "ERROR",
+    "message": "[ETHUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:21.102311",
+    "level": "SCAN",
+    "message": "[SCAN] ETHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:21.383597",
+    "level": "ERROR",
+    "message": "[SOLUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:21.394233",
+    "level": "SCAN",
+    "message": "[SCAN] SOLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:21.478065",
+    "level": "WARNING",
+    "message": "[ASTERUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:21.488553",
+    "level": "SCAN",
+    "message": "[SCAN] ASTERUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:21.570253",
+    "level": "WARNING",
+    "message": "[XRPUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:21.581441",
+    "level": "SCAN",
+    "message": "[SCAN] XRPUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:21.662103",
+    "level": "WARNING",
+    "message": "[BEATUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:21.672941",
+    "level": "SCAN",
+    "message": "[SCAN] BEATUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:21.755820",
+    "level": "WARNING",
+    "message": "[XPLUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:21.766371",
+    "level": "SCAN",
+    "message": "[SCAN] XPLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:21.842077",
+    "level": "WARNING",
+    "message": "[BCHUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:21.851552",
+    "level": "SCAN",
+    "message": "[SCAN] BCHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:21.925987",
+    "level": "WARNING",
+    "message": "[BNBUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:21.933203",
+    "level": "SCAN",
+    "message": "[SCAN] BNBUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:22.013384",
+    "level": "WARNING",
+    "message": "[HYPEUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:22.025330",
+    "level": "SCAN",
+    "message": "[SCAN] HYPEUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:22.101118",
+    "level": "WARNING",
+    "message": "[VELVETUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:22.112137",
+    "level": "SCAN",
+    "message": "[SCAN] VELVETUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:22.190522",
+    "level": "WARNING",
+    "message": "[LABUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:22.200300",
+    "level": "SCAN",
+    "message": "[SCAN] LABUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:22.283159",
+    "level": "WARNING",
+    "message": "[UPCUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:22.294369",
+    "level": "SCAN",
+    "message": "[SCAN] UPCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:22.379650",
+    "level": "WARNING",
+    "message": "[BTWUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:22.391927",
+    "level": "SCAN",
+    "message": "[SCAN] BTWUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:22.480284",
+    "level": "WARNING",
+    "message": "[DNUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:22.491354",
+    "level": "SCAN",
+    "message": "[SCAN] DNUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:25.041958",
+    "level": "ERROR",
+    "message": "[BTCUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:25.051325",
+    "level": "SCAN",
+    "message": "[SCAN] BTCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:25.350750",
+    "level": "ERROR",
+    "message": "[ETHUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:25.363801",
+    "level": "SCAN",
+    "message": "[SCAN] ETHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:25.666679",
+    "level": "ERROR",
+    "message": "[SOLUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:25.676405",
+    "level": "SCAN",
+    "message": "[SCAN] SOLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:25.763187",
+    "level": "WARNING",
+    "message": "[ASTERUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:25.772379",
+    "level": "SCAN",
+    "message": "[SCAN] ASTERUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:25.846297",
+    "level": "WARNING",
+    "message": "[XRPUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:25.855616",
+    "level": "SCAN",
+    "message": "[SCAN] XRPUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:25.938555",
+    "level": "WARNING",
+    "message": "[BEATUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:25.948600",
+    "level": "SCAN",
+    "message": "[SCAN] BEATUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:26.027722",
+    "level": "WARNING",
+    "message": "[XPLUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:26.038854",
+    "level": "SCAN",
+    "message": "[SCAN] XPLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:26.113473",
+    "level": "WARNING",
+    "message": "[BCHUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:26.122056",
+    "level": "SCAN",
+    "message": "[SCAN] BCHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:26.196215",
+    "level": "WARNING",
+    "message": "[BNBUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:26.205377",
+    "level": "SCAN",
+    "message": "[SCAN] BNBUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:26.278728",
+    "level": "WARNING",
+    "message": "[HYPEUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:26.290431",
+    "level": "SCAN",
+    "message": "[SCAN] HYPEUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:26.374296",
+    "level": "WARNING",
+    "message": "[VELVETUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:26.385926",
+    "level": "SCAN",
+    "message": "[SCAN] VELVETUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:26.472113",
+    "level": "WARNING",
+    "message": "[LABUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:26.483151",
+    "level": "SCAN",
+    "message": "[SCAN] LABUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:26.562123",
+    "level": "WARNING",
+    "message": "[UPCUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:26.576546",
+    "level": "SCAN",
+    "message": "[SCAN] UPCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:26.658658",
+    "level": "WARNING",
+    "message": "[BTWUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:26.669312",
+    "level": "SCAN",
+    "message": "[SCAN] BTWUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:26.735417",
+    "level": "WARNING",
+    "message": "[DNUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:26.747940",
+    "level": "SCAN",
+    "message": "[SCAN] DNUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:29.295062",
+    "level": "ERROR",
+    "message": "[BTCUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:29.303610",
+    "level": "SCAN",
+    "message": "[SCAN] BTCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:29.602876",
+    "level": "ERROR",
+    "message": "[ETHUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:29.614542",
+    "level": "SCAN",
+    "message": "[SCAN] ETHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:29.921126",
+    "level": "ERROR",
+    "message": "[SOLUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:29.933116",
+    "level": "SCAN",
+    "message": "[SCAN] SOLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:30.016830",
+    "level": "WARNING",
+    "message": "[ASTERUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:30.026001",
+    "level": "SCAN",
+    "message": "[SCAN] ASTERUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:30.102378",
+    "level": "WARNING",
+    "message": "[XRPUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:30.111897",
+    "level": "SCAN",
+    "message": "[SCAN] XRPUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:30.190858",
+    "level": "WARNING",
+    "message": "[BEATUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:30.200641",
+    "level": "SCAN",
+    "message": "[SCAN] BEATUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:30.278202",
+    "level": "WARNING",
+    "message": "[XPLUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:30.288976",
+    "level": "SCAN",
+    "message": "[SCAN] XPLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:30.373426",
+    "level": "WARNING",
+    "message": "[BCHUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:30.384547",
+    "level": "SCAN",
+    "message": "[SCAN] BCHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:30.468123",
+    "level": "WARNING",
+    "message": "[BNBUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:30.478571",
+    "level": "SCAN",
+    "message": "[SCAN] BNBUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:30.565275",
+    "level": "WARNING",
+    "message": "[HYPEUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:30.576403",
+    "level": "SCAN",
+    "message": "[SCAN] HYPEUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:30.658936",
+    "level": "WARNING",
+    "message": "[VELVETUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:30.669004",
+    "level": "SCAN",
+    "message": "[SCAN] VELVETUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:30.755827",
+    "level": "WARNING",
+    "message": "[LABUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:30.766319",
+    "level": "SCAN",
+    "message": "[SCAN] LABUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:30.850884",
+    "level": "WARNING",
+    "message": "[UPCUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:30.860440",
+    "level": "SCAN",
+    "message": "[SCAN] UPCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:30.943967",
+    "level": "WARNING",
+    "message": "[BTWUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:30.955853",
+    "level": "SCAN",
+    "message": "[SCAN] BTWUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:31.042267",
+    "level": "WARNING",
+    "message": "[DNUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:31.055024",
+    "level": "SCAN",
+    "message": "[SCAN] DNUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:33.579325",
+    "level": "ERROR",
+    "message": "[BTCUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:33.588581",
+    "level": "SCAN",
+    "message": "[SCAN] BTCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:33.888958",
+    "level": "ERROR",
+    "message": "[ETHUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:33.900248",
+    "level": "SCAN",
+    "message": "[SCAN] ETHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:34.192016",
+    "level": "ERROR",
+    "message": "[SOLUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:34.202530",
+    "level": "SCAN",
+    "message": "[SCAN] SOLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:34.274791",
+    "level": "WARNING",
+    "message": "[ASTERUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:34.284158",
+    "level": "SCAN",
+    "message": "[SCAN] ASTERUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:34.362349",
+    "level": "WARNING",
+    "message": "[XRPUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:34.371730",
+    "level": "SCAN",
+    "message": "[SCAN] XRPUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:34.452882",
+    "level": "WARNING",
+    "message": "[BEATUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:34.462171",
+    "level": "SCAN",
+    "message": "[SCAN] BEATUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:34.542973",
+    "level": "WARNING",
+    "message": "[XPLUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:34.552239",
+    "level": "SCAN",
+    "message": "[SCAN] XPLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:34.636227",
+    "level": "WARNING",
+    "message": "[BCHUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:34.648727",
+    "level": "SCAN",
+    "message": "[SCAN] BCHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:34.733207",
+    "level": "WARNING",
+    "message": "[BNBUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:34.744088",
+    "level": "SCAN",
+    "message": "[SCAN] BNBUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:34.832588",
+    "level": "WARNING",
+    "message": "[HYPEUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:34.843194",
+    "level": "SCAN",
+    "message": "[SCAN] HYPEUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:34.932659",
+    "level": "WARNING",
+    "message": "[VELVETUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:34.941988",
+    "level": "SCAN",
+    "message": "[SCAN] VELVETUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:35.033616",
+    "level": "WARNING",
+    "message": "[LABUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:35.049156",
+    "level": "SCAN",
+    "message": "[SCAN] LABUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:35.139200",
+    "level": "WARNING",
+    "message": "[UPCUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:35.149203",
+    "level": "SCAN",
+    "message": "[SCAN] UPCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:35.231025",
+    "level": "WARNING",
+    "message": "[BTWUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:35.242045",
+    "level": "SCAN",
+    "message": "[SCAN] BTWUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:35.319453",
+    "level": "WARNING",
+    "message": "[DNUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:35.328520",
+    "level": "SCAN",
+    "message": "[SCAN] DNUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:37.915814",
+    "level": "ERROR",
+    "message": "[BTCUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:37.925520",
+    "level": "SCAN",
+    "message": "[SCAN] BTCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:38.229383",
+    "level": "ERROR",
+    "message": "[ETHUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:38.241381",
+    "level": "SCAN",
+    "message": "[SCAN] ETHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:38.553037",
+    "level": "ERROR",
+    "message": "[SOLUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:38.562339",
+    "level": "SCAN",
+    "message": "[SCAN] SOLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:38.630306",
+    "level": "WARNING",
+    "message": "[ASTERUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:38.638068",
+    "level": "SCAN",
+    "message": "[SCAN] ASTERUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:38.705024",
+    "level": "WARNING",
+    "message": "[XRPUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:38.712383",
+    "level": "SCAN",
+    "message": "[SCAN] XRPUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:38.779213",
+    "level": "WARNING",
+    "message": "[BEATUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:38.786325",
+    "level": "SCAN",
+    "message": "[SCAN] BEATUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:38.868432",
+    "level": "WARNING",
+    "message": "[XPLUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:38.879196",
+    "level": "SCAN",
+    "message": "[SCAN] XPLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:38.952731",
+    "level": "WARNING",
+    "message": "[BCHUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:38.959313",
+    "level": "SCAN",
+    "message": "[SCAN] BCHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:39.042894",
+    "level": "WARNING",
+    "message": "[BNBUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:39.054537",
+    "level": "SCAN",
+    "message": "[SCAN] BNBUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:39.141866",
+    "level": "WARNING",
+    "message": "[HYPEUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:39.154766",
+    "level": "SCAN",
+    "message": "[SCAN] HYPEUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:39.247425",
+    "level": "WARNING",
+    "message": "[VELVETUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:39.257302",
+    "level": "SCAN",
+    "message": "[SCAN] VELVETUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:39.345502",
+    "level": "WARNING",
+    "message": "[LABUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:39.358360",
+    "level": "SCAN",
+    "message": "[SCAN] LABUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:39.449842",
+    "level": "WARNING",
+    "message": "[UPCUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:39.473070",
+    "level": "SCAN",
+    "message": "[SCAN] UPCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:39.562050",
+    "level": "WARNING",
+    "message": "[BTWUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:39.572657",
+    "level": "SCAN",
+    "message": "[SCAN] BTWUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:39.664172",
+    "level": "WARNING",
+    "message": "[DNUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:39.673556",
+    "level": "SCAN",
+    "message": "[SCAN] DNUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:42.248419",
+    "level": "ERROR",
+    "message": "[BTCUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:42.258674",
+    "level": "SCAN",
+    "message": "[SCAN] BTCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:42.548412",
+    "level": "ERROR",
+    "message": "[ETHUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:42.558723",
+    "level": "SCAN",
+    "message": "[SCAN] ETHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:42.848828",
+    "level": "ERROR",
+    "message": "[SOLUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:42.861671",
+    "level": "SCAN",
+    "message": "[SCAN] SOLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:42.946443",
+    "level": "WARNING",
+    "message": "[ASTERUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:42.956429",
+    "level": "SCAN",
+    "message": "[SCAN] ASTERUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:43.033479",
+    "level": "WARNING",
+    "message": "[XRPUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:43.044163",
+    "level": "SCAN",
+    "message": "[SCAN] XRPUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:43.123723",
+    "level": "WARNING",
+    "message": "[BEATUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:43.132336",
+    "level": "SCAN",
+    "message": "[SCAN] BEATUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:43.213045",
+    "level": "WARNING",
+    "message": "[XPLUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:43.223715",
+    "level": "SCAN",
+    "message": "[SCAN] XPLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:43.306733",
+    "level": "WARNING",
+    "message": "[BCHUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:43.317799",
+    "level": "SCAN",
+    "message": "[SCAN] BCHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:43.381611",
+    "level": "WARNING",
+    "message": "[BNBUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:43.388275",
+    "level": "SCAN",
+    "message": "[SCAN] BNBUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:43.451088",
+    "level": "WARNING",
+    "message": "[HYPEUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:43.458919",
+    "level": "SCAN",
+    "message": "[SCAN] HYPEUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:43.522147",
+    "level": "WARNING",
+    "message": "[VELVETUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:43.530889",
+    "level": "SCAN",
+    "message": "[SCAN] VELVETUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:43.591673",
+    "level": "WARNING",
+    "message": "[LABUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:43.598040",
+    "level": "SCAN",
+    "message": "[SCAN] LABUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:43.673931",
+    "level": "WARNING",
+    "message": "[UPCUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:43.682994",
+    "level": "SCAN",
+    "message": "[SCAN] UPCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:43.746737",
+    "level": "WARNING",
+    "message": "[BTWUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:43.756567",
+    "level": "SCAN",
+    "message": "[SCAN] BTWUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:43.835815",
+    "level": "WARNING",
+    "message": "[DNUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:43.844921",
+    "level": "SCAN",
+    "message": "[SCAN] DNUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:46.383951",
+    "level": "ERROR",
+    "message": "[BTCUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:46.396938",
+    "level": "SCAN",
+    "message": "[SCAN] BTCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:46.700977",
+    "level": "ERROR",
+    "message": "[ETHUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:46.711239",
+    "level": "SCAN",
+    "message": "[SCAN] ETHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:47.006681",
+    "level": "ERROR",
+    "message": "[SOLUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:47.018969",
+    "level": "SCAN",
+    "message": "[SCAN] SOLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:47.095067",
+    "level": "WARNING",
+    "message": "[ASTERUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:47.104945",
+    "level": "SCAN",
+    "message": "[SCAN] ASTERUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:47.172981",
+    "level": "WARNING",
+    "message": "[XRPUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:47.183532",
+    "level": "SCAN",
+    "message": "[SCAN] XRPUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:47.254894",
+    "level": "WARNING",
+    "message": "[BEATUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:47.265932",
+    "level": "SCAN",
+    "message": "[SCAN] BEATUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:47.331092",
+    "level": "WARNING",
+    "message": "[XPLUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:47.337413",
+    "level": "SCAN",
+    "message": "[SCAN] XPLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:47.413447",
+    "level": "WARNING",
+    "message": "[BCHUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:47.423173",
+    "level": "SCAN",
+    "message": "[SCAN] BCHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:47.501961",
+    "level": "WARNING",
+    "message": "[BNBUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:47.513147",
+    "level": "SCAN",
+    "message": "[SCAN] BNBUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:47.595369",
+    "level": "WARNING",
+    "message": "[HYPEUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:47.605870",
+    "level": "SCAN",
+    "message": "[SCAN] HYPEUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:47.687756",
+    "level": "WARNING",
+    "message": "[VELVETUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:47.698911",
+    "level": "SCAN",
+    "message": "[SCAN] VELVETUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:47.779501",
+    "level": "WARNING",
+    "message": "[LABUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:47.785830",
+    "level": "SCAN",
+    "message": "[SCAN] LABUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:47.859821",
+    "level": "WARNING",
+    "message": "[UPCUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:47.870082",
+    "level": "SCAN",
+    "message": "[SCAN] UPCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:47.944486",
+    "level": "WARNING",
+    "message": "[BTWUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:47.957250",
+    "level": "SCAN",
+    "message": "[SCAN] BTWUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:48.032769",
+    "level": "WARNING",
+    "message": "[DNUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:48.038558",
+    "level": "SCAN",
+    "message": "[SCAN] DNUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:50.541175",
+    "level": "ERROR",
+    "message": "[BTCUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:50.552182",
+    "level": "SCAN",
+    "message": "[SCAN] BTCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:50.848245",
+    "level": "ERROR",
+    "message": "[ETHUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:50.859926",
+    "level": "SCAN",
+    "message": "[SCAN] ETHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:51.173208",
+    "level": "ERROR",
+    "message": "[SOLUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:51.184973",
+    "level": "SCAN",
+    "message": "[SCAN] SOLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:51.267734",
+    "level": "WARNING",
+    "message": "[ASTERUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:51.280019",
+    "level": "SCAN",
+    "message": "[SCAN] ASTERUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:51.349840",
+    "level": "WARNING",
+    "message": "[XRPUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:51.361174",
+    "level": "SCAN",
+    "message": "[SCAN] XRPUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:51.439852",
+    "level": "WARNING",
+    "message": "[BEATUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:51.450502",
+    "level": "SCAN",
+    "message": "[SCAN] BEATUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:51.523204",
+    "level": "WARNING",
+    "message": "[XPLUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:51.532449",
+    "level": "SCAN",
+    "message": "[SCAN] XPLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:51.598022",
+    "level": "WARNING",
+    "message": "[BCHUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:51.606832",
+    "level": "SCAN",
+    "message": "[SCAN] BCHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:51.680514",
+    "level": "WARNING",
+    "message": "[BNBUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:51.690597",
+    "level": "SCAN",
+    "message": "[SCAN] BNBUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:51.770995",
+    "level": "WARNING",
+    "message": "[HYPEUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:51.781941",
+    "level": "SCAN",
+    "message": "[SCAN] HYPEUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:51.856504",
+    "level": "WARNING",
+    "message": "[VELVETUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:51.863423",
+    "level": "SCAN",
+    "message": "[SCAN] VELVETUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:51.924139",
+    "level": "WARNING",
+    "message": "[LABUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:51.930405",
+    "level": "SCAN",
+    "message": "[SCAN] LABUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:51.989316",
+    "level": "WARNING",
+    "message": "[UPCUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:51.998325",
+    "level": "SCAN",
+    "message": "[SCAN] UPCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:52.068803",
+    "level": "WARNING",
+    "message": "[BTWUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:52.076087",
+    "level": "SCAN",
+    "message": "[SCAN] BTWUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:52.136146",
+    "level": "WARNING",
+    "message": "[DNUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:52.143072",
+    "level": "SCAN",
+    "message": "[SCAN] DNUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:54.637277",
+    "level": "ERROR",
+    "message": "[BTCUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:54.644468",
+    "level": "SCAN",
+    "message": "[SCAN] BTCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:54.947035",
+    "level": "ERROR",
+    "message": "[ETHUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:54.957787",
+    "level": "SCAN",
+    "message": "[SCAN] ETHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:55.251727",
+    "level": "ERROR",
+    "message": "[SOLUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:55.261567",
+    "level": "SCAN",
+    "message": "[SCAN] SOLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:55.342319",
+    "level": "WARNING",
+    "message": "[ASTERUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:55.354982",
+    "level": "SCAN",
+    "message": "[SCAN] ASTERUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:55.429257",
+    "level": "WARNING",
+    "message": "[XRPUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:55.439022",
+    "level": "SCAN",
+    "message": "[SCAN] XRPUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:55.508157",
+    "level": "WARNING",
+    "message": "[BEATUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:55.514996",
+    "level": "SCAN",
+    "message": "[SCAN] BEATUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:55.577559",
+    "level": "WARNING",
+    "message": "[XPLUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:55.589276",
+    "level": "SCAN",
+    "message": "[SCAN] XPLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:55.682110",
+    "level": "WARNING",
+    "message": "[BCHUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:55.693498",
+    "level": "SCAN",
+    "message": "[SCAN] BCHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:55.773449",
+    "level": "WARNING",
+    "message": "[BNBUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:55.784619",
+    "level": "SCAN",
+    "message": "[SCAN] BNBUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:55.859483",
+    "level": "WARNING",
+    "message": "[HYPEUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:55.872230",
+    "level": "SCAN",
+    "message": "[SCAN] HYPEUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:55.952146",
+    "level": "WARNING",
+    "message": "[VELVETUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:55.964283",
+    "level": "SCAN",
+    "message": "[SCAN] VELVETUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:56.055825",
+    "level": "WARNING",
+    "message": "[LABUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:56.071376",
+    "level": "SCAN",
+    "message": "[SCAN] LABUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:56.168912",
+    "level": "WARNING",
+    "message": "[UPCUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:56.181131",
+    "level": "SCAN",
+    "message": "[SCAN] UPCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:56.268672",
+    "level": "WARNING",
+    "message": "[BTWUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:56.277521",
+    "level": "SCAN",
+    "message": "[SCAN] BTWUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:56.353939",
+    "level": "WARNING",
+    "message": "[DNUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:56.365837",
+    "level": "SCAN",
+    "message": "[SCAN] DNUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:58.881487",
+    "level": "ERROR",
+    "message": "[BTCUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:58.892280",
+    "level": "SCAN",
+    "message": "[SCAN] BTCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:59.191773",
+    "level": "ERROR",
+    "message": "[ETHUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:59.204232",
+    "level": "SCAN",
+    "message": "[SCAN] ETHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:59.508301",
+    "level": "ERROR",
+    "message": "[SOLUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:59.519734",
+    "level": "SCAN",
+    "message": "[SCAN] SOLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:29:59.604310",
+    "level": "WARNING",
+    "message": "[ASTERUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:59.616784",
+    "level": "SCAN",
+    "message": "[SCAN] ASTERUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:59.692005",
+    "level": "WARNING",
+    "message": "[XRPUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:59.702805",
+    "level": "SCAN",
+    "message": "[SCAN] XRPUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:59.782326",
+    "level": "WARNING",
+    "message": "[BEATUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:59.792005",
+    "level": "SCAN",
+    "message": "[SCAN] BEATUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:59.868885",
+    "level": "WARNING",
+    "message": "[XPLUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:59.874458",
+    "level": "SCAN",
+    "message": "[SCAN] XPLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:59.947374",
+    "level": "WARNING",
+    "message": "[BCHUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:29:59.958079",
+    "level": "SCAN",
+    "message": "[SCAN] BCHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:00.024276",
+    "level": "WARNING",
+    "message": "[BNBUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:00.036772",
+    "level": "SCAN",
+    "message": "[SCAN] BNBUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:00.114901",
+    "level": "WARNING",
+    "message": "[HYPEUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:00.126845",
+    "level": "SCAN",
+    "message": "[SCAN] HYPEUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:00.222618",
+    "level": "WARNING",
+    "message": "[VELVETUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:00.234068",
+    "level": "SCAN",
+    "message": "[SCAN] VELVETUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:00.318889",
+    "level": "WARNING",
+    "message": "[LABUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:00.330037",
+    "level": "SCAN",
+    "message": "[SCAN] LABUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:00.409905",
+    "level": "WARNING",
+    "message": "[UPCUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:00.419843",
+    "level": "SCAN",
+    "message": "[SCAN] UPCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:00.506892",
+    "level": "WARNING",
+    "message": "[BTWUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:00.516396",
+    "level": "SCAN",
+    "message": "[SCAN] BTWUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:00.602074",
+    "level": "WARNING",
+    "message": "[DNUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:00.613473",
+    "level": "SCAN",
+    "message": "[SCAN] DNUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:02.677804",
+    "level": "SCAN",
+    "message": "[SCANNER] refreshed 15 opportunities (scored 130 across Binance+MEXC)"
+  },
+  {
+    "time": "2026-06-19T12:30:03.309933",
+    "level": "ERROR",
+    "message": "[BTCUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:30:03.336762",
+    "level": "SCAN",
+    "message": "[SCAN] BTCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:30:03.685477",
+    "level": "ERROR",
+    "message": "[ETHUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:30:03.756009",
+    "level": "SCAN",
+    "message": "[SCAN] ETHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:30:04.092639",
+    "level": "ERROR",
+    "message": "[SOLUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:30:04.112014",
+    "level": "SCAN",
+    "message": "[SCAN] SOLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:30:04.217018",
+    "level": "WARNING",
+    "message": "[ASTERUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:04.228524",
+    "level": "SCAN",
+    "message": "[SCAN] ASTERUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:04.370842",
+    "level": "WARNING",
+    "message": "[XRPUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:04.404679",
+    "level": "SCAN",
+    "message": "[SCAN] XRPUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:04.573499",
+    "level": "WARNING",
+    "message": "[BEATUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:04.603907",
+    "level": "SCAN",
+    "message": "[SCAN] BEATUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:04.732437",
+    "level": "WARNING",
+    "message": "[XPLUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:04.746882",
+    "level": "SCAN",
+    "message": "[SCAN] XPLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:04.892863",
+    "level": "WARNING",
+    "message": "[BCHUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:04.912300",
+    "level": "SCAN",
+    "message": "[SCAN] BCHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:05.018545",
+    "level": "WARNING",
+    "message": "[BNBUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:05.039541",
+    "level": "SCAN",
+    "message": "[SCAN] BNBUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:05.183124",
+    "level": "WARNING",
+    "message": "[HYPEUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:05.219356",
+    "level": "SCAN",
+    "message": "[SCAN] HYPEUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:05.326983",
+    "level": "WARNING",
+    "message": "[VELVETUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:05.346176",
+    "level": "SCAN",
+    "message": "[SCAN] VELVETUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:05.460222",
+    "level": "WARNING",
+    "message": "[LABUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:05.479169",
+    "level": "SCAN",
+    "message": "[SCAN] LABUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:05.601632",
+    "level": "WARNING",
+    "message": "[UPCUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:05.623878",
+    "level": "SCAN",
+    "message": "[SCAN] UPCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:05.731079",
+    "level": "WARNING",
+    "message": "[BTWUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:05.746120",
+    "level": "SCAN",
+    "message": "[SCAN] BTWUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:05.882675",
+    "level": "WARNING",
+    "message": "[DNUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:05.904861",
+    "level": "SCAN",
+    "message": "[SCAN] DNUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:08.682658",
+    "level": "ERROR",
+    "message": "[BTCUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:30:08.693519",
+    "level": "SCAN",
+    "message": "[SCAN] BTCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:30:09.067835",
+    "level": "ERROR",
+    "message": "[ETHUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:30:09.088665",
+    "level": "SCAN",
+    "message": "[SCAN] ETHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:30:09.424990",
+    "level": "ERROR",
+    "message": "[SOLUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:30:09.438049",
+    "level": "SCAN",
+    "message": "[SCAN] SOLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:30:09.568401",
+    "level": "WARNING",
+    "message": "[ASTERUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:09.581957",
+    "level": "SCAN",
+    "message": "[SCAN] ASTERUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:09.726330",
+    "level": "WARNING",
+    "message": "[XRPUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:09.752042",
+    "level": "SCAN",
+    "message": "[SCAN] XRPUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:09.846850",
+    "level": "WARNING",
+    "message": "[BEATUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:09.872531",
+    "level": "SCAN",
+    "message": "[SCAN] BEATUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:09.978177",
+    "level": "WARNING",
+    "message": "[XPLUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:10.008789",
+    "level": "SCAN",
+    "message": "[SCAN] XPLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:10.140911",
+    "level": "WARNING",
+    "message": "[BCHUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:10.154845",
+    "level": "SCAN",
+    "message": "[SCAN] BCHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:10.269053",
+    "level": "WARNING",
+    "message": "[BNBUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:10.283648",
+    "level": "SCAN",
+    "message": "[SCAN] BNBUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:10.429816",
+    "level": "WARNING",
+    "message": "[HYPEUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:10.449995",
+    "level": "SCAN",
+    "message": "[SCAN] HYPEUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:10.625454",
+    "level": "WARNING",
+    "message": "[VELVETUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:10.638445",
+    "level": "SCAN",
+    "message": "[SCAN] VELVETUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:10.770875",
+    "level": "WARNING",
+    "message": "[LABUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:10.796258",
+    "level": "SCAN",
+    "message": "[SCAN] LABUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:10.914989",
+    "level": "WARNING",
+    "message": "[UPCUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:10.937605",
+    "level": "SCAN",
+    "message": "[SCAN] UPCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:11.058085",
+    "level": "WARNING",
+    "message": "[BTWUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:11.081177",
+    "level": "SCAN",
+    "message": "[SCAN] BTWUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:11.210924",
+    "level": "WARNING",
+    "message": "[DNUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:11.238024",
+    "level": "SCAN",
+    "message": "[SCAN] DNUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:14.061370",
+    "level": "ERROR",
+    "message": "[BTCUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:30:14.083129",
+    "level": "SCAN",
+    "message": "[SCAN] BTCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:30:14.438561",
+    "level": "ERROR",
+    "message": "[ETHUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:30:14.452398",
+    "level": "SCAN",
+    "message": "[SCAN] ETHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:30:14.771754",
+    "level": "ERROR",
+    "message": "[SOLUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:30:14.782628",
+    "level": "SCAN",
+    "message": "[SCAN] SOLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:30:14.946041",
+    "level": "WARNING",
+    "message": "[ASTERUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:14.987072",
+    "level": "SCAN",
+    "message": "[SCAN] ASTERUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:15.090014",
+    "level": "WARNING",
+    "message": "[XRPUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:15.119385",
+    "level": "SCAN",
+    "message": "[SCAN] XRPUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:15.247095",
+    "level": "WARNING",
+    "message": "[BEATUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:15.261576",
+    "level": "SCAN",
+    "message": "[SCAN] BEATUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:15.391634",
+    "level": "WARNING",
+    "message": "[XPLUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:15.418020",
+    "level": "SCAN",
+    "message": "[SCAN] XPLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:15.522906",
+    "level": "WARNING",
+    "message": "[BCHUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:15.545794",
+    "level": "SCAN",
+    "message": "[SCAN] BCHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:15.664491",
+    "level": "WARNING",
+    "message": "[BNBUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:15.675932",
+    "level": "SCAN",
+    "message": "[SCAN] BNBUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:15.805079",
+    "level": "WARNING",
+    "message": "[HYPEUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:15.812410",
+    "level": "SCAN",
+    "message": "[SCAN] HYPEUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:15.948620",
+    "level": "WARNING",
+    "message": "[VELVETUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:15.963421",
+    "level": "SCAN",
+    "message": "[SCAN] VELVETUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:16.119873",
+    "level": "WARNING",
+    "message": "[LABUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:16.136575",
+    "level": "SCAN",
+    "message": "[SCAN] LABUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:16.242544",
+    "level": "WARNING",
+    "message": "[UPCUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:16.271609",
+    "level": "SCAN",
+    "message": "[SCAN] UPCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:16.399383",
+    "level": "WARNING",
+    "message": "[BTWUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:16.424192",
+    "level": "SCAN",
+    "message": "[SCAN] BTWUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:16.604548",
+    "level": "WARNING",
+    "message": "[DNUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:16.620940",
+    "level": "SCAN",
+    "message": "[SCAN] DNUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:19.405984",
+    "level": "ERROR",
+    "message": "[BTCUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:30:19.426215",
+    "level": "SCAN",
+    "message": "[SCAN] BTCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:30:19.771555",
+    "level": "ERROR",
+    "message": "[ETHUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:30:19.787861",
+    "level": "SCAN",
+    "message": "[SCAN] ETHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:30:20.129386",
+    "level": "ERROR",
+    "message": "[SOLUSDT] Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:30:20.141913",
+    "level": "SCAN",
+    "message": "[SCAN] SOLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=Dip engine error: name 'live_settings' is not defined"
+  },
+  {
+    "time": "2026-06-19T12:30:20.235176",
+    "level": "WARNING",
+    "message": "[ASTERUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:20.247873",
+    "level": "SCAN",
+    "message": "[SCAN] ASTERUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:20.349252",
+    "level": "WARNING",
+    "message": "[XRPUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:20.370901",
+    "level": "SCAN",
+    "message": "[SCAN] XRPUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:20.486269",
+    "level": "WARNING",
+    "message": "[BEATUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:20.504602",
+    "level": "SCAN",
+    "message": "[SCAN] BEATUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:20.601769",
+    "level": "WARNING",
+    "message": "[XPLUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:20.615030",
+    "level": "SCAN",
+    "message": "[SCAN] XPLUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:20.730473",
+    "level": "WARNING",
+    "message": "[BCHUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:20.743178",
+    "level": "SCAN",
+    "message": "[SCAN] BCHUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:20.853497",
+    "level": "WARNING",
+    "message": "[BNBUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:20.866382",
+    "level": "SCAN",
+    "message": "[SCAN] BNBUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:20.979070",
+    "level": "WARNING",
+    "message": "[HYPEUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:20.988915",
+    "level": "SCAN",
+    "message": "[SCAN] HYPEUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:21.098052",
+    "level": "WARNING",
+    "message": "[VELVETUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:21.113577",
+    "level": "SCAN",
+    "message": "[SCAN] VELVETUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:21.232960",
+    "level": "WARNING",
+    "message": "[LABUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:21.244627",
+    "level": "SCAN",
+    "message": "[SCAN] LABUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:21.359059",
+    "level": "WARNING",
+    "message": "[UPCUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:21.371773",
+    "level": "SCAN",
+    "message": "[SCAN] UPCUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:21.472171",
+    "level": "WARNING",
+    "message": "[BTWUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:21.485656",
+    "level": "SCAN",
+    "message": "[SCAN] BTWUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:21.590971",
+    "level": "WARNING",
+    "message": "[DNUSDT] \ud83d\uded1 Emergency stop active \u2014 no trading"
+  },
+  {
+    "time": "2026-06-19T12:30:21.604824",
+    "level": "SCAN",
+    "message": "[SCAN] DNUSDT | change=n/a | vol=n/a | trend_ok=- | decision=SKIP | block=\ud83d\uded1 Emergency stop active \u2014 no trading"
+  }
+]

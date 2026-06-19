@@ -8,7 +8,7 @@
   "bot_was_running": true,
   "exchange_mode": "multi",
   "mexc_live_orders": true,
-  "use_scanner_symbols": false,
+  "use_scanner_symbols": true,
   "strategy": "Market Low",
   "interval": "1m",
   "check_every": 15,

@@ -1,0 +1,73 @@
+{
+  "symbol": "SOLUSDT",
+  "active_symbols": [
+    "BTCUSDT",
+    "ETHUSDT",
+    "SOLUSDT"
+  ],
+  "bot_was_running": true,
+  "exchange_mode": "multi",
+  "mexc_live_orders": false,
+  "use_scanner_symbols": true,
+  "strategy": "Market Low",
+  "interval": "1m",
+  "check_every": 15,
+  "threshold": 0.01,
+  "initial_balance": 1000.0,
+  "manual_amount": 100.0,
+  "refresh_secs": 5,
+  "tg_enabled": false,
+  "tg_token": "",
+  "tg_chat_id": "",
+  "show_ema": true,
+  "show_volume": true,
+  "show_rsi": true,
+  "show_macd": true,
+  "show_stoch": true,
+  "show_old_trades": true,
+  "show_sl_tp": true,
+  "chart_autofollow": true,
+  "chart_marker_offset_pct": 0.03,
+  "global_risk": {
+    "max_total_exposure_usdt": 300.0,
+    "max_exposure_per_symbol_pct": 100,
+    "max_open_trades_total": 18,
+    "max_open_trades_binance": 3,
+    "max_open_trades_mexc": 15,
+    "max_daily_loss_pct": 5.0,
+    "manage_manual_trades": true
+  },
+  "per_symbol_risk": {
+    "BTCUSDT": {
+      "invest_per_trade": 20.0,
+      "max_trade_usdt": 20.0,
+      "stop_loss_pct": 0.4,
+      "take_profit_pct": 0.6,
+      "max_open_trades": 30
+    },
+    "ETHUSDT": {
+      "invest_per_trade": 20.0,
+      "max_trade_usdt": 20.0,
+      "stop_loss_pct": 0.4,
+      "take_profit_pct": 0.6,
+      "max_open_trades": 30
+    },
+    "SOLUSDT": {
+      "invest_per_trade": 20.0,
+      "max_trade_usdt": 20.0,
+      "stop_loss_pct": 0.4,
+      "take_profit_pct": 0.6,
+      "max_open_trades": 30
+    }
+  },
+  "risk": {
+    "invest_per_trade": 20.0,
+    "max_trade_usdt": 20.0,
+    "stop_loss_pct": 0.6,
+    "take_profit_pct": 1.3,
+    "max_open_trades": 30,
+    "cooldown_seconds": 30,
+    "max_daily_loss_pct": 26.0,
+    "max_trades_per_session": 14
+  }
+}
