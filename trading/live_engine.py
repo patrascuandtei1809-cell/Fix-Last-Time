@@ -33,7 +33,7 @@ from typing import Callable, Dict, List, Optional
 
 import dip_strategy as dip
 from live_settings import (
-    LiveSettings, CooldownStore, get_settings,
+    LiveSettings, CooldownStore,
     SIZE_AUTO, SIZE_FIXED, SIZE_PERCENT, SIZE_ALL,
 )
 
@@ -117,14 +117,6 @@ def get_activity(symbol: str) -> Optional[ActivityRecord]:
 def get_all_activity() -> List[ActivityRecord]:
     with _ACT_LOCK:
         return list(_ACTIVITY.values())
-
-
-def _mexc_dry_run_public_eval(exchange) -> bool:
-    """MEXC DRY-RUN uses public prices/klines + simulated balance — no API key."""
-    return (
-        getattr(exchange, "name", "") == "mexc"
-        and not getattr(exchange, "live_orders", True)
-    )
 
 
 # ── MEXC exit reconciliation (phantom open trades) ───────────────────────────
@@ -393,7 +385,7 @@ def cooldown_block(settings: LiveSettings, state: Dict, now: datetime = None):
 
     # 2) Re-entry cooldown after any sell (default 1 minute).
     sell_at = state.get("last_sell_at")
-    reentry = int(getattr(settings, "reentry_cooldown_sec", 60) or 0)
+    reentry = int(getattr(settings, "reentry_cooldown_sec", 120) or 0)
     if sell_at is not None and reentry > 0:
         if sell_at.tzinfo is None:
             sell_at = sell_at.replace(tzinfo=timezone.utc)
@@ -491,17 +483,9 @@ class DipLiveEngine:
                               level="WARNING")
 
         # 3. Exchange / provider status — price is required for both exit & entry.
-        # MEXC DRY-RUN may evaluate via public market data without an authed client;
-        # LIVE MEXC (and all Binance paths) still require a connected client.
-        if (getattr(self.exchange, "client", None) is None
-                and not _mexc_dry_run_public_eval(self.exchange)):
+        if getattr(self.exchange, "client", None) is None:
             return self._skip(rec, "Exchange error — not connected (no API key)",
                               level="WARNING")
-        if (getattr(self.exchange, "client", None) is None
-                and _mexc_dry_run_public_eval(self.exchange)):
-            self._log("INFO",
-                      "[MEXC DRY-RUN] public-price evaluation allowed without "
-                      "API client")
         try:
             price = float(self.exchange.get_price(symbol))
             rec.price = price
@@ -524,7 +508,7 @@ class DipLiveEngine:
         ]
         if sym_open_any:
             if sym_open_bot:
-                return self._manage_exit(rec, symbol, sym_open_bot[0], price, thr, settings)
+                return self._manage_exit(rec, symbol, sym_open_bot[0], price, thr)
             return self._skip(
                 rec, "Position already open (manual) — bot will not manage it",
                 decision="HOLD")
@@ -713,15 +697,10 @@ class DipLiveEngine:
         self._state(symbol, signal="BUY", reason=reason, block_reason="")
         return _publish(rec)
 
-    def _manage_exit(self, rec, symbol, trade, price, thr,
-                     settings: LiveSettings) -> ActivityRecord:
+    def _manage_exit(self, rec, symbol, trade, price, thr) -> ActivityRecord:
         entry = float(trade.get("entry_price") or 0.0)
         side = trade.get("side", "BUY")
-        if settings is None:
-            try:
-                settings = get_settings()
-            except Exception:
-                settings = LiveSettings()
+        settings = live_settings.get_settings()
 
         # Optional breakeven / trailing (OFF unless operator enabled in live settings)
         profit_pct = dip.position_profit_pct(entry, price, side)

@@ -4078,6 +4078,111 @@ def _collect_settings_snapshot() -> dict:
     }
 
 
+def _render_live_decision_audit_diagnostics():
+    """Latest-cycle BUY audit snapshot for the Diagnostics tab."""
+    try:
+        import buy_audit as _ba
+        live = _ba.load_live_audit()
+    except Exception:
+        live = {}
+    summary = live.get("summary") or {}
+    updated = (live.get("updated_at") or "")[:19].replace("T", " ")
+
+    _sec("🛒 Live Decision Audit")
+    if not live:
+        st.caption("No live decision audit yet — starts after the next bot dip cycle.")
+        return
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Evaluated (last cycle)", int(summary.get("evaluated") or 0))
+    c2.metric("Reached BUY stage", int(summary.get("reached_buy_stage") or 0))
+    c3.metric("Rejected", int(summary.get("rejected") or 0))
+    c4.metric("Executed", int(summary.get("executed") or 0))
+    st.caption(f"Last cycle updated: {updated or '—'}")
+
+    top = summary.get("top_block_reasons") or []
+    if top:
+        st.markdown("**Top block reasons**")
+        st.dataframe(
+            pd.DataFrame([
+                {"Reason": r.get("reason", "—"), "Count": r.get("count", 0)}
+                for r in top
+            ]),
+            width="stretch",
+            hide_index=True,
+        )
+
+    rows = _ba.audit_display_rows(limit=50)
+    if rows:
+        st.markdown("**Latest 50 decisions**")
+        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+
+    mexc_rej = _ba.rejected_symbols("mexc")
+    bin_rej = _ba.rejected_symbols("binance")
+    r1, r2 = st.columns(2)
+    with r1:
+        st.markdown("**MEXC rejected symbols**")
+        st.caption(", ".join(mexc_rej) if mexc_rej else "—")
+    with r2:
+        st.markdown("**Binance rejected symbols**")
+        st.caption(", ".join(bin_rej) if bin_rej else "—")
+
+
+def _render_buy_audit_tab():
+    """Dedicated BUY AUDIT tab — why scored picks are not becoming orders."""
+    _sec("🛒 BUY AUDIT")
+    st.caption(
+        "Every symbol the live dip engine evaluates each cycle. "
+        "Explains why scanner opportunities are blocked before a BUY order."
+    )
+    try:
+        import buy_audit as _ba
+        payload = _ba.load_buy_audit()
+        live = payload.get("latest_cycle") or _ba.load_live_audit()
+    except Exception:
+        payload = {}
+        live = {}
+
+    summary = (live or {}).get("summary") or payload.get("summary") or {}
+    updated = (
+        (live or {}).get("updated_at")
+        or payload.get("updated_at")
+        or ""
+    )[:19].replace("T", " ")
+
+    if not summary and not payload:
+        st.info("No BUY audit data yet. Data appears after the bot completes its next dip cycle.")
+        return
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Evaluated (last cycle)", int(summary.get("evaluated") or 0))
+    m2.metric("Reached BUY stage", int(summary.get("reached_buy_stage") or 0))
+    m3.metric("Rejected", int(summary.get("rejected") or 0))
+    m4.metric("Executed", int(summary.get("executed") or 0))
+    st.caption(f"Last updated: {updated or '—'}")
+
+    top = summary.get("top_block_reasons") or []
+    _sec("Top rejection reasons")
+    if top:
+        st.dataframe(
+            pd.DataFrame([
+                {"Reason": r.get("reason", "—"), "Count": r.get("count", 0)}
+                for r in top
+            ]),
+            width="stretch",
+            hide_index=True,
+        )
+    else:
+        st.caption("No rejection reasons recorded yet.")
+
+    _sec("Last 100 evaluated symbols")
+    hist_rows = _ba.audit_history_rows(limit=100)
+    if hist_rows:
+        st.dataframe(pd.DataFrame(hist_rows), width="stretch", hide_index=True)
+    else:
+        st.caption("No symbol evaluations in rolling history yet.")
+
+
 def _render_diagnostics_tab():
     """Operator diagnostics — clean cards/tables, raw payloads collapsed."""
     _sec("🔧 Diagnostics")
@@ -4183,6 +4288,8 @@ def _render_diagnostics_tab():
         st.dataframe(pd.DataFrame(_blk_rows), width="stretch", hide_index=True)
     else:
         st.caption("No block reasons recorded yet.")
+
+    _render_live_decision_audit_diagnostics()
 
     _sec("🔵 MEXC Proof")
     mp1, mp2, mp3 = st.columns(3)
@@ -5191,6 +5298,7 @@ _MAIN_TAB_LABELS = (
     "🛰️ Scanner",
     "📋 History",
     "📈 Performance",
+    "🛒 BUY AUDIT",
     "🔧 Diagnostics",
 )
 
@@ -6150,6 +6258,9 @@ with st.container():
             _render_performance_tab(_fmt_pnl, total_pnl, win_rate, wins)
 
         elif _at_tab == _MAIN_TAB_LABELS[6]:
+            _render_buy_audit_tab()
+
+        elif _at_tab == _MAIN_TAB_LABELS[7]:
             _render_diagnostics_tab()
 
         st.markdown("<div style='height:48px'></div>", unsafe_allow_html=True)
