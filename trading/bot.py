@@ -30,6 +30,11 @@ from symbol_worker import SymbolWorker
 import telegram_notifier as tg
 import diagnostics
 import buy_audit
+from execution_lock import (
+    acquire_process_execution_lock,
+    get_process_role,
+    role_allows_local_execution,
+)
 # ── 20-Minute Dip strategy (Task #11) — the ONLY live order path ─────────────
 # When TradingBot.dip_mode is True (default) the orchestrator runs this engine
 # per active symbol and NEVER touches the legacy worker.tick/execute_entry path.
@@ -50,6 +55,8 @@ except Exception:                      # pragma: no cover - research optional
 # ─────────────────────────────────────────────────────────────────────────────
 _bot: Optional["TradingBot"] = None
 _bot_lock = threading.Lock()
+_active_loop_owner: Optional["TradingBot"] = None
+_active_loop_lock = threading.Lock()
 
 # Upper bound on simultaneously-scanned symbols. Scanner-driven dynamic symbol
 # sets must fit the full split-routing plan: 3 pinned Binance majors PLUS up to
@@ -969,17 +976,68 @@ class TradingBot:
         return traded
 
     # ── Control ──────────────────────────────────────────────────────────────
+    def _run_with_ownership(self):
+        """Run the orchestrator and release the in-process loop slot on exit."""
+        global _active_loop_owner
+        try:
+            self._loop()
+        finally:
+            self._running = False
+            with _active_loop_lock:
+                if _active_loop_owner is self:
+                    _active_loop_owner = None
+
     def start(self) -> bool:
+        global _active_loop_owner
         if self._thread and self._thread.is_alive():
             log_activity("WARNING", "⚠️ Bot already running — ignoring duplicate start")
             return False
+
+        role = get_process_role()
+        if not role_allows_local_execution(role):
+            log_activity(
+                "WARNING",
+                "🔒 Dashboard-only process cannot start a local trading loop",
+            )
+            return False
+        lease = acquire_process_execution_lock(
+            owner=f"trading-bot:{role}",
+            role=role,
+        )
+        if lease is None:
+            log_activity(
+                "WARNING",
+                "🔒 Live execution already owned by another AlphaTrade process",
+            )
+            return False
+
+        with _active_loop_lock:
+            other = _active_loop_owner
+            other_thread = getattr(other, "_thread", None) if other else None
+            if other is not None and other is not self and bool(
+                other_thread and other_thread.is_alive()
+            ):
+                log_activity(
+                    "WARNING",
+                    "⚠️ Another local orchestrator loop is still alive",
+                )
+                return False
+            _active_loop_owner = self
+
         self._running = True
         self._thread  = threading.Thread(
-            target=self._loop,
+            target=self._run_with_ownership,
             daemon=True,
             name=f"alphatrade-orchestrator",
         )
-        self._thread.start()
+        try:
+            self._thread.start()
+        except Exception:
+            self._running = False
+            with _active_loop_lock:
+                if _active_loop_owner is self:
+                    _active_loop_owner = None
+            raise
         syms = ", ".join(sorted({w.symbol for w in self.workers.values()}))
         exs  = ", ".join(sorted({w.exchange.name for w in self.workers.values()}))
         log_activity("INFO",

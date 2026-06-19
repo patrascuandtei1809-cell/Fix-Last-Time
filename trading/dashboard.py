@@ -44,6 +44,10 @@ _DIR = os.path.dirname(os.path.abspath(__file__))
 if _DIR not in sys.path:
     sys.path.insert(0, _DIR)
 
+from execution_lock import get_process_role, role_allows_local_execution
+
+_PROCESS_ROLE = get_process_role()
+
 import bot as bot_module
 import aggressive_mode as am
 import live_settings
@@ -781,8 +785,12 @@ _init()
 # Binance+MEXC and rewrites multi_exchange_opportunities.json, logging each
 # refresh to activity.json. The scanner is READ-ONLY public data (no keys).
 try:
-    import scanner as _scanner_mod
-    _scanner_mod.start_scanner_daemon(interval_sec=120, on_log=log_activity)
+    if role_allows_local_execution(_PROCESS_ROLE):
+        import scanner as _scanner_mod
+        _scanner_mod.start_scanner_daemon(interval_sec=120, on_log=log_activity)
+    else:
+        print("[SCANNER] owned by headless worker; dashboard is monitoring-only",
+              flush=True)
 except Exception as _sce:  # noqa: BLE001
     print(f"[SCANNER] daemon start failed: {_sce}", flush=True)
 
@@ -882,6 +890,9 @@ def _bot_start_blocker():
 
 def _launch_bot_from_plan(fallback_symbols=None):
     """Build + start the singleton bot from the effective scanner routing plan."""
+    if not role_allows_local_execution(_PROCESS_ROLE):
+        print("[BOT] dashboard role cannot launch a local trading loop", flush=True)
+        return None
     import bot as _bm
     _fb = fallback_symbols or st.session_state.active_symbols
     _eff_syms, _eff_venues, _eff_scan = _effective_bot_plan(_fb)
@@ -1033,6 +1044,10 @@ def _maybe_resume_bot():
     MEXC mode resumes on MEXC readiness alone (no Binance client needed) so a
     cold start while Binance is down still brings the bot back.
     """
+    if not role_allows_local_execution(_PROCESS_ROLE):
+        print("[BOT-DEBUG] dashboard role: headless worker owns execution",
+              flush=True)
+        return
     import bot as _bm
     if _bm.get_bot() and _bm.get_bot().is_running():
         print("[BOT-DEBUG] existing bot running", flush=True)

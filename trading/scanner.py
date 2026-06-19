@@ -322,44 +322,76 @@ def is_daemon_running() -> bool:
 # ── background cadence daemon ────────────────────────────────────────────────
 _daemon_started = False
 _daemon_lock = threading.Lock()
+_daemon_stop = threading.Event()
+_daemon_thread: Optional[threading.Thread] = None
+_daemon_active_stop: Optional[threading.Event] = None
 
 
 def start_scanner_daemon(interval_sec: int = 120,
                          cfg: Optional[ScanConfig] = None,
-                         on_log: Optional[Callable[[str, str], None]] = None
+                         on_log: Optional[Callable[[str, str], None]] = None,
+                         stop_event: Optional[threading.Event] = None,
                          ) -> bool:
     """Start (once) a daemon thread that re-runs ``scan(write=True)`` on a
     cadence so the bot always trades fresh scanner picks. Idempotent — repeated
     calls are no-ops. Returns True if it started the thread, False if one was
     already running. Each refresh is logged via ``on_log`` (e.g. activity.json).
     """
-    global _daemon_started
+    from execution_lock import get_process_role, role_allows_local_execution
+
+    if not role_allows_local_execution(get_process_role()):
+        print("[SCANNER] dashboard-only role; daemon not started", flush=True)
+        return False
+
+    global _daemon_started, _daemon_thread, _daemon_active_stop
     with _daemon_lock:
         if _daemon_started:
             return False
         _daemon_started = True
+        _daemon_stop.clear()
+        _daemon_active_stop = stop_event or _daemon_stop
 
     def _loop():
-        while True:
-            try:
-                payload = scan(cfg=cfg, write=True)
-                n = len(payload.get("opportunities", []))
-                scored = payload.get("count_scored", 0)
-                if on_log:
-                    try:
-                        on_log("SCAN",
-                               f"[SCANNER] refreshed {n} opportunities "
-                               f"(scored {scored} across Binance+MEXC)")
-                    except Exception:
-                        pass
-            except Exception as e:  # noqa: BLE001
-                print(f"[SCANNER][daemon] scan failed: {e}", flush=True)
-            time.sleep(max(15, int(interval_sec)))
+        global _daemon_started, _daemon_thread, _daemon_active_stop
+        active_stop = _daemon_active_stop or _daemon_stop
+        try:
+            while not active_stop.is_set():
+                try:
+                    payload = scan(cfg=cfg, write=True)
+                    n = len(payload.get("opportunities", []))
+                    scored = payload.get("count_scored", 0)
+                    if on_log:
+                        try:
+                            on_log("SCAN",
+                                   f"[SCANNER] refreshed {n} opportunities "
+                                   f"(scored {scored} across Binance+MEXC)")
+                        except Exception:
+                            pass
+                except Exception as e:  # noqa: BLE001
+                    print(f"[SCANNER][daemon] scan failed: {e}", flush=True)
+                if active_stop.wait(max(15, int(interval_sec))):
+                    break
+        finally:
+            with _daemon_lock:
+                _daemon_started = False
+                _daemon_thread = None
+                _daemon_active_stop = None
 
     t = threading.Thread(target=_loop, daemon=True, name="alphatrade-scanner")
+    _daemon_thread = t
     t.start()
     print(f"[SCANNER] daemon started (every {interval_sec}s)", flush=True)
     return True
+
+
+def stop_scanner_daemon(timeout: float = 30.0) -> None:
+    """Request scanner shutdown and wait briefly for its thread to exit."""
+    _daemon_stop.set()
+    if _daemon_active_stop is not None:
+        _daemon_active_stop.set()
+    thread = _daemon_thread
+    if thread is not None and thread.is_alive():
+        thread.join(timeout=max(0.0, float(timeout)))
 
 
 if __name__ == "__main__":

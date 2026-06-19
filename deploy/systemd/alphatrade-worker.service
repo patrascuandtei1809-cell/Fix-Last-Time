@@ -1,0 +1,22 @@
+[Unit]
+Description=AlphaTrade Headless Trading Worker
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/trading-bot-clean
+Environment=PYTHONUNBUFFERED=1
+Environment=ALPHATRADE_PROCESS_ROLE=worker
+Environment=ALPHATRADE_EXECUTION_LOCK=/run/alphatrade/execution.lock
+RuntimeDirectory=alphatrade
+RuntimeDirectoryMode=0750
+ExecStart=/root/trading-bot-clean/venv/bin/python3 -u trading/headless_worker.py
+Restart=always
+RestartSec=5
+TimeoutStopSec=40
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target
