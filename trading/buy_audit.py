@@ -100,6 +100,17 @@ def begin_cycle() -> None:
         _cycle_started_at = _utcnow_iso()
 
 
+def _safe_strategy_analysis(value: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Store only a diagnostic, explicitly non-executable analysis payload."""
+    if not isinstance(value, dict):
+        return {}
+    analysis = dict(value)
+    analysis["mode"] = "shadow"
+    analysis["executable"] = False
+    analysis["would_trade"] = bool(analysis.get("would_trade", False))
+    return analysis
+
+
 def record_from_activity(
     *,
     exchange: str,
@@ -109,6 +120,7 @@ def record_from_activity(
     settings=None,
     open_trades: Optional[List[Dict]] = None,
     cooldown_store=None,
+    strategy_analysis: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Record one engine evaluation (called from bot after evaluate())."""
     sym = str(symbol or "").upper()
@@ -168,6 +180,7 @@ def record_from_activity(
         "traded": traded,
         "reached_buy_stage": _reached_buy_stage(
             decision, traded, block_code, chg, buy_thr),
+        "strategy_analysis": _safe_strategy_analysis(strategy_analysis),
     }
     with _LOCK:
         _cycle_decisions.append(entry)
@@ -281,8 +294,26 @@ def record_engine_error(
     settings=None,
     open_trades: Optional[List[Dict]] = None,
     cooldown_store=None,
+    strategy_analysis: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Record a dip-engine crash without changing trading behaviour."""
+    if strategy_analysis is None:
+        strategy_analysis = {
+            "mode": "shadow",
+            "executable": False,
+            "version": "shadow-v1",
+            "status": "unavailable",
+            "recommended_strategy": "unknown",
+            "market_regime": "unknown",
+            "total_score": None,
+            "confidence": 0.0,
+            "risk_level": "unknown",
+            "would_trade": False,
+            "components": {},
+            "assessments": [],
+            "reasons": [],
+            "warnings": ["Live engine failed before shadow analysis"],
+        }
     reason = f"Dip engine error: {error}"
     stub = type(
         "_StubRec",
@@ -309,6 +340,7 @@ def record_engine_error(
         settings=settings,
         open_trades=open_trades,
         cooldown_store=cooldown_store,
+        strategy_analysis=strategy_analysis,
     )
 
 
@@ -322,7 +354,9 @@ def audit_display_rows(limit: int = 50) -> List[Dict[str, Any]]:
             "Time": (d.get("timestamp") or "")[:19].replace("T", " "),
             "Ex": d.get("exchange", "—"),
             "Symbol": (d.get("symbol") or "—").replace("USDT", ""),
-            "Score": d.get("score") if d.get("score") is not None else "—",
+            "Score": (
+                str(d.get("score")) if d.get("score") is not None else "—"
+            ),
             "ML %": (
                 f"{float(d['change_pct']):+.2f}%"
                 if d.get("change_pct") is not None else "—"
@@ -352,7 +386,9 @@ def audit_history_rows(limit: int = 100) -> List[Dict[str, Any]]:
             "Time": (d.get("timestamp") or "")[:19].replace("T", " "),
             "Ex": d.get("exchange", "—"),
             "Symbol": (d.get("symbol") or "—").replace("USDT", ""),
-            "Score": d.get("score") if d.get("score") is not None else "—",
+            "Score": (
+                str(d.get("score")) if d.get("score") is not None else "—"
+            ),
             "Price": (
                 f"{float(d['price']):.6g}"
                 if d.get("price") is not None else "—"
@@ -384,6 +420,43 @@ def audit_history_rows(limit: int = 100) -> List[Dict[str, Any]]:
                 else "✗" if d.get("trend_ok") is False else "—"
             ),
             "Detail": (d.get("rejection_detail") or "")[:60],
+        })
+    return rows
+
+
+def strategy_intelligence_rows(limit: int = 50) -> List[Dict[str, Any]]:
+    """Latest shadow recommendations for the dashboard."""
+    live = load_live_audit()
+    decisions = list(live.get("decisions") or [])
+    rows = []
+    for decision in reversed(decisions[-limit:]):
+        analysis = decision.get("strategy_analysis") or {}
+        if not analysis:
+            continue
+        snapshot = analysis.get("snapshot") or {}
+        components = analysis.get("components") or {}
+        component_text = " · ".join(
+            f"{name} {float(value.get('score') or 0):.0f}"
+            for name, value in components.items()
+            if isinstance(value, dict)
+        )
+        spread = snapshot.get("spread_pct")
+        cross = snapshot.get("cross_exchange_spread_pct")
+        rows.append({
+            "Time": (decision.get("timestamp") or "")[:19].replace("T", " "),
+            "Ex": decision.get("exchange", "—"),
+            "Symbol": (decision.get("symbol") or "—").replace("USDT", ""),
+            "Strategy": analysis.get("recommended_strategy", "unknown"),
+            "Regime": analysis.get("market_regime", "unknown"),
+            "Score": (
+                f"{float(analysis['total_score']):.1f}"
+                if analysis.get("total_score") is not None else "—"
+            ),
+            "Risk": analysis.get("risk_level", "unknown"),
+            "Shadow signal": "YES" if analysis.get("would_trade") else "NO",
+            "Spread": f"{float(spread):.3f}%" if spread is not None else "—",
+            "Cross-ex": f"{float(cross):.3f}%" if cross is not None else "—",
+            "Components": component_text[:180] or "—",
         })
     return rows
 

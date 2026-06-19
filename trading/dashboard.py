@@ -4175,6 +4175,46 @@ def _render_buy_audit_tab():
     else:
         st.caption("No rejection reasons recorded yet.")
 
+    _sec("Strategy Intelligence — SHADOW MODE")
+    st.info(
+        "Read-only recommendations. This analysis cannot place orders, bypass "
+        "risk controls, or change the live engine decision."
+    )
+    intelligence_rows = _ba.strategy_intelligence_rows(limit=50)
+    if intelligence_rows:
+        analyzed = len(intelligence_rows)
+        would_trade = sum(
+            1 for row in intelligence_rows if row.get("Shadow signal") == "YES"
+        )
+        high_risk = sum(
+            1 for row in intelligence_rows if row.get("Risk") == "high"
+        )
+        numeric_scores = []
+        for row in intelligence_rows:
+            try:
+                numeric_scores.append(float(row.get("Score")))
+            except (TypeError, ValueError):
+                pass
+        avg_score = (
+            sum(numeric_scores) / len(numeric_scores)
+            if numeric_scores else 0.0
+        )
+        s1, s2, s3, s4 = st.columns(4)
+        s1.metric("Shadow analyzed", analyzed)
+        s2.metric("Shadow signals", would_trade)
+        s3.metric("High risk", high_risk)
+        s4.metric("Avg shadow score", f"{avg_score:.1f}")
+        st.dataframe(
+            pd.DataFrame(intelligence_rows),
+            width="stretch",
+            hide_index=True,
+        )
+    else:
+        st.caption(
+            "No shadow intelligence yet. It appears after the next completed "
+            "bot cycle."
+        )
+
     _sec("Last 100 evaluated symbols")
     hist_rows = _ba.audit_history_rows(limit=100)
     if hist_rows:

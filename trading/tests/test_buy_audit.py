@@ -48,6 +48,15 @@ def test_finish_cycle_writes_files(tmp_path, monkeypatch):
         rec=Rec(),
         score=85,
         settings=None,
+        strategy_analysis={
+            "mode": "shadow",
+            "executable": True,
+            "recommended_strategy": "dip_rebound",
+            "market_regime": "ranging",
+            "total_score": 77.0,
+            "risk_level": "medium",
+            "would_trade": True,
+        },
     )
     ba.finish_cycle()
 
@@ -55,6 +64,25 @@ def test_finish_cycle_writes_files(tmp_path, monkeypatch):
     assert live["summary"]["evaluated"] == 1
     assert live["decisions"][0]["exact_block_reason"] == "volume_too_low"
     assert live["decisions"][0]["score"] == 85
+    analysis = live["decisions"][0]["strategy_analysis"]
+    assert analysis["mode"] == "shadow"
+    assert analysis["executable"] is False
+    assert analysis["recommended_strategy"] == "dip_rebound"
 
     buy = json.loads((tmp_path / "buy_audit.json").read_text(encoding="utf-8"))
     assert len(buy["history"]) == 1
+
+
+def test_engine_error_gets_non_executable_shadow_stub():
+    ba.begin_cycle()
+    ba.record_engine_error(
+        exchange="mexc",
+        symbol="FAILUSDT",
+        error="boom",
+    )
+
+    entry = ba._cycle_decisions[0]
+    analysis = entry["strategy_analysis"]
+    assert analysis["mode"] == "shadow"
+    assert analysis["executable"] is False
+    assert analysis["status"] == "unavailable"

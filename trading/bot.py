@@ -635,16 +635,58 @@ class TradingBot:
             self._dip_engines[key] = eng
         return eng
 
-    def _scanner_score_map(self) -> Dict[str, int]:
+    def _scanner_opportunity_map(self) -> Dict[str, Dict]:
         try:
             from scanner import load_opportunities
             return {
-                str(o.get("symbol") or "").upper(): int(o.get("score") or 0)
+                str(o.get("symbol") or "").upper(): dict(o)
                 for o in load_opportunities()
                 if o.get("symbol")
             }
         except Exception:
             return {}
+
+    @staticmethod
+    def _shadow_strategy_analysis(
+        *,
+        exchange: str,
+        symbol: str,
+        rec,
+        settings,
+        scanner_opportunity: Optional[Dict] = None,
+    ) -> Dict:
+        """Run diagnostics only, after the live engine already decided.
+
+        Fail-open for trading: intelligence failures are recorded as unavailable
+        and can never replace, block, or approve the live result.
+        """
+        try:
+            from intelligence.shadow_pipeline import get_default_shadow_pipeline
+            decision = get_default_shadow_pipeline().analyze(
+                exchange=exchange,
+                symbol=symbol,
+                rec=rec,
+                settings=settings,
+                scanner_opportunity=scanner_opportunity,
+            )
+            return decision.to_dict()
+        except Exception as exc:
+            return {
+                "mode": "shadow",
+                "executable": False,
+                "version": "shadow-v1",
+                "status": "unavailable",
+                "recommended_strategy": "unknown",
+                "market_regime": "unknown",
+                "total_score": None,
+                "confidence": 0.0,
+                "risk_level": "unknown",
+                "would_trade": False,
+                "components": {},
+                "assessments": [],
+                "reasons": [],
+                "warnings": [f"Shadow intelligence unavailable: {exc}"],
+            }
 
     def _run_dip_cycle(self, refresh_fn) -> bool:
         """Run the DipLiveEngine across all active symbols. Returns True if any
@@ -663,8 +705,13 @@ class TradingBot:
 
         try:
             buy_audit.begin_cycle()
-            _score_map = self._scanner_score_map()
+            _opportunity_map = self._scanner_opportunity_map()
+            _score_map = {
+                symbol: int(opportunity.get("score") or 0)
+                for symbol, opportunity in _opportunity_map.items()
+            }
         except Exception:
+            _opportunity_map = {}
             _score_map = {}
 
         traded = False
@@ -732,6 +779,15 @@ class TradingBot:
                     )
                 except Exception:
                     pass
+                _strategy_analysis = self._shadow_strategy_analysis(
+                    exchange=_venue,
+                    symbol=worker.symbol,
+                    rec=rec,
+                    settings=settings,
+                    scanner_opportunity=_opportunity_map.get(
+                        worker.symbol.upper()
+                    ),
+                )
                 try:
                     buy_audit.record_from_activity(
                         exchange=_venue,
@@ -741,6 +797,7 @@ class TradingBot:
                         settings=settings,
                         open_trades=all_open,
                         cooldown_store=self._cooldown,
+                        strategy_analysis=_strategy_analysis,
                     )
                 except Exception:
                     pass
