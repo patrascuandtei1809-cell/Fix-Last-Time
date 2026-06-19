@@ -1,0 +1,233 @@
+trading/dashboard.py.bak:1529:_ai_last  = (_sig_meta.get("ai_decision") or "").upper() if _sig_meta else ""
+trading/dashboard.py.bak:1530:_ai_lconf = int((_sig_meta.get("ai_confidence") or 0)) if _sig_meta else 0
+trading/dashboard.py.bak_ui_autorefresh:1719:_ai_last  = (_sig_meta.get("ai_decision") or "").upper() if _sig_meta else ""
+trading/dashboard.py.bak_ui_autorefresh:1720:_ai_lconf = int((_sig_meta.get("ai_confidence") or 0)) if _sig_meta else 0
+trading/dashboard.py.bak_ui_autorefresh:3622:def _render_ai_decisions(symbols, acts: dict, accent: str):
+trading/dashboard.py.bak_ui_autorefresh:4819:        _render_ai_decisions(_BIN_MAJORS, _acts, "#f0b90b")
+trading/dashboard.py.bak_ui_autorefresh:4833:        _render_ai_decisions((_mexc_syms or _mexc_top), _acts, "#3b82f6")
+trading/dashboard.py.bak_before_history_rerun_guard_2026-06-18_1557:1929:_ai_last  = (_sig_meta.get("ai_decision") or "").upper() if _sig_meta else ""
+trading/dashboard.py.bak_before_history_rerun_guard_2026-06-18_1557:1930:_ai_lconf = int((_sig_meta.get("ai_confidence") or 0)) if _sig_meta else 0
+trading/dashboard.py.bak_before_history_rerun_guard_2026-06-18_1557:3555:def _overview_ai_decision_summary(acts: dict, mexc_syms) -> str:
+trading/dashboard.py.bak_before_history_rerun_guard_2026-06-18_1557:3655:        f"  \n- **Latest AI decision:** {_overview_ai_decision_summary(acts, mexc_syms)}"
+trading/dashboard.py.bak_before_history_rerun_guard_2026-06-18_1557:4887:def _render_ai_decisions_narrative(symbols, acts: dict, venue: str = "binance"):
+trading/dashboard.py.bak_before_history_rerun_guard_2026-06-18_1557:4942:def _render_ai_decisions(symbols, acts: dict, accent: str, venue: str = "binance"):
+trading/dashboard.py.bak_before_history_rerun_guard_2026-06-18_1557:6115:            _render_ai_decisions_narrative(_BIN_MAJORS, _acts, venue="binance")
+trading/dashboard.py.bak_before_history_rerun_guard_2026-06-18_1557:6128:            _render_ai_decisions_narrative(_dec_syms, _acts, venue="mexc")
+trading/dashboard_broken_mockup_1049.py:1567:_ai_last  = (_sig_meta.get("ai_decision") or "").upper() if _sig_meta else ""
+trading/dashboard_broken_mockup_1049.py:1568:_ai_lconf = int((_sig_meta.get("ai_confidence") or 0)) if _sig_meta else 0
+trading/backups/deploy_20260611_1006/dashboard.py:1565:_ai_last  = (_sig_meta.get("ai_decision") or "").upper() if _sig_meta else ""
+trading/backups/deploy_20260611_1006/dashboard.py:1566:_ai_lconf = int((_sig_meta.get("ai_confidence") or 0)) if _sig_meta else 0
+trading/backups/deploy_20260611_1006/bot.py:85:                    ai_decision=None, ai_confidence=None, ai_reason=None,
+trading/backups/deploy_20260611_1006/bot.py:86:                    gpt_decision=None, gpt_confidence=None, gpt_reason=None,
+trading/backups/deploy_20260611_1006/bot.py:87:                    gpt_age_sec=None, gpt_enabled=None, gpt_active=None,
+trading/backups/deploy_20260611_1006/bot.py:99:        if ai_decision        is not None: s["ai_decision"]        = ai_decision
+trading/backups/deploy_20260611_1006/bot.py:100:        if ai_confidence      is not None: s["ai_confidence"]      = int(ai_confidence)
+trading/backups/deploy_20260611_1006/bot.py:107:        if gpt_decision   is not None: s["gpt_decision"]   = gpt_decision
+trading/backups/deploy_20260611_1006/bot.py:108:        if gpt_confidence is not None: s["gpt_confidence"] = int(gpt_confidence)
+trading/backups/deploy_20260611_1006/bot.py:109:        if gpt_reason     is not None: s["gpt_reason"]     = gpt_reason
+trading/backups/deploy_20260611_1006/bot.py:110:        if gpt_age_sec    is not None: s["gpt_age_sec"]    = gpt_age_sec
+trading/backups/deploy_20260611_1006/bot.py:111:        if gpt_enabled    is not None: s["gpt_enabled"]    = bool(gpt_enabled)
+trading/backups/deploy_20260611_1006/bot.py:112:        if gpt_active     is not None: s["gpt_active"]     = bool(gpt_active)
+trading/backups/deploy_20260611_1006/bot.py:162:            "ai_decision":        s.get("ai_decision"),
+trading/backups/deploy_20260611_1006/bot.py:163:            "ai_confidence":      int(s.get("ai_confidence") or 0),
+trading/backups/deploy_20260611_1006/bot.py:170:            "gpt_decision":       s.get("gpt_decision", ""),
+trading/backups/deploy_20260611_1006/bot.py:171:            "gpt_confidence":     int(s.get("gpt_confidence") or 0),
+trading/backups/deploy_20260611_1006/bot.py:172:            "gpt_reason":         s.get("gpt_reason", ""),
+trading/backups/deploy_20260611_1006/bot.py:173:            "gpt_age_sec":        s.get("gpt_age_sec"),
+trading/backups/deploy_20260611_1006/bot.py:174:            "gpt_enabled":        bool(s.get("gpt_enabled", False)),
+trading/backups/deploy_20260611_1006/bot.py:175:            "gpt_active":         bool(s.get("gpt_active",  False)),
+trading/backups/deploy_20260611_1006/bot.py:521:        self.gpt_prob_floor:       int = 50   # GPT advisory only (no hard veto)
+trading/backups/deploy_20260611_1006/bot.py:1017:            #   - GPT's probability >= gpt_prob_floor (55)
+trading/backups/deploy_20260611_1006/bot.py:1022:            gpt_block = ""
+trading/backups/deploy_20260611_1006/bot.py:1023:            gpt_pick  = None       # for state/dashboard
+trading/backups/deploy_20260611_1006/bot.py:1027:                    from gpt_advisor import get_advisor as _ga
+trading/backups/deploy_20260611_1006/bot.py:1047:                            gpt_pick = _gd
+trading/backups/deploy_20260611_1006/bot.py:1060:                                gpt_block = (f"GPT NO_TRADE on winner "
+trading/backups/deploy_20260611_1006/bot.py:1086:                _why = (f"GPT veto: {gpt_block}" if gpt_block
+trading/backups/deploy_20260611_1006/bot.py:1196:                if _selected_sym is None and gpt_block and qualified:
+trading/backups/deploy_20260611_1006/bot.py:1207:                    gpt_block=gpt_block or "",
+trading/dashboard.py.bak_mexc_only_force:1728:_ai_last  = (_sig_meta.get("ai_decision") or "").upper() if _sig_meta else ""
+trading/dashboard.py.bak_mexc_only_force:1729:_ai_lconf = int((_sig_meta.get("ai_confidence") or 0)) if _sig_meta else 0
+trading/dashboard.py.bak_mexc_only_force:3631:def _render_ai_decisions(symbols, acts: dict, accent: str):
+trading/dashboard.py.bak_mexc_only_force:4828:        _render_ai_decisions(_BIN_MAJORS, _acts, "#f0b90b")
+trading/dashboard.py.bak_mexc_only_force:4842:        _render_ai_decisions((_mexc_syms or _mexc_top), _acts, "#3b82f6")
+trading/backtest.py:27:  1. The live bot has an *advisory* GPT layer (ai_engine / gpt_advisor) that can
+trading/backtest.py:810:                    sl_slice, ai_signal="HOLD", ai_confidence=0, regime=regime)
+trading/diagnostics.py:108:    if "gpt" in r:
+trading/diagnostics.py:115:                   n_open: int, cap: int, gpt_block: str,
+trading/diagnostics.py:145:        if gpt_block:
+trading/diagnostics.py:146:            return gpt_block, "GPT veto", False
+trading/diagnostics.py:164:                 n_open: int, cap: int, gpt_block: str, traded: bool) -> None:
+trading/diagnostics.py:182:                    n_open=n_open, cap=cap, gpt_block=gpt_block,
+trading/bot_before_final_layout.py:85:                    ai_decision=None, ai_confidence=None, ai_reason=None,
+trading/bot_before_final_layout.py:86:                    gpt_decision=None, gpt_confidence=None, gpt_reason=None,
+trading/bot_before_final_layout.py:87:                    gpt_age_sec=None, gpt_enabled=None, gpt_active=None,
+trading/bot_before_final_layout.py:99:        if ai_decision        is not None: s["ai_decision"]        = ai_decision
+trading/bot_before_final_layout.py:100:        if ai_confidence      is not None: s["ai_confidence"]      = int(ai_confidence)
+trading/bot_before_final_layout.py:107:        if gpt_decision   is not None: s["gpt_decision"]   = gpt_decision
+trading/bot_before_final_layout.py:108:        if gpt_confidence is not None: s["gpt_confidence"] = int(gpt_confidence)
+trading/bot_before_final_layout.py:109:        if gpt_reason     is not None: s["gpt_reason"]     = gpt_reason
+trading/bot_before_final_layout.py:110:        if gpt_age_sec    is not None: s["gpt_age_sec"]    = gpt_age_sec
+trading/bot_before_final_layout.py:111:        if gpt_enabled    is not None: s["gpt_enabled"]    = bool(gpt_enabled)
+trading/bot_before_final_layout.py:112:        if gpt_active     is not None: s["gpt_active"]     = bool(gpt_active)
+trading/bot_before_final_layout.py:162:            "ai_decision":        s.get("ai_decision"),
+trading/bot_before_final_layout.py:163:            "ai_confidence":      int(s.get("ai_confidence") or 0),
+trading/bot_before_final_layout.py:170:            "gpt_decision":       s.get("gpt_decision", ""),
+trading/bot_before_final_layout.py:171:            "gpt_confidence":     int(s.get("gpt_confidence") or 0),
+trading/bot_before_final_layout.py:172:            "gpt_reason":         s.get("gpt_reason", ""),
+trading/bot_before_final_layout.py:173:            "gpt_age_sec":        s.get("gpt_age_sec"),
+trading/bot_before_final_layout.py:174:            "gpt_enabled":        bool(s.get("gpt_enabled", False)),
+trading/bot_before_final_layout.py:175:            "gpt_active":         bool(s.get("gpt_active",  False)),
+trading/bot_before_final_layout.py:521:        self.gpt_prob_floor:       int = 50   # GPT advisory only (no hard veto)
+trading/bot_before_final_layout.py:1017:            #   - GPT's probability >= gpt_prob_floor (55)
+trading/bot_before_final_layout.py:1022:            gpt_block = ""
+trading/bot_before_final_layout.py:1023:            gpt_pick  = None       # for state/dashboard
+trading/bot_before_final_layout.py:1027:                    from gpt_advisor import get_advisor as _ga
+trading/bot_before_final_layout.py:1047:                            gpt_pick = _gd
+trading/bot_before_final_layout.py:1060:                                gpt_block = (f"GPT NO_TRADE on winner "
+trading/bot_before_final_layout.py:1086:                _why = (f"GPT veto: {gpt_block}" if gpt_block
+trading/bot_before_final_layout.py:1196:                if _selected_sym is None and gpt_block and qualified:
+trading/bot_before_final_layout.py:1207:                    gpt_block=gpt_block or "",
+trading/dashboard.py.current_broken_2026-06-13_2226:1734:_ai_last  = (_sig_meta.get("ai_decision") or "").upper() if _sig_meta else ""
+trading/dashboard.py.current_broken_2026-06-13_2226:1735:_ai_lconf = int((_sig_meta.get("ai_confidence") or 0)) if _sig_meta else 0
+trading/dashboard.py.current_broken_2026-06-13_2226:3637:def _render_ai_decisions(symbols, acts: dict, accent: str):
+trading/dashboard.py.current_broken_2026-06-13_2226:4834:        _render_ai_decisions(_BIN_MAJORS, _acts, "#f0b90b")
+trading/dashboard.py.current_broken_2026-06-13_2226:4848:        _render_ai_decisions((_mexc_syms or _mexc_top), _acts, "#3b82f6")
+trading/gpt_advisor.py:5:  - GPT (gpt-4o-mini) is SECONDARY, called ONLY when:
+trading/gpt_advisor.py:10:    schedules a background refresh; it NEVER blocks waiting for OpenAI.
+trading/gpt_advisor.py:11:  - If OPENAI_API_KEY is missing, the advisor degrades silently — every
+trading/gpt_advisor.py:32:TIMEOUT_SEC      = 6.0    # hard cap on each OpenAI call
+trading/gpt_advisor.py:34:MODEL            = "gpt-4o-mini"
+trading/gpt_advisor.py:61:        self._enabled                               = bool(os.environ.get("OPENAI_API_KEY"))
+trading/gpt_advisor.py:75:            from openai import OpenAI
+trading/gpt_advisor.py:76:            self._client = OpenAI(timeout=TIMEOUT_SEC)
+trading/gpt_advisor.py:111:            daemon=True, name=f"gpt-advisor-{symbol}",
+trading/gpt_advisor.py:138:            verdict = self._call_openai(symbol, snapshot)
+trading/gpt_advisor.py:157:    def _call_openai(self, symbol: str, snap: Dict[str, Any]) -> Optional[GPTVerdict]:
+trading/gpt_advisor.py:170:            resp = client.chat.completions.create(
+trading/gpt_advisor.py:182:            raise RuntimeError(f"openai call failed: {e}")
+trading/gpt_advisor.py:274:            resp = client.chat.completions.create(
+trading/symbol_worker.py:329:                               ai_decision=_ai.decision,
+trading/symbol_worker.py:330:                               ai_confidence=_ai.confidence,
+trading/symbol_worker.py:347:            from gpt_advisor import get_advisor as _get_gpt
+trading/symbol_worker.py:348:            _gpt = _get_gpt()
+trading/symbol_worker.py:349:            _gpt_status = _gpt.status()
+trading/symbol_worker.py:362:                _gpt_status["enabled"]
+trading/symbol_worker.py:379:                _gpt.maybe_request(self.symbol, _snap)
+trading/symbol_worker.py:380:            _cached = _gpt.get_cached(self.symbol)
+trading/symbol_worker.py:389:                              f"gpt_conf={_cached['confidence']}) | {_cached.get('reason','')[:120]}")
+trading/symbol_worker.py:398:                           gpt_decision   = (_cached or {}).get("decision", ""),
+trading/symbol_worker.py:399:                           gpt_confidence = (_cached or {}).get("confidence", 0),
+trading/symbol_worker.py:400:                           gpt_reason     = (_cached or {}).get("reason", ""),
+trading/symbol_worker.py:401:                           gpt_age_sec    = (_cached or {}).get("age_sec", -1),
+trading/symbol_worker.py:402:                           gpt_enabled    = _gpt_status["enabled"],
+trading/symbol_worker.py:403:                           gpt_active     = _gpt_status["active"])
+trading/symbol_worker.py:440:                    ai_confidence=confidence, regime=_regime)
+trading/dashboard.py.current_broken_2026-06-13_2221:1718:_ai_last  = (_sig_meta.get("ai_decision") or "").upper() if _sig_meta else ""
+trading/dashboard.py.current_broken_2026-06-13_2221:1719:_ai_lconf = int((_sig_meta.get("ai_confidence") or 0)) if _sig_meta else 0
+trading/dashboard.py.current_broken_2026-06-13_2221:3621:def _render_ai_decisions(symbols, acts: dict, accent: str):
+trading/dashboard.py.current_broken_2026-06-13_2221:4818:        _render_ai_decisions(_BIN_MAJORS, _acts, "#f0b90b")
+trading/dashboard.py.current_broken_2026-06-13_2221:4832:        _render_ai_decisions((_mexc_syms or _mexc_top), _acts, "#3b82f6")
+trading/dashboard.py:1929:_ai_last  = (_sig_meta.get("ai_decision") or "").upper() if _sig_meta else ""
+trading/dashboard.py:1930:_ai_lconf = int((_sig_meta.get("ai_confidence") or 0)) if _sig_meta else 0
+trading/dashboard.py:3567:def _overview_ai_decision_summary(acts: dict, mexc_syms) -> str:
+trading/dashboard.py:3667:        f"  \n- **Latest AI decision:** {_overview_ai_decision_summary(acts, mexc_syms)}"
+trading/dashboard.py:4899:def _render_ai_decisions_narrative(symbols, acts: dict, venue: str = "binance"):
+trading/dashboard.py:4954:def _render_ai_decisions(symbols, acts: dict, accent: str, venue: str = "binance"):
+trading/dashboard.py:6127:            _render_ai_decisions_narrative(_BIN_MAJORS, _acts, venue="binance")
+trading/dashboard.py:6140:            _render_ai_decisions_narrative(_dec_syms, _acts, venue="mexc")
+trading/strategy.py:900:                      ai_confidence: int = 0,
+trading/strategy.py:944:    if   ai_signal == "BUY":  bull += min(20.0, max(0, ai_confidence) / 5.0)
+trading/strategy.py:945:    elif ai_signal == "SELL": bear += min(20.0, max(0, ai_confidence) / 5.0)
+trading/strategy.py:1021:        "ai_confidence": int(ai_confidence),
+trading/dashboard.py.bak_autostart_mexc:1718:_ai_last  = (_sig_meta.get("ai_decision") or "").upper() if _sig_meta else ""
+trading/dashboard.py.bak_autostart_mexc:1719:_ai_lconf = int((_sig_meta.get("ai_confidence") or 0)) if _sig_meta else 0
+trading/dashboard.py.bak_autostart_mexc:3621:def _render_ai_decisions(symbols, acts: dict, accent: str):
+trading/dashboard.py.bak_autostart_mexc:4818:        _render_ai_decisions(_BIN_MAJORS, _acts, "#f0b90b")
+trading/dashboard.py.bak_autostart_mexc:4832:        _render_ai_decisions((_mexc_syms or _mexc_top), _acts, "#3b82f6")
+trading/api_support.py:27:    "openai_api_key", "OPENAI_API_KEY",
+trading/bot.py:95:                    ai_decision=None, ai_confidence=None, ai_reason=None,
+trading/bot.py:96:                    gpt_decision=None, gpt_confidence=None, gpt_reason=None,
+trading/bot.py:97:                    gpt_age_sec=None, gpt_enabled=None, gpt_active=None,
+trading/bot.py:109:        if ai_decision        is not None: s["ai_decision"]        = ai_decision
+trading/bot.py:110:        if ai_confidence      is not None: s["ai_confidence"]      = int(ai_confidence)
+trading/bot.py:117:        if gpt_decision   is not None: s["gpt_decision"]   = gpt_decision
+trading/bot.py:118:        if gpt_confidence is not None: s["gpt_confidence"] = int(gpt_confidence)
+trading/bot.py:119:        if gpt_reason     is not None: s["gpt_reason"]     = gpt_reason
+trading/bot.py:120:        if gpt_age_sec    is not None: s["gpt_age_sec"]    = gpt_age_sec
+trading/bot.py:121:        if gpt_enabled    is not None: s["gpt_enabled"]    = bool(gpt_enabled)
+trading/bot.py:122:        if gpt_active     is not None: s["gpt_active"]     = bool(gpt_active)
+trading/bot.py:172:            "ai_decision":        s.get("ai_decision"),
+trading/bot.py:173:            "ai_confidence":      int(s.get("ai_confidence") or 0),
+trading/bot.py:180:            "gpt_decision":       s.get("gpt_decision", ""),
+trading/bot.py:181:            "gpt_confidence":     int(s.get("gpt_confidence") or 0),
+trading/bot.py:182:            "gpt_reason":         s.get("gpt_reason", ""),
+trading/bot.py:183:            "gpt_age_sec":        s.get("gpt_age_sec"),
+trading/bot.py:184:            "gpt_enabled":        bool(s.get("gpt_enabled", False)),
+trading/bot.py:185:            "gpt_active":         bool(s.get("gpt_active",  False)),
+trading/bot.py:563:        self.gpt_prob_floor:       int = 50   # GPT advisory only (no hard veto)
+trading/bot.py:1288:            #   - GPT's probability >= gpt_prob_floor (55)
+trading/bot.py:1293:            gpt_block = ""
+trading/bot.py:1294:            gpt_pick  = None       # for state/dashboard
+trading/bot.py:1298:                    from gpt_advisor import get_advisor as _ga
+trading/bot.py:1318:                            gpt_pick = _gd
+trading/bot.py:1331:                                gpt_block = (f"GPT NO_TRADE on winner "
+trading/bot.py:1361:                _why = (f"GPT veto: {gpt_block}" if gpt_block
+trading/bot.py:1474:                if _selected_sym is None and gpt_block and qualified:
+trading/bot.py:1485:                    gpt_block=gpt_block or "",
+trading/dashboard.py.bak_fix_resume_order:1725:_ai_last  = (_sig_meta.get("ai_decision") or "").upper() if _sig_meta else ""
+trading/dashboard.py.bak_fix_resume_order:1726:_ai_lconf = int((_sig_meta.get("ai_confidence") or 0)) if _sig_meta else 0
+trading/dashboard.py.bak_fix_resume_order:3628:def _render_ai_decisions(symbols, acts: dict, accent: str):
+trading/dashboard.py.bak_fix_resume_order:4825:        _render_ai_decisions(_BIN_MAJORS, _acts, "#f0b90b")
+trading/dashboard.py.bak_fix_resume_order:4839:        _render_ai_decisions((_mexc_syms or _mexc_top), _acts, "#3b82f6")
+trading/dashboard.py.bak_refresh_1s:1726:_ai_last  = (_sig_meta.get("ai_decision") or "").upper() if _sig_meta else ""
+trading/dashboard.py.bak_refresh_1s:1727:_ai_lconf = int((_sig_meta.get("ai_confidence") or 0)) if _sig_meta else 0
+trading/dashboard.py.bak_refresh_1s:3629:def _render_ai_decisions(symbols, acts: dict, accent: str):
+trading/dashboard.py.bak_refresh_1s:4826:        _render_ai_decisions(_BIN_MAJORS, _acts, "#f0b90b")
+trading/dashboard.py.bak_refresh_1s:4840:        _render_ai_decisions((_mexc_syms or _mexc_top), _acts, "#3b82f6")
+trading/dashboard.py.bak_remove_double_refresh:1734:_ai_last  = (_sig_meta.get("ai_decision") or "").upper() if _sig_meta else ""
+trading/dashboard.py.bak_remove_double_refresh:1735:_ai_lconf = int((_sig_meta.get("ai_confidence") or 0)) if _sig_meta else 0
+trading/dashboard.py.bak_remove_double_refresh:3637:def _render_ai_decisions(symbols, acts: dict, accent: str):
+trading/dashboard.py.bak_remove_double_refresh:4834:        _render_ai_decisions(_BIN_MAJORS, _acts, "#f0b90b")
+trading/dashboard.py.bak_remove_double_refresh:4848:        _render_ai_decisions((_mexc_syms or _mexc_top), _acts, "#3b82f6")
+trading/dashboard.py.bak_before_history_no_shake_2026-06-18_1039:1929:_ai_last  = (_sig_meta.get("ai_decision") or "").upper() if _sig_meta else ""
+trading/dashboard.py.bak_before_history_no_shake_2026-06-18_1039:1930:_ai_lconf = int((_sig_meta.get("ai_confidence") or 0)) if _sig_meta else 0
+trading/dashboard.py.bak_before_history_no_shake_2026-06-18_1039:3555:def _overview_ai_decision_summary(acts: dict, mexc_syms) -> str:
+trading/dashboard.py.bak_before_history_no_shake_2026-06-18_1039:3655:        f"  \n- **Latest AI decision:** {_overview_ai_decision_summary(acts, mexc_syms)}"
+trading/dashboard.py.bak_before_history_no_shake_2026-06-18_1039:4887:def _render_ai_decisions_narrative(symbols, acts: dict, venue: str = "binance"):
+trading/dashboard.py.bak_before_history_no_shake_2026-06-18_1039:4942:def _render_ai_decisions(symbols, acts: dict, accent: str, venue: str = "binance"):
+trading/dashboard.py.bak_before_history_no_shake_2026-06-18_1039:6115:            _render_ai_decisions_narrative(_BIN_MAJORS, _acts, venue="binance")
+trading/dashboard.py.bak_before_history_no_shake_2026-06-18_1039:6128:            _render_ai_decisions_narrative(_dec_syms, _acts, venue="mexc")
+trading/dashboard.py.bak_before_symbols_patch:1529:_ai_last  = (_sig_meta.get("ai_decision") or "").upper() if _sig_meta else ""
+trading/dashboard.py.bak_before_symbols_patch:1530:_ai_lconf = int((_sig_meta.get("ai_confidence") or 0)) if _sig_meta else 0
+trading/dashboard_before_exact_mockup.py:1567:_ai_last  = (_sig_meta.get("ai_decision") or "").upper() if _sig_meta else ""
+trading/dashboard_before_exact_mockup.py:1568:_ai_lconf = int((_sig_meta.get("ai_confidence") or 0)) if _sig_meta else 0
+trading/dashboard_before_final_layout.py:1565:_ai_last  = (_sig_meta.get("ai_decision") or "").upper() if _sig_meta else ""
+trading/dashboard_before_final_layout.py:1566:_ai_lconf = int((_sig_meta.get("ai_confidence") or 0)) if _sig_meta else 0
+trading/test_bot_validation_gate.py:153:             mock.patch("gpt_advisor.get_advisor", return_value=None):
+trading/PROJECT_REPORT.md:33:├── gpt_advisor.py          # GPT global analyst (OpenAI) — analyze_global() advisory veto (346)
+trading/PROJECT_REPORT.md:66:| `gpt_advisor.py` | Optional OpenAI call. `analyze_global()` sends all symbols' state and returns a TRADE/NO_TRADE verdict used as an advisory veto on the winner. |
+trading/PROJECT_REPORT.md:101:  │     • gpt_advisor.analyze_global() → may set winner=None (NO_TRADE veto, advisory)
+trading/PROJECT_REPORT.md:114:`strategy.py` (signal + score), `ai_engine.py` + `gpt_advisor.py` (advisory),
+trading/PROJECT_REPORT.md:157:| AI confidence | 20 | `ai_confidence / 5` |
+trading/tests/test_dip_strategy.py:155:    for banned in ("import strategy", "import scoring", "gpt_advisor",
+trading/tests/test_aggressive_mode.py:35:        self.gpt_prob_floor = 50
+trading/tests/test_aggressive_mode.py:60:            "score_threshold_floor", "gpt_prob_floor")
+trading/aggressive_mode.py:9:  • gpt_prob_floor            — GPT advisory acceptance threshold
+trading/aggressive_mode.py:65:        "gpt_prob_floor":       70,
+trading/aggressive_mode.py:75:        "gpt_prob_floor":       60,
+trading/aggressive_mode.py:85:        "gpt_prob_floor":       55,
+trading/aggressive_mode.py:95:        "gpt_prob_floor":       50,
+trading/aggressive_mode.py:341:    "gpt_prob_floor",
+trading/aggressive_mode.py:360:    bot.gpt_prob_floor        = int(p["gpt_prob_floor"])
+trading/dashboard_manual_backup.py:1565:_ai_last  = (_sig_meta.get("ai_decision") or "").upper() if _sig_meta else ""
+trading/dashboard_manual_backup.py:1566:_ai_lconf = int((_sig_meta.get("ai_confidence") or 0)) if _sig_meta else 0
+replit.md:161:1. **`strategy.weighted_decision(df, ai_signal, ai_confidence, regime)`** scores
+replit.md:235:   `gpt_prob_floor 55→50`. `strategy.reversal_signal()` volume gate
+replit.md:269:  may be resolved by `gpt_advisor.rank_opportunities()` (one short GPT call,
+replit.md:303:- **GPT role rewritten** (`gpt_advisor.analyze_global` prompt). It is now an
+replit.md:346:  `gpt_prob_floor=65` (GPT = filter, not predictor — reject low-confidence
+replit.md:352:- **GPT = GLOBAL ANALYST** (`gpt_advisor.analyze_global`). Every cycle with
+replit.md:377:  `gpt_prob_floor = 55`, `global_throttle_sec = 20` (was 30). Anti-idle floor
+replit.md:633:  AI decisions (`_render_ai_decisions`, majors).
+.env:1:OPENAI_API_KEY=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
