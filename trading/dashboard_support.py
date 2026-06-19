@@ -22,6 +22,14 @@ SCANNER_PATH = os.path.join(_DIR, "data", "multi_exchange_opportunities.json")
 # Snapshot of LiveSettings dataclass defaults — single source for display fallbacks.
 _LIVE_RULE_DEFAULTS = _live_settings.default_settings()
 
+# Backward-compatible display constants.  dashboard.py and older helper code
+# still import these names; derive them from LiveSettings so there is only one
+# source of truth and importing the dashboard cannot crash.
+GLOBAL_BUY_PCT = float(_LIVE_RULE_DEFAULTS.buy_threshold_pct)
+GLOBAL_TP_PCT = float(_LIVE_RULE_DEFAULTS.take_profit_pct)
+GLOBAL_SL_PCT = float(_LIVE_RULE_DEFAULTS.stop_loss_pct)
+GLOBAL_COOLDOWN_SEC = int(_LIVE_RULE_DEFAULTS.reentry_cooldown_sec)
+
 
 def is_emergency_stop_active(
     risk=None,

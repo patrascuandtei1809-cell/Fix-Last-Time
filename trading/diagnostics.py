@@ -430,15 +430,23 @@ def preflight_checks(exchange, symbols: List[str]) -> Dict:
 def reconcile_ghost_trades(exchange, dry_run: bool = False) -> Dict:
     import bot as _bot
 
+    venue = str(getattr(exchange, "name", "binance") or "binance").lower()
     out: Dict = {"checked": 0, "ghosts": [], "mismatches": [], "closed": [],
-                 "errors": [], "dry_run": dry_run}
+                 "errors": [], "dry_run": dry_run, "exchange": venue}
 
     client = getattr(exchange, "client", None)
     if exchange is None or client is None:
         out["errors"].append("No authenticated client — cannot reconcile.")
         return out
 
-    open_trades = [t for t in _bot.load_trades() if t.get("status") == "open"]
+    # Never compare positions from one venue with another venue's balances.
+    # A MEXC XRP trade, for example, must not be declared a ghost merely
+    # because the Binance account has no XRP.
+    open_trades = [
+        t for t in _bot.load_trades()
+        if t.get("status") == "open"
+        and str(t.get("exchange") or "binance").lower() == venue
+    ]
     out["checked"] = len(open_trades)
     if not open_trades:
         return out
@@ -457,7 +465,7 @@ def reconcile_ghost_trades(exchange, dry_run: bool = False) -> Dict:
         return sym
 
     # Sum recorded qty per base asset (across all open BUY trades) so we can
-    # compare against the real Binance holding.
+    # compare against the real holding on this exchange.
     recorded_by_base: Dict[str, float] = {}
     for t in open_trades:
         if (t.get("side") or "").upper() != "BUY":
@@ -479,7 +487,7 @@ def reconcile_ghost_trades(exchange, dry_run: bool = False) -> Dict:
         real = balances.get(b, {}) or {}
         real_total = float(real.get("total", 0) or 0)
 
-        # Dust threshold = essentially NOTHING on Binance: at or below the
+        # Dust threshold = essentially NOTHING on the venue: at or below the
         # smallest tradable quantity (or a tiny epsilon if the exchange reports
         # no min_qty). It is NEVER scaled by the recorded qty — a partial
         # holding is a MISMATCH (left open for review), not a ghost. This is the
@@ -492,16 +500,17 @@ def reconcile_ghost_trades(exchange, dry_run: bool = False) -> Dict:
         dust = min_qty if min_qty > 0 else 1e-8
 
         if real_total <= dust:
-            # GHOST — no meaningful balance on Binance for this base asset.
+            # GHOST — no meaningful balance on this exchange for this base asset.
             ghost = {"id": t.get("id"), "symbol": sym, "recorded_qty": rec_qty,
+                     "exchange": venue, "exchange_total": real_total,
                      "binance_total": real_total, "entry": t.get("entry_price")}
             out["ghosts"].append(ghost)
             if not dry_run:
                 entry = float(t.get("entry_price") or 0)
                 closed = _bot.close_trade(
                     t.get("id"), entry,
-                    f"RECONCILED — ghost trade: no {b} balance on Binance "
-                    f"(recorded {rec_qty}, Binance total {real_total}). "
+                    f"RECONCILED — ghost trade: no {b} balance on {venue.upper()} "
+                    f"(recorded {rec_qty}, exchange total {real_total}). "
                     f"Closed at entry (P&L unknown → 0).",
                 )
                 if closed:
@@ -510,7 +519,7 @@ def reconcile_ghost_trades(exchange, dry_run: bool = False) -> Dict:
                         _bot.log_activity(
                             "WARNING",
                             f"🧹 RECONCILED ghost {sym} #{t.get('id')} — no {b} "
-                            f"balance on Binance (recorded {rec_qty}, real "
+                            f"balance on {venue.upper()} (recorded {rec_qty}, real "
                             f"{real_total}). Marked closed at entry, P&L=0.")
                     except Exception:
                         pass
@@ -518,6 +527,8 @@ def reconcile_ghost_trades(exchange, dry_run: bool = False) -> Dict:
             # Partial mismatch — flag for review, do NOT auto-close.
             out["mismatches"].append({
                 "symbol": sym, "id": t.get("id"), "recorded_qty": rec_qty,
+                "exchange": venue,
+                "exchange_total": real_total,
                 "binance_total": real_total,
                 "recorded_total_for_base": recorded_by_base.get(b, 0),
             })
@@ -527,7 +538,7 @@ def reconcile_ghost_trades(exchange, dry_run: bool = False) -> Dict:
             _bot.log_activity(
                 "WARNING",
                 f"⚠️ Reconcile: {len(out['mismatches'])} open trade(s) have a "
-                f"PARTIAL balance mismatch vs Binance — left OPEN for review.")
+                f"PARTIAL balance mismatch vs {venue.upper()} — left OPEN for review.")
         except Exception:
             pass
 
