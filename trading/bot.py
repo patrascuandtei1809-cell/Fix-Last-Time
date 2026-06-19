@@ -29,6 +29,7 @@ from exchanges import registry as ex_registry
 from symbol_worker import SymbolWorker
 import telegram_notifier as tg
 import diagnostics
+import buy_audit
 # ── 20-Minute Dip strategy (Task #11) — the ONLY live order path ─────────────
 # When TradingBot.dip_mode is True (default) the orchestrator runs this engine
 # per active symbol and NEVER touches the legacy worker.tick/execute_entry path.
@@ -634,6 +635,17 @@ class TradingBot:
             self._dip_engines[key] = eng
         return eng
 
+    def _scanner_score_map(self) -> Dict[str, int]:
+        try:
+            from scanner import load_opportunities
+            return {
+                str(o.get("symbol") or "").upper(): int(o.get("score") or 0)
+                for o in load_opportunities()
+                if o.get("symbol")
+            }
+        except Exception:
+            return {}
+
     def _run_dip_cycle(self, refresh_fn) -> bool:
         """Run the DipLiveEngine across all active symbols. Returns True if any
         symbol placed a LIVE order this cycle."""
@@ -648,6 +660,12 @@ class TradingBot:
         # Task #41 — rotate stale scanner picks before iterating workers so the
         # snapshot below reflects any swap (self-throttled; no-op when disabled).
         self._maybe_rotate_scanner_symbols()
+
+        try:
+            buy_audit.begin_cycle()
+            _score_map = self._scanner_score_map()
+        except Exception:
+            _score_map = {}
 
         traded = False
         for key, worker in list(self.workers.items()):
@@ -714,6 +732,18 @@ class TradingBot:
                     )
                 except Exception:
                     pass
+                try:
+                    buy_audit.record_from_activity(
+                        exchange=_venue,
+                        symbol=worker.symbol,
+                        rec=rec,
+                        score=_score_map.get(worker.symbol.upper()),
+                        settings=settings,
+                        open_trades=all_open,
+                        cooldown_store=self._cooldown,
+                    )
+                except Exception:
+                    pass
             except Exception as exc:
                 log_activity("ERROR", f"Dip engine {key} crashed: {exc}")
                 # Same consolidated per-symbol scan line on the error path, so
@@ -737,6 +767,22 @@ class TradingBot:
                     )
                 except Exception:
                     pass
+                try:
+                    buy_audit.record_engine_error(
+                        exchange=_venue,
+                        symbol=worker.symbol,
+                        error=str(exc),
+                        score=_score_map.get(worker.symbol.upper()),
+                        settings=settings,
+                        open_trades=all_open,
+                        cooldown_store=self._cooldown,
+                    )
+                except Exception:
+                    pass
+        try:
+            buy_audit.finish_cycle()
+        except Exception:
+            pass
         try:
             diagnostics.record_dip_cycle(traded)
         except Exception:

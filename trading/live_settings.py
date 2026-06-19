@@ -24,7 +24,7 @@ import os
 import json
 from dataclasses import dataclass, asdict, fields
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 try:
     import psycopg2
@@ -57,7 +57,7 @@ class LiveSettings:
     """Every operator-tunable LIVE trading setting. Defaults match the spec."""
     # Strategy thresholds (defaults = the FINAL TRADING RULE)
     buy_threshold_pct: float = -0.05     # BUY when 20m change ≤ this
-    take_profit_pct: float = 1.00        # SELL when profit ≥ this
+    take_profit_pct: float = 0.60        # SELL when profit ≥ this
     stop_loss_pct: float = -0.30         # STOP-LOSS when loss ≤ this
     lookback_minutes: int = 20
 
@@ -83,10 +83,10 @@ class LiveSettings:
     aggressive_on: bool = True             # aggressive default ON (spec)
     safe_mode: bool = False                # operator freeze (no new entries)
 
-    # Cooldowns (seconds) — FINAL RULE: 2 minutes after a stop-loss AND 2 minutes
+    # Cooldowns (seconds) — FINAL RULE: 1 minute after a stop-loss AND 1 minute
     # after a (profitable) sell before re-entering the same symbol.
-    stop_loss_cooldown_sec: int = 120      # 2 minutes after a stop-loss
-    reentry_cooldown_sec: int = 120        # 2 minutes after any sell
+    stop_loss_cooldown_sec: int = 60       # 1 minute after a stop-loss
+    reentry_cooldown_sec: int = 60         # 1 minute after any sell
 
     # Optional exit enhancements — OFF by default (operator must enable in dashboard)
     breakeven_enabled: bool = False
@@ -118,6 +118,21 @@ class LiveSettings:
 
 def default_settings() -> LiveSettings:
     return LiveSettings()
+
+
+def global_rules_snapshot(settings: Optional[LiveSettings] = None) -> Dict[str, Any]:
+    """Public global-rule fields for API / dashboard — sourced from LiveSettings."""
+    s = settings if settings is not None else default_settings()
+    return {
+        "buy_threshold_pct": float(s.buy_threshold_pct),
+        "take_profit_pct": float(s.take_profit_pct),
+        "stop_loss_pct": float(s.stop_loss_pct),
+        "stop_loss_cooldown_sec": int(s.stop_loss_cooldown_sec),
+        "reentry_cooldown_sec": int(s.reentry_cooldown_sec),
+        "trend_filter_on": bool(s.trend_filter_on),
+        "volume_filter_on": bool(s.volume_filter_on),
+        "min_volume_multiple": float(s.min_volume_multiple),
+    }
 
 
 # ── PostgreSQL persistence ───────────────────────────────────────────────────

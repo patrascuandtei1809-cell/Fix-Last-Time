@@ -414,26 +414,11 @@ def load_global_rules() -> Dict[str, Any]:
     try:
         import live_settings as ls
         s = ls.get_settings()
-        data = {
-            "buy_threshold_pct": float(s.buy_threshold_pct),
-            "take_profit_pct": float(s.take_profit_pct),
-            "stop_loss_pct": float(s.stop_loss_pct),
-            "reentry_cooldown_sec": int(s.reentry_cooldown_sec),
-            "trend_filter_on": bool(s.trend_filter_on),
-            "volume_filter_on": bool(s.volume_filter_on),
-            "min_volume_multiple": float(s.min_volume_multiple),
-        }
+        data = ls.global_rules_snapshot(s)
     except Exception as exc:
         warnings.append(_warning("live_settings_error", str(exc)))
-        data = {
-            "buy_threshold_pct": ds.GLOBAL_BUY_PCT,
-            "take_profit_pct": ds.GLOBAL_TP_PCT,
-            "stop_loss_pct": ds.GLOBAL_SL_PCT,
-            "reentry_cooldown_sec": ds.GLOBAL_COOLDOWN_SEC,
-            "trend_filter_on": True,
-            "volume_filter_on": True,
-            "min_volume_multiple": 1.0,
-        }
+        import live_settings as ls
+        data = ls.global_rules_snapshot(ls.default_settings())
     return {"ok": True, "warnings": warnings, "data": data}
 
 

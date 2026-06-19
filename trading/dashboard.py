@@ -102,21 +102,48 @@ def _order_fee_usdt(order: dict, coin: str, fill_price: float) -> float:
 def _dip_rules() -> dict:
     """The ONE Market-Low rule both venues obey — from persisted live_settings."""
     _s = st.session_state.get("live_settings")
+    if _s is None:
+        try:
+            _s = live_settings.get_settings()
+        except Exception:
+            _s = live_settings.LiveSettings()
+
+    _defaults = live_settings.default_settings()
 
     def _g(name, default):
         try:
-            v = getattr(_s, name)
+            v = getattr(_s, name, default)
             return v if v is not None else default
         except Exception:  # noqa: BLE001
             return default
     return {
-        "buy":      float(_g("buy_threshold_pct", dsupport.GLOBAL_BUY_PCT)),
-        "tp":       float(_g("take_profit_pct", dsupport.GLOBAL_TP_PCT)),
-        "sl":       float(_g("stop_loss_pct", dsupport.GLOBAL_SL_PCT)),
-        "cooldown": int(_g("reentry_cooldown_sec", dsupport.GLOBAL_COOLDOWN_SEC)),
-        "trend":    bool(_g("trend_filter_on", True)),
-        "vol":      bool(_g("volume_filter_on", True)),
+        "buy":      float(_g("buy_threshold_pct", _defaults.buy_threshold_pct)),
+        "tp":       float(_g("take_profit_pct", _defaults.take_profit_pct)),
+        "sl":       float(_g("stop_loss_pct", _defaults.stop_loss_pct)),
+        "cooldown": int(_g("reentry_cooldown_sec", _defaults.reentry_cooldown_sec)),
+        "trend":    bool(_g("trend_filter_on", _defaults.trend_filter_on)),
+        "vol":      bool(_g("volume_filter_on", _defaults.volume_filter_on)),
     }
+
+
+def _emergency_stop_active() -> bool:
+    return dsupport.is_emergency_stop_active(
+        risk=st.session_state.get("risk"),
+        global_risk=st.session_state.get("global_risk"),
+        per_symbol_risk=st.session_state.get("per_symbol_risk"),
+    )
+
+
+def _live_settings_status() -> tuple[bool, str]:
+    """Whether live_settings loaded and a short source label for debug."""
+    _s = st.session_state.get("live_settings")
+    if _s is not None:
+        return True, "session_state.live_settings"
+    try:
+        live_settings.get_settings()
+        return True, "live_settings.get_settings()"
+    except Exception as exc:
+        return False, f"fallback defaults ({exc})"
 
 
 # ── Page config ───────────────────────────────────────────────────────────────
@@ -1981,7 +2008,10 @@ _bot_status_html = (
 )
 
 _diag = get_bot_diagnostics(symbol=st.session_state.symbol)
-_block = (_diag.get("block_reason") or "").strip()
+_block = dsupport.effective_block_reason(
+    (_diag.get("block_reason") or "").strip(),
+    _emergency_stop_active(),
+)
 _lo    = _diag.get("last_order") or {}
 
 _block_html = ""
@@ -2057,7 +2087,10 @@ def _render_bot_symbol_overview():
             _lo = _d.get("last_order") or {}
             if _lo.get("ok"):
                 _recent_order = True
-        _br = (_d.get("block_reason") or "").strip()
+        _br = dsupport.effective_block_reason(
+            (_d.get("block_reason") or "").strip(),
+            _emergency_stop_active(),
+        )
         _sig = (_stx.get("signal") or "").upper()
         if _br:
             _waiting_reasons.append(f"{_s}: {_br}")
@@ -2082,7 +2115,10 @@ def _render_bot_symbol_overview():
         _upd = _st.get("updated_at")
         _lo_at = _d.get("last_order_at")
         _lo = _d.get("last_order") or {}
-        _br = (_d.get("block_reason") or "").strip()
+        _br = dsupport.effective_block_reason(
+            (_d.get("block_reason") or "").strip(),
+            _emergency_stop_active(),
+        )
 
         def _ago(dt):
             if not dt:
@@ -2430,10 +2466,11 @@ with st.sidebar:
         '</div></div>',
         unsafe_allow_html=True,
     )
+    _r = _dip_rules()
     st.caption("BUY when market-low change ≤ −0.05% with volume + trend "
-               f"confirmation, SELL at +{dsupport.GLOBAL_TP_PCT:.2f}%, "
-               f"STOP at {dsupport.GLOBAL_SL_PCT:.2f}%, "
-               f"{dsupport.GLOBAL_COOLDOWN_SEC}s cooldown. "
+               f"confirmation, SELL at +{_r['tp']:.2f}%, "
+               f"STOP at {_r['sl']:.2f}%, "
+               f"{_r['cooldown']}s cooldown. "
                "MEXC is the trading venue; Binance is display/reconciliation only.")
 
     st.markdown('<hr class="s-div"/>', unsafe_allow_html=True)
@@ -3727,9 +3764,54 @@ def _render_equity_sparkline():
                     config={"displayModeBar": False})
 
 
+@st.cache_data(ttl=30, show_spinner=False)
+def _cached_history_bundle(cache_key: int):
+    """Trade history + activity — keyed so History tab stays stable between reruns."""
+    trades = load_trades()
+    status = dsupport.trades_dir_status()
+    by_ex = dsupport.group_trades_by_exchange(trades)
+    bin_closed = dsupport.sort_trades_latest_first(
+        [t for t in by_ex.get("binance", []) if t.get("status") == "closed"])
+    mexc_closed = dsupport.sort_trades_latest_first(
+        [t for t in by_ex.get("mexc", []) if t.get("status") == "closed"])
+    try:
+        activity = load_activity()
+    except Exception:
+        activity = []
+    try:
+        dip_acts = live_engine.get_all_activity()
+    except Exception:
+        dip_acts = []
+    return trades, status, bin_closed, mexc_closed, activity, dip_acts
+
+
 def _render_history_tab(fmt_pnl_fn, fmt_pct_fn):
     """Trade history, activity log, venue-filtered closed trades."""
     _sec("📋 Trade History")
+
+    if "hist_cache_key" not in st.session_state:
+        st.session_state.hist_cache_key = 0
+
+    _hr1, _hr2 = st.columns([4, 1])
+    with _hr2:
+        if st.button("↺ Refresh history", key="hist_manual_refresh", width="stretch"):
+            st.session_state.hist_cache_key = int(st.session_state.hist_cache_key) + 1
+            st.session_state.last_history_loaded_at = datetime.now(_TZ).strftime(
+                "%Y-%m-%d %H:%M:%S")
+            st.rerun()
+
+    _trades, _trades_status, _bin_closed, _mexc_closed, _activity, _dip_acts = (
+        _cached_history_bundle(int(st.session_state.hist_cache_key))
+    )
+    _last_loaded = st.session_state.get("last_history_loaded_at") or "not loaded yet"
+
+    _ls_ok, _ls_src = _live_settings_status()
+    st.caption(
+        f"**Debug** · last_history_loaded_at: {_last_loaded} · "
+        f"history_rows_count: {len(_trades)} · emergency_stop: {_emergency_stop_active()} · "
+        f"live_settings: {'OK' if _ls_ok else 'FALLBACK'} ({_ls_src})"
+    )
+
     if not _trades_status.get("exists") or _trades_status.get("file_count", 0) == 0:
         st.warning(dsupport.trades_dir_missing_message())
 
@@ -3748,12 +3830,32 @@ def _render_history_tab(fmt_pnl_fn, fmt_pct_fn):
             out = [t for t in out if t.get("type") == _ty_f]
         return out
 
-    tab_h, tab_a, tab_b, tab_m = st.tabs([
-        "All trades", "Activity log", "Binance closed", "MEXC closed",
-    ])
+    _sub_labels = ["All trades", "Activity log", "Binance closed", "MEXC closed"]
+    if "hist_sub_tab" not in st.session_state:
+        st.session_state.hist_sub_tab = _sub_labels[0]
+    if hasattr(st, "segmented_control"):
+        _sub_pick = st.segmented_control(
+            "History section",
+            _sub_labels,
+            default=st.session_state.hist_sub_tab,
+            key="hist_sub_tab_sel",
+            label_visibility="collapsed",
+        )
+    else:
+        _sub_pick = st.radio(
+            "History section",
+            _sub_labels,
+            index=_sub_labels.index(st.session_state.hist_sub_tab),
+            horizontal=True,
+            key="hist_sub_tab_radio",
+            label_visibility="collapsed",
+        )
+    if _sub_pick and _sub_pick != st.session_state.get("hist_sub_tab"):
+        st.session_state.hist_sub_tab = _sub_pick
+    _sub = st.session_state.get("hist_sub_tab", _sub_labels[0])
 
-    with tab_h:
-        _shown = _filt(all_trades)
+    if _sub == "All trades":
+        _shown = _filt(_trades)
         if not _shown:
             st.info("No trades match filters — history appears when the bot or manual "
                     "close flow writes to data/trades/*.json.")
@@ -3767,11 +3869,20 @@ def _render_history_tab(fmt_pnl_fn, fmt_pct_fn):
                 },
             )
 
-    with tab_a:
+    elif _sub == "Activity log":
         try:
-            _dip_acts = live_engine.get_all_activity()
+            _acts_live = _acts_map()
         except Exception:
-            _dip_acts = []
+            _acts_live = {}
+        _cur_blk = dsupport.current_engine_blocker(_acts_live, _emergency_stop_active())
+        st.markdown("**Current trading blocker (live engine only)**")
+        if _emergency_stop_active():
+            st.warning("Emergency stop is ON — trading halted for this session.")
+        elif _cur_blk:
+            st.info(_cur_blk)
+        else:
+            st.caption("No active engine block — bot may be waiting for signals or OFF.")
+
         if _dip_acts:
             st.markdown("**Market Low — live engine decisions**")
             for _rec in _dip_acts:
@@ -3782,21 +3893,27 @@ def _render_history_tab(fmt_pnl_fn, fmt_pct_fn):
                     f"20m {_chg_s} · {getattr(_rec, 'reason', '')}"
                 )
             st.divider()
+
+        st.markdown("**Historic activity log** *(not current blockers)*")
         ac1, ac2 = st.columns([8, 1])
         with ac2:
             if st.button("🗑 Clear log", key="clear_activity_btn"):
                 clear_activity()
-                st.rerun()
-        activity = load_activity()
-        if not activity:
+                st.session_state.hist_cache_key = int(st.session_state.hist_cache_key) + 1
+                st.toast("Activity log cleared — click ↺ Refresh history to reload")
+        if not _activity:
             st.info("No activity log yet — expected at trading/data/activity.json")
         else:
             lines = []
-            for entry in reversed(activity[-300:]):
+            for entry in reversed(_activity[-300:]):
                 ts = _fmt_london(entry.get("time"), "%Y-%m-%d %H:%M:%S")
                 lvl = entry.get("level", "INFO")
                 msg = (entry.get("message", "")
                        .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+                if (not _emergency_stop_active()
+                        and "emergency stop" in msg.lower()
+                        and "EMERGENCY STOP" in msg.upper()):
+                    msg = f'<span style="opacity:.55;">{msg} (historic)</span>'
                 lines.append(
                     f'<div class="log-line">'
                     f'<span class="l-ts">{ts}</span>'
@@ -3806,19 +3923,23 @@ def _render_history_tab(fmt_pnl_fn, fmt_pct_fn):
             st.markdown('<div class="log-wrap">' + "".join(lines) + "</div>",
                         unsafe_allow_html=True)
 
-    def _closed_tab(closed_list, venue_label):
-        if not closed_list:
-            st.info(f"No closed {venue_label} trades in data/trades/*.json yet.")
+    elif _sub == "Binance closed":
+        if not _bin_closed:
+            st.info("No closed Binance trades in data/trades/*.json yet.")
         else:
             st.dataframe(
-                pd.DataFrame(dsupport.build_history_rows(closed_list, fmt_pnl_fn, fmt_pct_fn)),
+                pd.DataFrame(dsupport.build_history_rows(_bin_closed, fmt_pnl_fn, fmt_pct_fn)),
                 width="stretch", hide_index=True, height=300,
             )
 
-    with tab_b:
-        _closed_tab(_bin_closed, "Binance")
-    with tab_m:
-        _closed_tab(_mexc_closed, "MEXC")
+    elif _sub == "MEXC closed":
+        if not _mexc_closed:
+            st.info("No closed MEXC trades in data/trades/*.json yet.")
+        else:
+            st.dataframe(
+                pd.DataFrame(dsupport.build_history_rows(_mexc_closed, fmt_pnl_fn, fmt_pct_fn)),
+                width="stretch", hide_index=True, height=300,
+            )
 
 
 def _render_performance_tab(fmt_pnl_fn, total_pnl_val, win_rate_val, wins_val):
@@ -3902,6 +4023,7 @@ def _render_trade_diagnostics_panel():
         _freq = diagnostics.trade_frequency_stats()
         _latest = diagnostics.get_latest_by_symbol()
         _topblk = diagnostics.get_block_summary(top=10)
+        _topblk = dsupport.filter_block_summary(_topblk, _emergency_stop_active())
         _cyc = diagnostics.get_cycle_stats()
     except Exception as _diag_err:
         st.warning(f"Diagnostics unavailable: "
@@ -4059,6 +4181,111 @@ def _collect_settings_snapshot() -> dict:
     }
 
 
+def _render_live_decision_audit_diagnostics():
+    """Latest-cycle BUY audit snapshot for the Diagnostics tab."""
+    try:
+        import buy_audit as _ba
+        live = _ba.load_live_audit()
+    except Exception:
+        live = {}
+    summary = live.get("summary") or {}
+    updated = (live.get("updated_at") or "")[:19].replace("T", " ")
+
+    _sec("🛒 Live Decision Audit")
+    if not live:
+        st.caption("No live decision audit yet — starts after the next bot dip cycle.")
+        return
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Evaluated (last cycle)", int(summary.get("evaluated") or 0))
+    c2.metric("Reached BUY stage", int(summary.get("reached_buy_stage") or 0))
+    c3.metric("Rejected", int(summary.get("rejected") or 0))
+    c4.metric("Executed", int(summary.get("executed") or 0))
+    st.caption(f"Last cycle updated: {updated or '—'}")
+
+    top = summary.get("top_block_reasons") or []
+    if top:
+        st.markdown("**Top block reasons**")
+        st.dataframe(
+            pd.DataFrame([
+                {"Reason": r.get("reason", "—"), "Count": r.get("count", 0)}
+                for r in top
+            ]),
+            width="stretch",
+            hide_index=True,
+        )
+
+    rows = _ba.audit_display_rows(limit=50)
+    if rows:
+        st.markdown("**Latest 50 decisions**")
+        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+
+    mexc_rej = _ba.rejected_symbols("mexc")
+    bin_rej = _ba.rejected_symbols("binance")
+    r1, r2 = st.columns(2)
+    with r1:
+        st.markdown("**MEXC rejected symbols**")
+        st.caption(", ".join(mexc_rej) if mexc_rej else "—")
+    with r2:
+        st.markdown("**Binance rejected symbols**")
+        st.caption(", ".join(bin_rej) if bin_rej else "—")
+
+
+def _render_buy_audit_tab():
+    """Dedicated BUY AUDIT tab — why scored picks are not becoming orders."""
+    _sec("🛒 BUY AUDIT")
+    st.caption(
+        "Every symbol the live dip engine evaluates each cycle. "
+        "Explains why scanner opportunities are blocked before a BUY order."
+    )
+    try:
+        import buy_audit as _ba
+        payload = _ba.load_buy_audit()
+        live = payload.get("latest_cycle") or _ba.load_live_audit()
+    except Exception:
+        payload = {}
+        live = {}
+
+    summary = (live or {}).get("summary") or payload.get("summary") or {}
+    updated = (
+        (live or {}).get("updated_at")
+        or payload.get("updated_at")
+        or ""
+    )[:19].replace("T", " ")
+
+    if not summary and not payload:
+        st.info("No BUY audit data yet. Data appears after the bot completes its next dip cycle.")
+        return
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Evaluated (last cycle)", int(summary.get("evaluated") or 0))
+    m2.metric("Reached BUY stage", int(summary.get("reached_buy_stage") or 0))
+    m3.metric("Rejected", int(summary.get("rejected") or 0))
+    m4.metric("Executed", int(summary.get("executed") or 0))
+    st.caption(f"Last updated: {updated or '—'}")
+
+    top = summary.get("top_block_reasons") or []
+    _sec("Top rejection reasons")
+    if top:
+        st.dataframe(
+            pd.DataFrame([
+                {"Reason": r.get("reason", "—"), "Count": r.get("count", 0)}
+                for r in top
+            ]),
+            width="stretch",
+            hide_index=True,
+        )
+    else:
+        st.caption("No rejection reasons recorded yet.")
+
+    _sec("Last 100 evaluated symbols")
+    hist_rows = _ba.audit_history_rows(limit=100)
+    if hist_rows:
+        st.dataframe(pd.DataFrame(hist_rows), width="stretch", hide_index=True)
+    else:
+        st.caption("No symbol evaluations in rolling history yet.")
+
+
 def _render_diagnostics_tab():
     """Operator diagnostics — clean cards/tables, raw payloads collapsed."""
     _sec("🔧 Diagnostics")
@@ -4090,7 +4317,8 @@ def _render_diagnostics_tab():
     _worker_summary = dsupport.bot_worker_summary(_b_now)
     _scanner_selected = len((_scan_payload or {}).get("opportunities") or [])
     _proof = dsupport.mexc_operator_proof(
-        _b_now, _acts, open_trades, _activities, _mexc_live
+        _b_now, _acts, open_trades, _activities, _mexc_live,
+        emergency_active=_emergency_stop_active(),
     )
 
     def _card(lbl, val, ok=True):
@@ -4160,21 +4388,32 @@ def _render_diagnostics_tab():
 
     _sec("🧱 Why Not Trading")
     _blk_rows = dsupport.top_block_reasons_plain(top=5)
+    if not _emergency_stop_active():
+        _blk_rows = [
+            r for r in _blk_rows
+            if "emergency" not in (r.get("Reason") or "").lower()
+        ]
     if _blk_rows:
         st.dataframe(pd.DataFrame(_blk_rows), width="stretch", hide_index=True)
     else:
         st.caption("No block reasons recorded yet.")
+
+    _render_live_decision_audit_diagnostics()
 
     _sec("🔵 MEXC Proof")
     mp1, mp2, mp3 = st.columns(3)
     mp1.metric("MEXC workers active", _proof.get("mexc_workers_active", "NO"))
     mp2.metric("MEXC open trades", int(_proof.get("mexc_open_trades_count", 0)))
     mp3.metric("MEXC mode", _proof.get("mode", "DRY-RUN"))
+    _cur_mexc_blk = _proof.get("current_mexc_block_reason") or "—"
+    if _emergency_stop_active():
+        _cur_mexc_blk = "Emergency stop active — no trading"
     st.markdown(
         f"- **Latest MEXC decision:** {_proof.get('latest_decision', '—')}  \n"
         f"- **Latest MEXC BUY/SELL/STOP/HOLD event:** {_ev_text(_proof.get('latest_mexc_event'))}  \n"
         f"- **Latest MEXC {'LIVE' if _mexc_live else 'dry-run'} trade:** {_ev_text(_proof.get('latest_mexc_trade_event'))}  \n"
-        f"- **Last MEXC blocked reason:** {_ev_text(_proof.get('last_mexc_block_reason'))}"
+        f"- **Current MEXC blocker (live engine):** {_cur_mexc_blk}  \n"
+        f"- **Historic MEXC block (activity log):** {_ev_text(_proof.get('last_mexc_block_reason'))}"
     )
 
     st.divider()
@@ -4937,6 +5176,7 @@ def _render_ai_decisions(symbols, acts: dict, accent: str, venue: str = "binance
     _sec("🧠 AI / MACD Decisions · next action & why")
     syms = [s for s in (symbols or []) if s]
     scores = _scanner_scores()
+    _buy_default = _dip_rules()["buy"]
     rows = []
     for sym in syms:
         rec = acts.get(str(sym).upper())
@@ -4944,7 +5184,7 @@ def _render_ai_decisions(symbols, acts: dict, accent: str, venue: str = "binance
             continue
         df_ind = _indicator_snapshot(sym, venue)
         macd_l, rsi_l, ai_conf = dsupport.macd_rsi_state(df_ind)
-        buy_thr = float(getattr(rec, "buy_threshold", dsupport.GLOBAL_BUY_PCT) or dsupport.GLOBAL_BUY_PCT)
+        buy_thr = float(getattr(rec, "buy_threshold", _buy_default) or _buy_default)
         state, scol, rsn = dsupport.classify_decision(rec, buy_thr, macd_l, rsi_l, ai_conf)
         chg = getattr(rec, "change_pct", None)
         if chg is None:
@@ -5172,6 +5412,7 @@ _MAIN_TAB_LABELS = (
     "🛰️ Scanner",
     "📋 History",
     "📈 Performance",
+    "🛒 BUY AUDIT",
     "🔧 Diagnostics",
 )
 
@@ -5199,7 +5440,7 @@ def _pick_main_tab(labels=_MAIN_TAB_LABELS):
             key="at_main_tab_radio",
             label_visibility="collapsed",
         )
-    if picked:
+    if picked and picked != cur:
         st.session_state.at_main_tab = picked
     return st.session_state.get("at_main_tab", default)
 
@@ -6131,6 +6372,9 @@ with st.container():
             _render_performance_tab(_fmt_pnl, total_pnl, win_rate, wins)
 
         elif _at_tab == _MAIN_TAB_LABELS[6]:
+            _render_buy_audit_tab()
+
+        elif _at_tab == _MAIN_TAB_LABELS[7]:
             _render_diagnostics_tab()
 
         st.markdown("<div style='height:48px'></div>", unsafe_allow_html=True)
@@ -6148,6 +6392,17 @@ if st.session_state.get("_last_settings_hash") != _snap_hash:
         st.session_state._settings_initial_saved = True
 
 # ── Dashboard heartbeat (auto-refresh iframe removed — see line ~751) ─────────
+# Global polling refresh runs on every tab EXCEPT History (stable cached view).
+_hist_tab_label = _MAIN_TAB_LABELS[4]
+_on_history_tab = st.session_state.get("at_main_tab", _MAIN_TAB_LABELS[0]) == _hist_tab_label
+if not _on_history_tab:
+    try:
+        from streamlit_autorefresh import st_autorefresh
+        _global_ref_ms = max(3000, int(st.session_state.get("refresh_secs", 3)) * 1000)
+        st_autorefresh(interval=_global_ref_ms, key="alphatrade_global_refresh", limit=None)
+    except Exception:
+        pass
+
 try:
     heartbeats.write("dashboard", {
         "refresh_secs": int(st.session_state.get("refresh_secs", 3)),

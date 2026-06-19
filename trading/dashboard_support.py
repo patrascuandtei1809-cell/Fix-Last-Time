@@ -13,15 +13,68 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
 
+import live_settings as _live_settings
+
 _DIR = os.path.dirname(os.path.abspath(__file__))
 TRADES_DIR = os.path.join(_DIR, "data", "trades")
 SCANNER_PATH = os.path.join(_DIR, "data", "multi_exchange_opportunities.json")
 
-# Global live rules (display baseline — operator may override via live_settings)
-GLOBAL_BUY_PCT = -0.05
-GLOBAL_TP_PCT = 1.00
-GLOBAL_SL_PCT = -0.30
-GLOBAL_COOLDOWN_SEC = 120
+# Snapshot of LiveSettings dataclass defaults — single source for display fallbacks.
+_LIVE_RULE_DEFAULTS = _live_settings.default_settings()
+
+
+def is_emergency_stop_active(
+    risk=None,
+    global_risk=None,
+    per_symbol_risk: Optional[Dict[str, Any]] = None,
+) -> bool:
+    """True only when a live session kill switch is armed right now."""
+    try:
+        if risk is not None and bool(getattr(risk, "emergency_stop", False)):
+            return True
+        if global_risk is not None and bool(getattr(global_risk, "emergency_stop", False)):
+            return True
+        for rs in (per_symbol_risk or {}).values():
+            if bool(getattr(rs, "emergency_stop", False)):
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def is_emergency_block_text(text: str) -> bool:
+    return "emergency stop" in (text or "").lower()
+
+
+def effective_block_reason(text: str, emergency_active: bool) -> str:
+    """Drop stale emergency-stop block text when the kill switch is OFF."""
+    t = (text or "").strip()
+    if not t:
+        return ""
+    if not emergency_active and is_emergency_block_text(t):
+        return ""
+    return t
+
+
+def filter_block_summary(items: List[Dict], emergency_active: bool) -> List[Dict]:
+    if emergency_active:
+        return list(items or [])
+    return [
+        it for it in (items or [])
+        if not is_emergency_block_text(str(it.get("category") or ""))
+    ]
+
+
+def current_engine_blocker(acts_map: Dict[str, Any], emergency_active: bool) -> str:
+    """Latest live-engine skip/hold reason — not historic activity.json rows."""
+    if emergency_active:
+        return "Emergency stop active — no trading"
+    for rec in (acts_map or {}).values():
+        dec = str(getattr(rec, "decision", "") or "").upper()
+        reason = str(getattr(rec, "reason", "") or "").strip()
+        if dec == "SKIP" and reason and not is_emergency_block_text(reason):
+            return reason
+    return ""
 
 
 def trades_dir_status() -> Dict[str, Any]:
@@ -292,12 +345,14 @@ def macd_rsi_state(df) -> Tuple[str, str, float]:
 
 def classify_decision(
     rec,
-    buy_thr: float = GLOBAL_BUY_PCT,
+    buy_thr: float | None = None,
     macd_l: str = "—",
     rsi_l: str = "—",
     ai_conf: float = 0.0,
 ) -> Tuple[str, str, str]:
     """Map ActivityRecord + indicators → (label, color, detail reason)."""
+    if buy_thr is None:
+        buy_thr = float(_LIVE_RULE_DEFAULTS.buy_threshold_pct)
     d = (getattr(rec, "decision", "") or "HOLD").upper().replace("-", "_")
     chg = getattr(rec, "change_pct", None)
     vr = getattr(rec, "volume_ratio", None)
@@ -814,6 +869,8 @@ def mexc_operator_proof(
     open_trades: List[Dict],
     activities: List[Dict],
     mexc_live: bool,
+    *,
+    emergency_active: bool = False,
 ) -> Dict[str, Any]:
     """Operator-proof facts for MEXC truth panel."""
     ws = bot_worker_summary(bot)
@@ -836,6 +893,9 @@ def mexc_operator_proof(
         activities,
         ["BLOCK", "SKIP", "COOLDOWN", "CAP", "RISK", "REJECT"],
     )
+    if last_blocked and is_emergency_block_text(last_blocked.get("message", "")):
+        last_blocked = None
+    current_block = current_engine_blocker(acts_map, emergency_active=emergency_active)
     mexc_open = [t for t in (open_trades or []) if (t.get("exchange") or "").lower() == "mexc"]
     return {
         "mode": "LIVE" if mexc_live else "DRY-RUN",
@@ -848,6 +908,7 @@ def mexc_operator_proof(
         "latest_mexc_trade_event": latest_trade_event,
         "mexc_open_trades_count": len(mexc_open),
         "last_mexc_block_reason": last_blocked,
+        "current_mexc_block_reason": current_block or None,
     }
 
 
