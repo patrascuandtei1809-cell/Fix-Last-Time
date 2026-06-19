@@ -508,7 +508,9 @@ class DipLiveEngine:
         ]
         if sym_open_any:
             if sym_open_bot:
-                return self._manage_exit(rec, symbol, sym_open_bot[0], price, thr)
+                return self._manage_exit(
+                    rec, symbol, sym_open_bot[0], price, thr, settings
+                )
             return self._skip(
                 rec, "Position already open (manual) — bot will not manage it",
                 decision="HOLD")
@@ -707,10 +709,11 @@ class DipLiveEngine:
         self._state(symbol, signal="BUY", reason=reason, block_reason="")
         return _publish(rec)
 
-    def _manage_exit(self, rec, symbol, trade, price, thr) -> ActivityRecord:
+    def _manage_exit(
+        self, rec, symbol, trade, price, thr, settings
+    ) -> ActivityRecord:
         entry = float(trade.get("entry_price") or 0.0)
         side = trade.get("side", "BUY")
-        settings = live_settings.get_settings()
 
         # Optional breakeven / trailing (OFF unless operator enabled in live settings)
         profit_pct = dip.position_profit_pct(entry, price, side)

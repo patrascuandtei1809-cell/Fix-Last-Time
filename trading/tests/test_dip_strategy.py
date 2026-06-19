@@ -384,7 +384,25 @@ def test_exit_fires_even_with_entry_filters_on():
     assert closed.get("trade") is open_trade
 
 
-# ── 8e. Volume gate is fully DISABLED when min_volume_multiple <= 0 ───────────
+# ── 8e. Open-position HOLD path uses the cycle's settings safely ─────────────
+def test_open_position_hold_does_not_raise_engine_error():
+    ex = _FakeExchange(price=100.20, change_pct=0.0)
+    eng = le.DipLiveEngine(exchange=ex, cooldown=ls.CooldownStore())
+    s = _settings()
+    open_trade = {"id": "t-hold", "coin": "BTCUSDT", "type": "bot",
+                  "manual": False, "status": "open", "side": "BUY",
+                  "entry_price": 100.0, "invested": 50.0}
+
+    rec = eng.evaluate(symbol="BTCUSDT", settings=s,
+                       open_trades=[open_trade], current_exposure=50.0,
+                       global_gate_fn=_pass_gate)
+
+    assert rec.decision == "HOLD"
+    assert rec.traded is False
+    assert "engine error" not in (rec.reason or "").lower()
+
+
+# ── 8f. Volume gate is fully DISABLED when min_volume_multiple <= 0 ───────────
 def test_volume_gate_disabled_when_multiple_zero():
     # Clear dip BUY, volume filter ON, but min_volume_multiple = 0 ⇒ the gate
     # must NOT block even though the fake exposes no volume (ratio 0.0×).
