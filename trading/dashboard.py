@@ -1685,7 +1685,14 @@ _cur_open_ids   = {t["id"] for t in open_trades   if t.get("id")}
 _cur_closed_ids = {t["id"] for t in closed_trades if t.get("id")}
 
 _new_opens  = _cur_open_ids   - _known_open
-_new_closes = _cur_closed_ids - _known_closed
+# Avoid replaying old closed-trade notifications on page reload/new Streamlit session.
+# First render seeds the known closed IDs and emits no close toasts.
+if not st.session_state.get("_alert_closed_bootstrapped", False):
+    st.session_state.alert_closed_ids = list(_cur_closed_ids)
+    st.session_state._alert_closed_bootstrapped = True
+    _new_closes = set()
+else:
+    _new_closes = _cur_closed_ids - _known_closed
 
 # Build alert payloads
 _alert_events = []
