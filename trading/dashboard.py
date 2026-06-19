@@ -2214,7 +2214,10 @@ def _safe_rerun():
             return
     except Exception:
         pass
-    _safe_rerun()
+
+    rerun = getattr(st, "rerun", None) or getattr(st, "experimental_rerun", None)
+    if rerun is not None:
+        rerun()
 
 
 # ── Sticky "last action" banner — survives _safe_rerun() so the user always
