@@ -1218,7 +1218,7 @@ if not st.session_state.get("_settings_loaded"):
 
     # ── MARKET-LOW RULE INVARIANTS (final spec) ──────────────────────────────
     # The Scanner Market-Low rule MUST run with the trend filter ON and the
-    # volume filter active (min_volume_multiple ≥ 1.0). A stale/legacy DB row
+    # volume filter active (min_volume_multiple ≥ 0.30). A stale/legacy DB row
     # may carry trend_filter_on=False or min_volume_multiple=0.0 (filters off);
     # force-snap them back to spec on cold start and persist the correction so
     # the droplet self-heals on first boot after deploy. Thresholds
@@ -1229,8 +1229,8 @@ if not st.session_state.get("_settings_loaded"):
         if not bool(getattr(_ls, "trend_filter_on", False)):
             _ls.trend_filter_on = True
             _ls_fixed = True
-        if float(getattr(_ls, "min_volume_multiple", 0.0) or 0.0) < 1.0:
-            _ls.min_volume_multiple = 1.0
+        if float(getattr(_ls, "min_volume_multiple", 0.0) or 0.0) < 0.30:
+            _ls.min_volume_multiple = 0.30
             _ls_fixed = True
         if not bool(getattr(_ls, "volume_filter_on", False)):
             _ls.volume_filter_on = True
@@ -1243,7 +1243,7 @@ if not st.session_state.get("_settings_loaded"):
             except Exception:
                 pass
             print("[LIVE-SETTINGS] force-snapped Market-Low filters: "
-                  "trend_filter_on=True min_volume_multiple>=1.0 "
+                  "trend_filter_on=True min_volume_multiple>=0.30 "
                   "volume_filter_on=True", flush=True)
     except Exception as _e:
         print(f"[LIVE-SETTINGS] filter invariant snap failed: {_e}", flush=True)

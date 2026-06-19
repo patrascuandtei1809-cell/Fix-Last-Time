@@ -63,7 +63,7 @@ class LiveSettings:
 
     # Entry-quality filters (part of the BUY criteria)
     volume_filter_on: bool = True          # require a volume spike to BUY
-    min_volume_multiple: float = 1.0       # last-candle vol ≥ this × avg
+    min_volume_multiple: float = 0.30       # last-candle vol ≥ this × avg
                                            # (≤ 0 disables the volume gate entirely)
     trend_filter_on: bool = True           # require a short-term upturn to BUY
 

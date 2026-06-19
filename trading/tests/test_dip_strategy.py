@@ -334,24 +334,24 @@ def test_dip_mode_does_not_invoke_legacy_worker_tick():
     assert traded is False                          # positive change ⇒ HOLD
 
 
-# ── 9. Safety: 30-minute stop-loss cooldown ──────────────────────────────────
-def test_stop_loss_cooldown_blocks_for_one_minute():
+# ── 9. Safety: 2-minute cooldowns ──────────────────────────────────
+def test_stop_loss_cooldown_blocks_for_two_minutes():
     now = datetime.now(timezone.utc)
     state = {"last_stop_loss_at": now}
     s = _settings()
-    assert s.stop_loss_cooldown_sec == 60        # FINAL RULE: 1 minute
+    assert s.stop_loss_cooldown_sec == 120        # CURRENT LIVE DEFAULT: 2 minutes
     blocked, why = le.cooldown_block(s, state, now=now + timedelta(seconds=30))
     assert blocked and "cooldown" in why.lower()
-    # after 1 minute it clears
+    # after 2 minutes it clears
     ok, _ = le.cooldown_block(s, state, now=now + timedelta(minutes=2))
     assert ok is False
 
 
-def test_reentry_cooldown_blocks_for_one_minute_after_a_sell():
+def test_reentry_cooldown_blocks_for_two_minutes_after_a_sell():
     now = datetime.now(timezone.utc)
     state = {"last_sell_at": now}
     s = _settings()
-    assert s.reentry_cooldown_sec == 60          # FINAL RULE: 1 minute
+    assert s.reentry_cooldown_sec == 120          # CURRENT LIVE DEFAULT: 2 minutes
     blocked, why = le.cooldown_block(s, state, now=now + timedelta(seconds=30))
     assert blocked and "cooldown" in why.lower()
     ok, _ = le.cooldown_block(s, state, now=now + timedelta(minutes=2))
@@ -453,15 +453,15 @@ def test_settings_defaults_and_persistence():
     assert s.aggressive_on is True                  # aggressive default ON
     assert s.size_mode in ls.SIZE_MODES
     assert s.buy_threshold_pct == -0.05
-    assert s.take_profit_pct == 0.60
+    assert s.take_profit_pct == 1.00
     assert s.stop_loss_pct == -0.30
     # FINAL RULE knobs — volume + trend filters ON (Scanner Market-Low spec)
     assert s.volume_filter_on is True
-    assert s.min_volume_multiple == 1.0     # volume gate active (≥ 1× avg)
+    assert s.min_volume_multiple == 0.30     # volume gate active (≥ 0.30× avg)
     assert s.trend_filter_on is True
     assert s.max_position_pct == 50.0
-    assert s.stop_loss_cooldown_sec == 60
-    assert s.reentry_cooldown_sec == 60
+    assert s.stop_loss_cooldown_sec == 120
+    assert s.reentry_cooldown_sec == 120
     # from_dict ignores unknown keys and preserves known ones
     s2 = ls.LiveSettings.from_dict({"size_mode": "FIXED_USDT",
                                     "aggressive_on": False, "bogus": 1})
