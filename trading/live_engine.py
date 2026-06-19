@@ -546,14 +546,22 @@ class DipLiveEngine:
         # multiplier + trend-filter result on every evaluation.
         try:
             vols = dip.volumes_from_klines(df)
+            # REST klines include the currently-forming 1m candle. Comparing
+            # that partial volume with complete prior minutes creates a strong
+            # time-of-minute bias (e.g. 0.08x a few seconds after the minute).
+            # Entry quality must use the latest COMPLETED candle.
+            completed_vols = vols[:-1] if len(vols) >= 2 else vols
             _v_ok, v_ratio = dip.volume_ok(
-                vols, getattr(settings, "min_volume_multiple", 1.5),
+                completed_vols, getattr(settings, "min_volume_multiple", 1.5),
                 thr.lookback_minutes)
             rec.volume_ratio = v_ratio
         except Exception:
             rec.volume_ratio = None
         try:
-            rec.trend_ok = bool(dip.trend_ok(closes, thr.lookback_minutes))
+            completed_closes = closes[:-1] if len(closes) >= 2 else closes
+            rec.trend_ok = bool(
+                dip.trend_ok(completed_closes, thr.lookback_minutes)
+            )
         except Exception:
             rec.trend_ok = None
 
@@ -582,9 +590,21 @@ class DipLiveEngine:
             if blocked:
                 return self._skip(rec, why)
 
-        # 8b. Entry-quality filters (part of the BUY criteria): volume spike +
-        #     short-term trend upturn. These only restrict NEW entries; an open
-        #     position's exit already ran above and is never gated by these.
+        # 10. Decision (entry). Check the dip first so diagnostics report
+        # "threshold_not_met" for symbols that never reached the BUY setup,
+        # instead of blaming a secondary volume/trend quality filter.
+        decision = dip.decide_entry(rec.change_pct, thr)
+        if decision.action != dip.BUY:
+            rec.decision = "HOLD"
+            rec.reason = decision.reason
+            self._state(symbol, signal="HOLD", reason=decision.reason,
+                        block_reason="")
+            self._log("SIGNAL", f"[{symbol}] {decision.reason}")
+            return _publish(rec)
+
+        # 10b. Entry-quality filters (part of the BUY criteria): volume spike +
+        #      short-term trend upturn. These only restrict NEW entries; an open
+        #      position's exit already ran above and is never gated by these.
         _need = float(getattr(settings, "min_volume_multiple", 1.5))
         # A required multiple of ≤ 0 disables the volume gate completely — even
         # when volume_filter_on is True — so a small account can trade on any
@@ -607,16 +627,6 @@ class DipLiveEngine:
                             block_reason="")
                 self._log("SIGNAL", f"[{symbol}] {rec.reason}")
                 return _publish(rec)
-
-        # 10. Decision (entry)
-        decision = dip.decide_entry(rec.change_pct, thr)
-        if decision.action != dip.BUY:
-            rec.decision = "HOLD"
-            rec.reason = decision.reason
-            self._state(symbol, signal="HOLD", reason=decision.reason,
-                        block_reason="")
-            self._log("SIGNAL", f"[{symbol}] {decision.reason}")
-            return _publish(rec)
 
         # 11. Sizing
         amount, ok, why = compute_order_amount(settings, free_usdt, current_exposure)
