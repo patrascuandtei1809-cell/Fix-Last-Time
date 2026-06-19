@@ -100,9 +100,10 @@ def test_global_rules():
     body = resp.json()
     data = body["data"]
     assert data["buy_threshold_pct"] == -0.05
-    assert data["take_profit_pct"] == 1.00
+    assert data["take_profit_pct"] == 0.60
     assert data["stop_loss_pct"] == -0.30
-    assert data["reentry_cooldown_sec"] == 120
+    assert data["stop_loss_cooldown_sec"] == 60
+    assert data["reentry_cooldown_sec"] == 60
 
 
 def test_status_system_connections_bools_only():

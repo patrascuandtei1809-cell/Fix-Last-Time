@@ -144,3 +144,60 @@ def test_per_venue_cap_enforced_independently():
     # … but a Binance entry alongside 15 MEXC trades still passes.
     ok, _ = grm.check_global(mexc_open, 10.0, "BTCUSDT", new_venue="binance")
     assert ok is True
+
+
+def test_dip_engine_mexc_dry_run_passes_connection_gate_without_client(monkeypatch):
+    """MEXC DRY-RUN must reach market-low evaluation without API keys."""
+    import pandas as pd
+    from live_engine import DipLiveEngine
+    from live_settings import LiveSettings
+
+    n = 30
+    price = 1.0
+    df = pd.DataFrame({"close": [price] * n, "volume": [1000.0] * n})
+    monkeypatch.setattr("exchanges.mexc.public_price", lambda s: price)
+    monkeypatch.setattr(
+        "exchanges.mexc.public_klines",
+        lambda s, interval, limit=150: df.head(limit),
+    )
+    monkeypatch.setattr(
+        "exchanges.mexc.public_24h",
+        lambda s: {"high": 1.1, "low": 0.9, "change_pct": 0.0},
+    )
+
+    m = MexcExchange(client=None, live_orders=False)
+    eng = DipLiveEngine(exchange=m, on_log=lambda *_a, **_kw: None)
+    s = LiveSettings()
+    s.safe_mode = False
+
+    rec = eng.evaluate(
+        symbol="WLDUSDT",
+        settings=s,
+        open_trades=[],
+        current_exposure=0.0,
+        global_gate_fn=lambda *_a, **_kw: (True, "ok"),
+    )
+    assert "not connected" not in (rec.reason or "").lower()
+    assert rec.price == price
+    assert rec.change_pct is not None
+
+
+def test_dip_engine_mexc_live_still_blocks_without_client():
+    """LIVE MEXC without credentials must still fail at the connection gate."""
+    from live_engine import DipLiveEngine
+    from live_settings import LiveSettings
+
+    m = MexcExchange(client=None, live_orders=True)
+    eng = DipLiveEngine(exchange=m, on_log=lambda *_a, **_kw: None)
+    s = LiveSettings()
+    s.safe_mode = False
+
+    rec = eng.evaluate(
+        symbol="WLDUSDT",
+        settings=s,
+        open_trades=[],
+        current_exposure=0.0,
+        global_gate_fn=lambda *_a, **_kw: (True, "ok"),
+    )
+    assert rec.decision == "SKIP"
+    assert "not connected" in (rec.reason or "").lower()
