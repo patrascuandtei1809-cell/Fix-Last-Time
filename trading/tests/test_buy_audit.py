@@ -25,6 +25,31 @@ def test_classify_block_reason_engine_error():
     assert ba.classify_block_reason("Dip engine error: boom", "SKIP") == "engine_error"
 
 
+def test_classify_holding_open_position():
+    reason = "Holding — +0.171% (TP +1.00% / SL -0.30%)"
+    assert (
+        ba.classify_block_reason(reason, "HOLD")
+        == "managing_open_position"
+    )
+
+
+def test_open_position_hold_is_visible_but_not_rejected():
+    decision = {
+        "decision": "HOLD",
+        "traded": False,
+        "exact_block_reason": "managing_open_position",
+        "reached_buy_stage": False,
+    }
+
+    summary = ba._summarize([decision])
+
+    assert summary["evaluated"] == 1
+    assert summary["rejected"] == 0
+    assert summary["top_block_reasons"] == [
+        {"reason": "managing_open_position", "count": 1}
+    ]
+
+
 def test_finish_cycle_writes_files(tmp_path, monkeypatch):
     monkeypatch.setattr(ba, "DATA_DIR", tmp_path)
     monkeypatch.setattr(ba, "LIVE_AUDIT_PATH", tmp_path / "live_decision_audit.json")

@@ -66,6 +66,8 @@ def classify_block_reason(reason: str, decision: str = "", traded: bool = False)
         return "venue_rule_block"
     if "dip engine error" in r or d == "SKIP" and "error" in r:
         return "engine_error"
+    if d == "HOLD" and r.startswith("holding") and ("tp " in r or "sl " in r):
+        return "managing_open_position"
     if d == "HOLD" and ("change" in r or "threshold" in r or "waiting" in r):
         return "threshold_not_met"
     if d in ("SELL", "STOP_LOSS", "TAKE_PROFIT"):
@@ -196,7 +198,11 @@ def _summarize(decisions: List[Dict[str, Any]]) -> Dict[str, Any]:
     reached = sum(1 for d in decisions if d.get("reached_buy_stage"))
     rejected = sum(
         1 for d in decisions
-        if not d.get("traded") and d.get("decision") not in ("SELL", "STOP_LOSS")
+        if (
+            not d.get("traded")
+            and d.get("decision") not in ("SELL", "STOP_LOSS")
+            and d.get("exact_block_reason") != "managing_open_position"
+        )
     )
     return {
         "evaluated": evaluated,
