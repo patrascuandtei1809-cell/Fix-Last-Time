@@ -5084,7 +5084,7 @@ def _indicator_snapshot(sym: str, venue: str):
 
 def _render_ai_decisions_narrative(symbols, acts: dict, venue: str = "binance"):
     """Human-readable AI / Market-Low decision blocks."""
-    _sec("🧠 AI Decisions")
+    _sec("🧠 Worker Decisions")
     syms = [s for s in (symbols or []) if s]
     if not syms:
         st.caption("No symbols to show.")
@@ -5094,8 +5094,8 @@ def _render_ai_decisions_narrative(symbols, acts: dict, venue: str = "binance"):
     for sym in syms:
         rec = acts.get(str(sym).upper())
         if rec is None:
-            st.markdown(f"**{sym}** — waiting for engine data")
-            st.caption("Start the bot to populate decisions.")
+            st.markdown(f"**{sym}** — worker monitoring")
+            st.caption("Worker is running — decisions are coming from worker logs, Activity and Buy Audit.")
             continue
         df_ind = _indicator_snapshot(sym, venue)
         macd_l, rsi_l, ai_conf = dsupport.macd_rsi_state(df_ind)
