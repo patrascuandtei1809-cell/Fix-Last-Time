@@ -1452,6 +1452,14 @@ except Exception:
 # 2. Chart data — prefer bot's continuously-updated shared df when bot is running
 bot_inst    = bot_module.get_bot()
 bot_running = bot_inst.is_running() if bot_inst else False
+try:
+    from pathlib import Path as _WorkerPath
+    _worker_hb = heartbeats.read("worker", max_age_sec=120)
+    _worker_lock_ok = _WorkerPath("/run/alphatrade/execution.lock").exists()
+    worker_running = bool(_worker_hb) and bool(_worker_lock_ok)
+except Exception:
+    worker_running = False
+
 if bot_running:
     _ensure_mexc_live_mode()
 
@@ -1750,9 +1758,12 @@ _src_label = {"bot-live": "bot-live", "auth": "auth-live", "public": "public"}.g
 conn_pill = ('<span class="pill p-green"><span class="dot dot-g"></span>CONNECTED</span>'
              if st.session_state.connected
              else '<span class="pill p-gray"><span class="dot dot-x"></span>NO AUTH</span>')
-bot_pill  = ('<span class="pill p-blue"><span class="dot dot-y"></span>BOT ON</span>'
-             if bot_running
-             else '<span class="pill p-gray">BOT OFF</span>')
+if worker_running and not bot_running:
+    bot_pill = '<span class="pill p-blue"><span class="dot dot-y"></span>WORKER RUNNING</span>'
+elif bot_running:
+    bot_pill = '<span class="pill p-blue"><span class="dot dot-y"></span>BOT ON</span>'
+else:
+    bot_pill = '<span class="pill p-gray">BOT OFF</span>'
 mode_pill = '<span class="pill p-red"><span class="dot dot-r"></span>⚡ LIVE</span>'
 net_pill  = '<span class="pill p-red">MAINNET</span>'
 _ref_secs = st.session_state.get("refresh_secs", 3)
@@ -1785,8 +1796,8 @@ try:
     _mob_bal = f"${_cl().get_account_balance('USDT')['total']:,.2f}" if (st.session_state.connected and _cl()) else "—"
 except Exception:
     _mob_bal = "ERR"
-_mob_bot_val = "ON" if bot_running else "OFF"
-_mob_bot_cls = "up" if bot_running else "gray"
+_mob_bot_val = "WORKER" if worker_running and not bot_running else ("ON" if bot_running else "OFF")
+_mob_bot_cls = "up" if (bot_running or worker_running) else "gray"
 _mob_syms = ",".join(s.replace("USDT", "") for s in st.session_state.active_symbols) or "—"
 st.markdown(f"""
 <div class="mob-summary">
@@ -1906,7 +1917,10 @@ else:
 _gate_html = ('<span class="pill p-red"><span class="dot dot-r"></span>'
               '⚡ LIVE MAINNET · every order is real</span>')
 
-if bot_running:
+if worker_running and not bot_running:
+    _bot_dot = '<span class="dot dot-y"></span>'
+    _bot_lbl = '<span style="font-size:11px;font-weight:700;color:#e3b341;">WORKER RUNNING</span>'
+elif bot_running:
     _bot_dot = '<span class="dot dot-y"></span>'
     _bot_lbl = '<span style="font-size:11px;font-weight:700;color:#e3b341;">BOT ON</span>'
 else:
@@ -5570,9 +5584,7 @@ with st.container():
                 else:
                     _sig_badge = ""
                 _bot_run_badge = (
-                    '<span class="cbadge" style="color:#e3b341;background:#1e1a0a;">⚡ BOT ON</span>'
-                    if bot_running else
-                    '<span class="cbadge" style="color:#484f58;">BOT OFF</span>'
+                    '<span class="cbadge" style="color:#e3b341;background:#1e1a0a;">⚡ WORKER RUNNING</span>' if worker_running and not bot_running else '<span class="cbadge" style="color:#e3b341;background:#1e1a0a;">⚡ BOT ON</span>' if bot_running else '<span class="cbadge" style="color:#484f58;">BOT OFF</span>'
                 )
                 st.markdown(f"""
     <div class="chart-bar">
