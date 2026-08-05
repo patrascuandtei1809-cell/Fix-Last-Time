@@ -1812,9 +1812,7 @@ _src_label = {"bot-live": "bot-live", "auth": "auth-live", "public": "public"}.g
 conn_pill = ('<span class="pill p-green"><span class="dot dot-g"></span>CONNECTED</span>'
              if st.session_state.connected
              else '<span class="pill p-gray"><span class="dot dot-x"></span>NO AUTH</span>')
-if worker_running and not bot_running:
-    bot_pill = '<span class="pill p-blue"><span class="dot dot-y"></span>WORKER RUNNING</span>'
-elif bot_running:
+if bot_running or worker_running:
     bot_pill = '<span class="pill p-blue"><span class="dot dot-y"></span>BOT ON</span>'
 else:
     bot_pill = '<span class="pill p-gray">BOT OFF</span>'
@@ -1850,7 +1848,7 @@ try:
     _mob_bal = f"${_cl().get_account_balance('USDT')['total']:,.2f}" if (st.session_state.connected and _cl()) else "—"
 except Exception:
     _mob_bal = "ERR"
-_mob_bot_val = "WORKER" if worker_running and not bot_running else ("ON" if bot_running else "OFF")
+_mob_bot_val = "ON" if (bot_running or worker_running) else "OFF"
 _mob_bot_cls = "up" if (bot_running or worker_running) else "gray"
 _mob_syms = ",".join(s.replace("USDT", "") for s in st.session_state.active_symbols) or "—"
 st.markdown(f"""
@@ -1971,10 +1969,7 @@ else:
 _gate_html = ('<span class="pill p-red"><span class="dot dot-r"></span>'
               '⚡ LIVE MAINNET · every order is real</span>')
 
-if worker_running and not bot_running:
-    _bot_dot = '<span class="dot dot-y"></span>'
-    _bot_lbl = '<span style="font-size:11px;font-weight:700;color:#e3b341;">WORKER RUNNING</span>'
-elif bot_running:
+if bot_running or worker_running:
     _bot_dot = '<span class="dot dot-y"></span>'
     _bot_lbl = '<span style="font-size:11px;font-weight:700;color:#e3b341;">BOT ON</span>'
 else:
@@ -5080,7 +5075,7 @@ def _render_mexc_operator_panel(acts: dict, mexc_syms):
     if _decision_rows:
         st.dataframe(pd.DataFrame(_decision_rows), width="stretch", hide_index=True)
     else:
-        st.caption("No active MEXC worker decisions yet.")
+        st.caption("No active MEXC bot decisions yet.")
 
     _render_venue_closed_trades("mexc", _fmt_pnl, _fmt_pct)
 
@@ -5314,7 +5309,7 @@ def _indicator_snapshot(sym: str, venue: str):
 
 def _render_ai_decisions_narrative(symbols, acts: dict, venue: str = "binance"):
     """Human-readable AI / Market-Low decision blocks."""
-    _sec("🧠 Worker Decisions")
+    _sec("🧠 Bot Decisions")
     syms = [s for s in (symbols or []) if s]
     if not syms:
         st.caption("No symbols to show.")
@@ -5324,8 +5319,8 @@ def _render_ai_decisions_narrative(symbols, acts: dict, venue: str = "binance"):
     for sym in syms:
         rec = acts.get(str(sym).upper())
         if rec is None:
-            st.markdown(f"**{sym}** — worker monitoring")
-            st.caption("Worker is running — decisions are coming from worker logs, Activity and Buy Audit.")
+            st.markdown(f"**{sym}** — bot monitoring")
+            st.caption("Bot is running — decisions are coming from live bot logs, Activity and Buy Audit.")
             continue
         df_ind = _indicator_snapshot(sym, venue)
         macd_l, rsi_l, ai_conf = dsupport.macd_rsi_state(df_ind)
@@ -5814,7 +5809,7 @@ with st.container():
                 else:
                     _sig_badge = ""
                 _bot_run_badge = (
-                    '<span class="cbadge" style="color:#e3b341;background:#1e1a0a;">⚡ WORKER RUNNING</span>' if worker_running and not bot_running else '<span class="cbadge" style="color:#e3b341;background:#1e1a0a;">⚡ BOT ON</span>' if bot_running else '<span class="cbadge" style="color:#484f58;">BOT OFF</span>'
+                    '<span class="cbadge" style="color:#e3b341;background:#1e1a0a;">⚡ BOT ON</span>' if (bot_running or worker_running) else '<span class="cbadge" style="color:#484f58;">BOT OFF</span>'
                 )
                 st.markdown(f"""
     <div class="chart-bar">
