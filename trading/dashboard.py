@@ -5004,6 +5004,51 @@ def _render_mexc_operator_panel(acts: dict, mexc_syms):
             return "—"
         return f"{ev.get('time') or '—'} — {ev.get('message') or '—'}"
 
+    def _mexc_trade_event_from_trades():
+        """Display-only fallback for the latest real MEXC bot trade.
+
+        Activity logs are rolling and can miss older BUY/SELL lines. The trade
+        files are the local source of truth for open/closed bot positions, so
+        the operator panel should not show "—" when a live MEXC position exists.
+        """
+        try:
+            candidates = []
+            for trade in all_trades:
+                if str(trade.get("exchange") or "").lower() != "mexc":
+                    continue
+                coin = str(trade.get("coin") or trade.get("symbol") or "MEXC")
+                status = str(trade.get("status") or "").lower()
+                opened = trade.get("open_time") or ""
+                closed = trade.get("close_time") or ""
+                if status == "open":
+                    msg = (
+                        f"LIVE BUY recorded — {coin} "
+                        f"${float(trade.get('invested') or 0):,.2f} "
+                        f"@ ${float(trade.get('entry_price') or 0):,.6f}"
+                    )
+                    candidates.append({
+                        "time": opened[:19].replace("T", " "),
+                        "message": msg,
+                        "_sort": opened,
+                    })
+                elif status == "closed":
+                    msg = (
+                        f"LIVE SELL recorded — {coin} "
+                        f"net PnL ${float(trade.get('profit_loss') or 0):+,.4f}"
+                    )
+                    candidates.append({
+                        "time": closed[:19].replace("T", " "),
+                        "message": msg,
+                        "_sort": closed,
+                    })
+            if not candidates:
+                return None
+            best = max(candidates, key=lambda x: str(x.get("_sort") or ""))
+            best.pop("_sort", None)
+            return best
+        except Exception:
+            return None
+
     _latest_engine_evt = dsupport.latest_activity_by_pattern(
         _activities,
         ["MEXC", "BUY", "SELL", "STOP", "HOLD", "SIGNAL", "ORDER"],
@@ -5015,23 +5060,23 @@ def _render_mexc_operator_panel(acts: dict, mexc_syms):
     _latest_live_evt = dsupport.latest_activity_by_pattern(
         _activities,
         ["LIVE MEXC"],
-    )
+    ) or _mexc_trade_event_from_trades()
 
     t1, t2, t3, t4 = st.columns(4)
-    t1.metric("Workers active", len(_worker_syms))
+    t1.metric("Bot symbols active", len(_worker_syms))
     t2.metric("Scanner selected", len(_scan_mexc))
     t3.metric("MEXC open trades", len(_mexc_open))
     t4.metric("Mode", "LIVE" if _mexc_live else "DRY-RUN")
 
     st.markdown(
         f"- **Scanner opportunity (selection pool):** {len(_scan_mexc)} MEXC symbols in scanner payload  \n"
-        f"- **Current worker symbols (engine workers):** {', '.join(s.replace('USDT', '') for s in _worker_syms) or '—'}  \n"
+        f"- **Current bot symbols (engine symbols):** {', '.join(s.replace('USDT', '') for s in _worker_syms) or '—'}  \n"
         f"- **Latest MEXC BUY/SELL/STOP/HOLD event:** {_ev_text(_latest_engine_evt)}  \n"
         f"- **Latest MEXC dry-run trade (simulated):** {_ev_text(_latest_dry_evt)}  \n"
         f"- **Latest MEXC live order event:** {_ev_text(_latest_live_evt)}"
     )
 
-    st.markdown("**Engine decision (per active MEXC worker symbol)**")
+    st.markdown("**Engine decision (per active MEXC bot symbol)**")
     if _decision_rows:
         st.dataframe(pd.DataFrame(_decision_rows), width="stretch", hide_index=True)
     else:
