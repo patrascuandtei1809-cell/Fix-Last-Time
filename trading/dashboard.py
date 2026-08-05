@@ -683,7 +683,7 @@ def _init():
         "ai_assist":        True,                # AI always on (advisory, never blocks)
         "ai_aggressiveness": "Active Scalper",   # ignored — single mode
         "aggressive_mode":  am.DEFAULT_MODE,     # Conservative/Balanced/Aggressive/Very Aggressive (PG-persisted)
-        "refresh_secs":     3,
+        "refresh_secs":     30,
         "alert_open_ids":      [],
         "alert_closed_ids":    [],
         "pending_live_trade":  None,   # dict stored between reruns for live confirmation
@@ -3208,8 +3208,8 @@ with st.sidebar:
 
     # Data & Live Refresh
     st.markdown('<div class="sec-lbl">Data & Refresh</div>', unsafe_allow_html=True)
-    _ref_opts = [3, 5, 10, 30, 60]   # default 3s live refresh
-    _cur_ref  = max(3, int(st.session_state.refresh_secs))
+    _ref_opts = [30, 60, 120, 300]   # full-page refresh; keep gentle
+    _cur_ref  = max(30, int(st.session_state.refresh_secs))
     _ref_idx  = _ref_opts.index(_cur_ref) if _cur_ref in _ref_opts else 0
     _ref_choice = st.selectbox(
         "Live refresh interval",
@@ -5660,7 +5660,10 @@ def _render_live_auto_refresh(active_tab: str) -> None:
     try:
         if active_tab in _AUTO_REFRESH_DISABLED_TABS:
             return
-        secs = max(3, int(st.session_state.get("refresh_secs", 3) or 3))
+        # This is a browser reload, not a tiny data poll, so never do it every
+        # 3–10s on the full Streamlit app. A short interval makes the page blank
+        # repeatedly while all wallet/chart/table calls rebuild.
+        secs = max(30, int(st.session_state.get("refresh_secs", 30) or 30))
         components.html(
             f"""
             <script>
