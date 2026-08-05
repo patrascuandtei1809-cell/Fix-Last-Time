@@ -1376,12 +1376,14 @@ def _fastapi_health():
     return False, "OFF"
 
 
-@st.cache_data(ttl=3, show_spinner=False)
+@st.cache_data(ttl=15, show_spinner=False)
 def _cached_mexc_wallet(_live: bool, _creds_fp: str):
-    """MEXC balances — avoids rebuilding client on every panel/rerun."""
+    """Read-only MEXC balances plus best-effort USDT valuation."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     from exchanges.mexc import (
         MexcExchange as _MX, MexcClient as _MXC,
         load_mexc_credentials as _load_mx_creds,
+        public_price as _mexc_public_price,
     )
     _creds = _load_mx_creds()
     if not _creds:
@@ -1389,11 +1391,63 @@ def _cached_mexc_wallet(_live: bool, _creds_fp: str):
     _mx = _MX(client=_MXC(*_creds), live_orders=_live)
     _all = _mx.client.get_all_balances()
     _mxb = _all.get("USDT", {"free": 0, "locked": 0, "total": 0})
+
+    _valuations = {}
+    _price_assets = [
+        str(_asset).upper()
+        for _asset, _bal in _all.items()
+        if str(_asset).upper() != "USDT"
+        and float((_bal or {}).get("total") or 0) > 0
+    ]
+
+    def _value_asset(_asset):
+        _qty = float((_all.get(_asset) or {}).get("total") or 0)
+        try:
+            return _asset, _qty * float(_mexc_public_price(f"{_asset}USDT"))
+        except Exception:
+            return _asset, None
+
+    if _price_assets:
+        try:
+            with ThreadPoolExecutor(max_workers=min(8, len(_price_assets))) as _pool:
+                _futures = [_pool.submit(_value_asset, _asset)
+                            for _asset in _price_assets]
+                for _future in as_completed(_futures):
+                    _asset, _value = _future.result()
+                    _valuations[_asset] = _value
+        except Exception:
+            # Individual assets remain UNKNOWN; the dashboard must never crash.
+            pass
+
+    _assets = []
+    _estimated_total = 0.0
+    for _asset, _bal in sorted(_all.items()):
+        _asset = str(_asset).upper()
+        _free = float((_bal or {}).get("free") or 0)
+        _locked = float((_bal or {}).get("locked") or 0)
+        _qty = float((_bal or {}).get("total") or (_free + _locked))
+        if _qty <= 0:
+            continue
+        _value = _qty if _asset == "USDT" else _valuations.get(_asset)
+        if _value is not None:
+            _estimated_total += float(_value)
+        _assets.append({
+            "asset": _asset,
+            "quantity": _qty,
+            "free": _free,
+            "locked": _locked,
+            "estimated_usdt": _value,
+        })
+
     return {
         "all": _all,
-        "total": float(_mxb.get("total", 0.0)),
+        "assets": _assets,
+        "estimated_total": _estimated_total,
+        # Compatibility: callers that used total now receive true wallet value.
+        "total": _estimated_total,
         "free": float(_mxb.get("free", 0.0)),
         "locked": float(_mxb.get("locked", 0.0)),
+        "usdt_total": float(_mxb.get("total", 0.0)),
     }
 
 
@@ -4714,11 +4768,109 @@ def _render_binance_legacy():
                             _safe_rerun()
 
 
+# Mirrors the MEXC adapter's conservative default minimum notional. Display only.
+_MEXC_DUST_FLOOR_USDT = 1.0
+
+
+def _mexc_wallet_accounting(wallet: dict) -> dict:
+    """Classify wallet assets for display only; never mutates trades or balances."""
+    _managed_symbols = {}
+    for _trade in _mexc_open:
+        _symbol = str(
+            _trade.get("coin") or _trade.get("symbol") or ""
+        ).upper()
+        if not _symbol:
+            continue
+        _base = _symbol
+        for _quote in ("USDT", "USDC"):
+            if _symbol.endswith(_quote):
+                _base = _symbol[:-len(_quote)]
+                break
+        if _base:
+            _managed_symbols.setdefault(_base, []).append(_symbol)
+
+    _rows = []
+    _managed_value = 0.0
+    _unmanaged_value = 0.0
+    _dust_value = 0.0
+    _unknown_count = 0
+
+    for _item in (wallet or {}).get("assets", []):
+        if not isinstance(_item, dict):
+            continue
+        _asset = str(_item.get("asset") or "").upper()
+        _qty = float(_item.get("quantity") or 0)
+        _free = float(_item.get("free") or 0)
+        _locked = float(_item.get("locked") or 0)
+        _value = _item.get("estimated_usdt")
+        _local_symbols = _managed_symbols.get(_asset, [])
+
+        if _asset == "USDT":
+            _status = "USDT"
+            _notes = (
+                f"Free quote balance ${_free:,.2f}"
+                + (f" · locked ${_locked:,.2f}" if _locked > 0 else "")
+            )
+        elif _value is None:
+            _status = "UNKNOWN"
+            _unknown_count += 1
+            _notes = "No MEXC USDT price available; excluded from estimated total"
+            if _local_symbols:
+                _notes += f" · local trade: {', '.join(_local_symbols)}"
+        elif float(_value) < _MEXC_DUST_FLOOR_USDT:
+            _status = "DUST"
+            _dust_value += float(_value)
+            _notes = (
+                f"Below ~${_MEXC_DUST_FLOOR_USDT:.2f} tradable-value floor; "
+                "left untouched"
+            )
+            if _local_symbols:
+                _notes += f" · local trade: {', '.join(_local_symbols)}"
+        elif _local_symbols:
+            _status = "MANAGED"
+            _managed_value += float(_value)
+            _notes = f"Matched local open MEXC trade: {', '.join(_local_symbols)}"
+        else:
+            _status = "UNMANAGED"
+            _unmanaged_value += float(_value)
+            _notes = "Wallet holding only; no local open trade; left untouched"
+
+        _rows.append({
+            "Asset": _asset,
+            "Quantity": f"{_qty:,.8g}",
+            "Estimated USDT Value": (
+                f"${float(_value):,.4f}" if _value is not None else "—"
+            ),
+            "Status": _status,
+            "Notes": _notes,
+            "_value": float(_value) if _value is not None else None,
+        })
+
+    _status_order = {
+        "USDT": 0, "MANAGED": 1, "UNMANAGED": 2, "DUST": 3, "UNKNOWN": 4,
+    }
+    _rows.sort(key=lambda _row: (
+        _status_order.get(_row["Status"], 9),
+        -(_row["_value"] or 0.0),
+        _row["Asset"],
+    ))
+    for _row in _rows:
+        _row.pop("_value", None)
+
+    return {
+        "rows": _rows,
+        "managed_value": _managed_value,
+        "unmanaged_value": _unmanaged_value,
+        "dust_value": _dust_value,
+        "unknown_count": _unknown_count,
+    }
+
+
 def _render_mexc_wallet():
     """MEXC wallet overview — balance, PnL, active trades, slots (display-only)."""
     _mexc_live = bool(st.session_state.get("mexc_live_orders", False))
-    _mexc_tag = "LIVE" if _mexc_live else "DRY-RUN"
     _sec("💰 Wallet Overview")
+    _wallet = None
     _mx_total = _mx_free = _mx_lock = None
     _mx_connected = False
     try:
@@ -4726,60 +4878,93 @@ def _render_mexc_wallet():
         _mx_creds = _load_mx_creds()
         if _mx_creds:
             _fp = (_mx_creds[0] or "")[:8]
-            _wb = _cached_mexc_wallet(_mexc_live, _fp)
-            if _wb is not None:
-                _mx_total = _wb["total"]
-                _mx_free = _wb["free"]
-                _mx_lock = _wb["locked"]
+            _wallet = _cached_mexc_wallet(_mexc_live, _fp)
+            if _wallet is not None:
+                _mx_total = _wallet.get("estimated_total")
+                _mx_free = _wallet.get("free")
+                _mx_lock = _wallet.get("locked")
                 _mx_connected = True
     except Exception as _mxe:  # noqa: BLE001
         st.caption(f"MEXC balance unavailable: {_mxe}")
 
+    _accounting = _mexc_wallet_accounting(_wallet or {})
+    _managed_value = float(_accounting.get("managed_value") or 0)
+    _unmanaged_value = float(_accounting.get("unmanaged_value") or 0)
+    _dust_value = float(_accounting.get("dust_value") or 0)
+    _unknown_count = int(_accounting.get("unknown_count") or 0)
+
     _slots = len(_mexc_open)
     _cap = _mexc_cap()
-    _u_cls = "up" if _mexc_unrealized >= 0 else "dn"
-    _r_cls = "up" if _mexc_realized >= 0 else "dn"
-    _dpnl_cls = "up" if _mexc_daily_pnl >= 0 else "dn"
-    _tot_cls = "up" if _mexc_total_pnl >= 0 else "dn"
     _mx_card_style = 'border-color:#3b82f655;' if _mx_connected else 'opacity:.55;'
     _acct_disp = f"${_mx_total:,.2f}" if _mx_total is not None else "—"
     _free_disp = f"${_mx_free:,.2f}" if _mx_free is not None else "—"
     _lock_disp = f"${_mx_lock:,.2f}" if _mx_lock is not None else "—"
+    _managed_disp = f"${_managed_value:,.2f}" if _mx_connected else "—"
+    _unmanaged_disp = f"${_unmanaged_value:,.2f}" if _mx_connected else "—"
+    _dust_disp = f"${_dust_value:,.4f}" if _mx_connected else "—"
+    _total_note = "USDT + priced wallet assets"
+    if _unknown_count:
+        _total_note += f" · {_unknown_count} unpriced excluded"
 
     st.markdown(f"""
 <div class="cards cards-mexc">
   <div class="card" style="{_mx_card_style}">
-    <div class="c-lbl">Account Value</div>
+    <div class="c-lbl">Total Estimated Value</div>
     <div class="c-val">{_acct_disp}</div>
-    <div class="c-sub">{'🟢 MEXC · ' + _mexc_tag if _mx_connected else 'Not connected'}</div>
+    <div class="c-sub">{_total_note if _mx_connected else 'Not connected'}</div>
   </div>
   <div class="card" style="{_mx_card_style}">
-    <div class="c-lbl">Available (USDT)</div>
+    <div class="c-lbl">Free USDT</div>
     <div class="c-val">{_free_disp}</div>
-    <div class="c-sub">{'Free for new orders' if _mx_connected else 'Save MEXC API keys'}</div>
+    <div class="c-sub">{'Available quote balance' if _mx_connected else 'Save MEXC API keys'}</div>
   </div>
   <div class="card">
-    <div class="c-lbl">Total PnL</div>
-    <div class="c-val {_tot_cls}">{_fmt_pnl(_mexc_total_pnl)}</div>
-    <div class="c-sub">R {_fmt_pnl(_mexc_realized)} · U {_fmt_pnl(_mexc_unrealized)}</div>
+    <div class="c-lbl">Managed Value</div>
+    <div class="c-val">{_managed_disp}</div>
+    <div class="c-sub">Assets matched to local open MEXC trades</div>
   </div>
   <div class="card">
-    <div class="c-lbl">Realized PnL</div>
-    <div class="c-val {_r_cls}">{_fmt_pnl(_mexc_realized)}</div>
-    <div class="c-sub">{len(_mexc_closed)} closed · Win {_mexc_win_rate:.1f}%</div>
+    <div class="c-lbl">Unmanaged Value</div>
+    <div class="c-val">{_unmanaged_disp}</div>
+    <div class="c-sub">Wallet assets without a local open trade</div>
   </div>
   <div class="card">
-    <div class="c-lbl">Daily P&L</div>
-    <div class="c-val {_dpnl_cls}">{_fmt_pnl(_mexc_daily_pnl)}</div>
-    <div class="c-sub">R {_fmt_pnl(_mexc_daily_realized)} · exposure ${_mexc_exposure:,.2f}</div>
+    <div class="c-lbl">Dust Value</div>
+    <div class="c-val">{_dust_disp}</div>
+    <div class="c-sub">Below ~${_MEXC_DUST_FLOOR_USDT:.2f} · untouched</div>
   </div>
   <div class="card">
     <div class="c-lbl">Active Trades</div>
     <div class="c-val">{_slots}/{_cap}</div>
-    <div class="c-sub">Slots used · locked {_lock_disp}</div>
+    <div class="c-sub">Local MEXC trades · locked USDT {_lock_disp}</div>
   </div>
 </div>
 """, unsafe_allow_html=True)
+
+    _p1, _p2, _p3 = st.columns(3)
+    _p1.metric("MEXC Total PnL", _fmt_pnl(_mexc_total_pnl))
+    _p2.metric("MEXC Realized PnL", _fmt_pnl(_mexc_realized))
+    _p3.metric("MEXC Daily P&L", _fmt_pnl(_mexc_daily_pnl))
+
+    _sec("🪙 MEXC Asset Breakdown")
+    _asset_rows = _accounting.get("rows") or []
+    if _asset_rows:
+        st.dataframe(
+            pd.DataFrame(_asset_rows),
+            width="stretch",
+            hide_index=True,
+            height=min(40 + 36 * len(_asset_rows), 460),
+        )
+        st.caption(
+            "Display-only accounting. UNMANAGED and DUST assets are not added "
+            "to the trading engine, converted, transferred, sold, or otherwise "
+            "changed by this dashboard."
+        )
+    elif _mx_connected:
+        st.caption("MEXC returned no non-zero wallet balances.")
+    else:
+        st.caption("Connect MEXC credentials to display wallet assets.")
+
     if _mx_connected and _mx_free is not None:
         _mexc_lim = float(getattr(st.session_state.global_risk,
                                   "max_total_exposure_usdt", 0) or 0)
