@@ -1237,7 +1237,7 @@ if not st.session_state.get("_settings_loaded"):
     # may carry trend_filter_on=False or min_volume_multiple=0.0 (filters off);
     # force-snap them back to spec on cold start and persist the correction so
     # the droplet self-heals on first boot after deploy. Thresholds
-    # (buy −0.05 / TP +1.00 / SL −0.30) and cooldowns stay operator-loaded.
+    # (buy +0.10 / TP +1.00 / SL −0.30) and cooldowns stay operator-loaded.
     try:
         _ls = st.session_state.live_settings
         _ls_fixed = False

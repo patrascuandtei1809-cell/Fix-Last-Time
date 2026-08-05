@@ -452,14 +452,14 @@ def test_settings_defaults_and_persistence():
     s = ls.LiveSettings()
     assert s.aggressive_on is True                  # aggressive default ON
     assert s.size_mode in ls.SIZE_MODES
-    assert s.buy_threshold_pct == -0.05
+    assert s.buy_threshold_pct == 0.10
     assert s.take_profit_pct == 1.00
     assert s.stop_loss_pct == -0.30
     # FINAL RULE knobs — volume + trend filters ON (Scanner Market-Low spec)
     assert s.volume_filter_on is True
     assert s.min_volume_multiple == 0.30     # volume gate active (≥ 0.30× avg)
     assert s.trend_filter_on is True
-    assert s.max_position_pct == 50.0
+    assert s.max_position_pct == 60.0
     assert s.stop_loss_cooldown_sec == 120
     assert s.reentry_cooldown_sec == 120
     # from_dict ignores unknown keys and preserves known ones

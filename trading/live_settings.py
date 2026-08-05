@@ -56,7 +56,7 @@ def normalize_size_mode(mode: Optional[str]) -> str:
 class LiveSettings:
     """Every operator-tunable LIVE trading setting. Defaults match the spec."""
     # Strategy thresholds (defaults = the FINAL TRADING RULE)
-    buy_threshold_pct: float = -0.05     # BUY when 20m change ≤ this
+    buy_threshold_pct: float = 0.10      # BUY when 20m change ≤ this
     take_profit_pct: float = 1.00        # SELL when profit ≥ this
     stop_loss_pct: float = -0.30         # STOP-LOSS when loss ≤ this
     lookback_minutes: int = 20
@@ -76,7 +76,7 @@ class LiveSettings:
     # Spending / size limits (0 = disabled / unlimited)
     bot_spending_limit_usdt: float = 0.0   # max total USDT the bot may deploy
     max_position_size_usdt: float = 0.0    # hard $ cap on a single trade
-    max_position_pct: float = 50.0         # cap a single trade at this % of free USDT
+    max_position_pct: float = 60.0         # cap a single trade at this % of free USDT
     min_trade_size_usdt: float = 10.0      # floor (Binance min-notional ~ $10)
 
     # Behavior toggles
