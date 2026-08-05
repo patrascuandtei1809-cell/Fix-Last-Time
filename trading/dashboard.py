@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -9,6 +8,7 @@ from zoneinfo import ZoneInfo
 import time
 import os
 import sys
+import json
 
 _TZ = ZoneInfo("Europe/London")
 
@@ -683,7 +683,7 @@ def _init():
         "ai_assist":        True,                # AI always on (advisory, never blocks)
         "ai_aggressiveness": "Active Scalper",   # ignored — single mode
         "aggressive_mode":  am.DEFAULT_MODE,     # Conservative/Balanced/Aggressive/Very Aggressive (PG-persisted)
-        "refresh_secs":     30,
+        "refresh_secs":     10,
         "alert_open_ids":      [],
         "alert_closed_ids":    [],
         "pending_live_trade":  None,   # dict stored between reruns for live confirmation
@@ -3208,20 +3208,20 @@ with st.sidebar:
 
     # Data & Live Refresh
     st.markdown('<div class="sec-lbl">Data & Refresh</div>', unsafe_allow_html=True)
-    _ref_opts = [30, 60, 120, 300]   # full-page refresh; keep gentle
-    _cur_ref  = max(30, int(st.session_state.refresh_secs))
+    _ref_opts = [10, 30, 60, 120]
+    _cur_ref  = max(10, int(st.session_state.refresh_secs))
     _ref_idx  = _ref_opts.index(_cur_ref) if _cur_ref in _ref_opts else 0
     _ref_choice = st.selectbox(
         "Live refresh interval",
         options=_ref_opts,
         index=_ref_idx,
         format_func=lambda x: f"{x}s",
-        help="Chart and data refresh automatically at this interval",
+        help="Small live status panel refresh interval. The whole page stays mounted.",
     )
     st.session_state.refresh_secs = _ref_choice
     st.caption(
-        f"Live monitoring tabs auto-refresh every {_ref_choice}s. "
-        "History and Performance stay manual to prevent table shake."
+        f"Live status panel auto-updates every {_ref_choice}s without full-page reload. "
+        "Use ↺ Refresh Now when you want to reload the whole dashboard."
     )
     if st.button("↺ Refresh Now", width="stretch"):
         _safe_rerun()
@@ -5656,34 +5656,92 @@ def _set_query_param_value(name: str, value: str) -> None:
 
 
 def _render_live_auto_refresh(active_tab: str) -> None:
-    """Browser-side dashboard repaint timer. UI-only; does not start/stop bot."""
+    """Small live status fragment. UI-only; does not start/stop the bot.
+
+    The old implementation used browser reloads, which blanked the whole
+    Streamlit page and forced all wallet/chart/table API calls to rebuild.
+    A fragment reruns only this tiny status strip, so the page stays mounted.
+    """
     try:
         if active_tab in _AUTO_REFRESH_DISABLED_TABS:
             return
-        # This is a browser reload, not a tiny data poll, so never do it every
-        # 3–10s on the full Streamlit app. A short interval makes the page blank
-        # repeatedly while all wallet/chart/table calls rebuild.
-        secs = max(30, int(st.session_state.get("refresh_secs", 30) or 30))
-        components.html(
-            f"""
-            <script>
-            (function() {{
-              const delayMs = {secs * 1000};
-              window.setTimeout(function() {{
-                try {{
-                  window.parent.location.reload();
-                }} catch (err) {{
-                  window.location.reload();
-                }}
-              }}, delayMs);
-            }})();
-            </script>
-            """,
-            height=0,
-            width=0,
-        )
     except Exception:
-        pass
+        return
+
+    try:
+        secs = max(10, int(st.session_state.get("refresh_secs", 10) or 10))
+    except Exception:
+        secs = 10
+
+    def _live_status_body():
+        try:
+            now_txt = datetime.now(_TZ).strftime("%H:%M:%S")
+
+            fresh_trades = load_trades()
+            mexc_open = [
+                t for t in fresh_trades
+                if str(t.get("exchange") or "").lower() == "mexc"
+                and t.get("status") == "open"
+            ]
+            open_txt = ", ".join(
+                str(t.get("coin") or t.get("symbol") or "UNKNOWN")
+                for t in mexc_open
+            ) or "none"
+
+            latest_msg = "—"
+            try:
+                for entry in reversed(load_activity()[-120:]):
+                    msg = str((entry or {}).get("message") or "")
+                    if "api_key" in msg.lower():
+                        continue
+                    up = msg.upper()
+                    if any(k in up for k in ("ACTIVE SCAN", "EXIT-MANAGER", "LIVE BUY", "LIVE SELL", "HOLD", "SKIP")):
+                        latest_msg = dsupport.sanitize_log_message(msg, 180)
+                        break
+            except Exception:
+                pass
+
+            audit_txt = "—"
+            try:
+                ap = os.path.join(_DIR, "data", "live_decision_audit.json")
+                if os.path.exists(ap):
+                    with open(ap, "r", encoding="utf-8") as fh:
+                        audit = json.load(fh)
+                    audit_txt = str(audit.get("updated_at") or "—")[:19].replace("T", " ")
+            except Exception:
+                pass
+
+            st.markdown(
+                "<div style='margin:8px 0 10px 0;padding:8px 12px;"
+                "border:1px solid #1f6feb55;border-radius:10px;"
+                "background:#07111f;color:#9fb7d7;font-family:\"JetBrains Mono\",monospace;"
+                "font-size:11px;line-height:1.55;'>"
+                f"🔄 Live panel auto-updates every {secs}s · page does not fully reload · "
+                f"now {now_txt} LON<br>"
+                f"🤖 Bot: {'ON' if (bot_running or worker_running) else 'OFF'} · "
+                f"MEXC open: {len(mexc_open)} · {open_txt}<br>"
+                f"🧾 audit: {audit_txt} · latest: {latest_msg}"
+                "</div>",
+                unsafe_allow_html=True,
+            )
+        except Exception as exc:
+            st.caption(f"Live status unavailable: {exc}")
+
+    frag = getattr(st, "fragment", None)
+    if callable(frag):
+        try:
+            frag(run_every=f"{secs}s")(_live_status_body)()
+            return
+        except TypeError:
+            try:
+                frag(run_every=secs)(_live_status_body)()
+                return
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    _live_status_body()
 
 
 def _pick_main_tab(labels=_MAIN_TAB_LABELS):
