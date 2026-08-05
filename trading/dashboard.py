@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -3219,8 +3220,8 @@ with st.sidebar:
     )
     st.session_state.refresh_secs = _ref_choice
     st.caption(
-        f"Use ↺ Refresh Now to update charts (auto-refresh disabled — "
-        f"prevents iframe load errors with {_ref_choice}s polling)."
+        f"Live monitoring tabs auto-refresh every {_ref_choice}s. "
+        "History and Performance stay manual to prevent table shake."
     )
     if st.button("↺ Refresh Now", width="stretch"):
         _safe_rerun()
@@ -5607,10 +5608,86 @@ _MAIN_TAB_LABELS = (
 )
 
 
+_MAIN_TAB_QUERY_KEYS = {
+    _MAIN_TAB_LABELS[0]: "overview",
+    _MAIN_TAB_LABELS[1]: "binance",
+    _MAIN_TAB_LABELS[2]: "mexc",
+    _MAIN_TAB_LABELS[3]: "scanner",
+    _MAIN_TAB_LABELS[4]: "history",
+    _MAIN_TAB_LABELS[5]: "performance",
+    _MAIN_TAB_LABELS[6]: "buy-audit",
+    _MAIN_TAB_LABELS[7]: "diagnostics",
+}
+_MAIN_TAB_BY_QUERY_KEY = {v: k for k, v in _MAIN_TAB_QUERY_KEYS.items()}
+_AUTO_REFRESH_DISABLED_TABS = {
+    _MAIN_TAB_LABELS[4],  # History tables: keep still while reading
+    _MAIN_TAB_LABELS[5],  # Performance tables/charts: manual refresh is calmer
+}
+
+
+def _query_param_value(name: str):
+    """Read one query param defensively across Streamlit versions."""
+    try:
+        qp = getattr(st, "query_params", None)
+        if qp is not None:
+            val = qp.get(name)
+            if isinstance(val, list):
+                return val[0] if val else None
+            return val
+    except Exception:
+        pass
+    try:
+        vals = st.experimental_get_query_params().get(name)
+        return vals[0] if vals else None
+    except Exception:
+        return None
+
+
+def _set_query_param_value(name: str, value: str) -> None:
+    """Persist UI tab in the URL without touching trading/runtime state."""
+    try:
+        qp = getattr(st, "query_params", None)
+        if qp is not None:
+            if qp.get(name) != value:
+                qp[name] = value
+            return
+    except Exception:
+        pass
+
+
+def _render_live_auto_refresh(active_tab: str) -> None:
+    """Browser-side dashboard repaint timer. UI-only; does not start/stop bot."""
+    try:
+        if active_tab in _AUTO_REFRESH_DISABLED_TABS:
+            return
+        secs = max(3, int(st.session_state.get("refresh_secs", 3) or 3))
+        components.html(
+            f"""
+            <script>
+            (function() {{
+              const delayMs = {secs * 1000};
+              window.setTimeout(function() {{
+                try {{
+                  window.parent.location.reload();
+                }} catch (err) {{
+                  window.location.reload();
+                }}
+              }}, delayMs);
+            }})();
+            </script>
+            """,
+            height=0,
+            width=0,
+        )
+    except Exception:
+        pass
+
+
 def _pick_main_tab(labels=_MAIN_TAB_LABELS):
     """Single active main tab — avoids mounting every tab's Plotly/HTML iframes."""
     default = labels[0]
-    cur = st.session_state.get("at_main_tab", default)
+    query_tab = _MAIN_TAB_BY_QUERY_KEY.get(str(_query_param_value("at_tab") or ""))
+    cur = st.session_state.get("at_main_tab", query_tab or default)
     if cur not in labels:
         cur = default
     if hasattr(st, "segmented_control"):
@@ -5632,6 +5709,7 @@ def _pick_main_tab(labels=_MAIN_TAB_LABELS):
         )
     if picked:
         st.session_state.at_main_tab = picked
+        _set_query_param_value("at_tab", _MAIN_TAB_QUERY_KEYS.get(picked, "overview"))
     return st.session_state.get("at_main_tab", default)
 
 
@@ -5665,6 +5743,7 @@ with st.container():
 
         _render_global_rules_bar()
         _at_tab = _pick_main_tab()
+        _render_live_auto_refresh(_at_tab)
 
         if _at_tab == _MAIN_TAB_LABELS[0]:
             _render_overview_tab(
